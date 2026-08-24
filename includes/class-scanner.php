@@ -484,11 +484,15 @@ class UAMS_MRA_Scanner {
 			return self::advance( $state );
 		}
 
-		$refs = array();
+		$skip_keys = self::skipped_meta_keys();
+		$refs      = array();
 
 		foreach ( $rows as $row ) {
 			$cursor = (int) $row->pk;
 
+			if ( isset( $skip_keys[ $row->meta_key ] ) ) {
+				continue;
+			}
 			if ( '' === (string) $row->meta_value ) {
 				continue;
 			}
@@ -702,6 +706,39 @@ class UAMS_MRA_Scanner {
 	 * ------------------------------------------------------------------ */
 
 	/**
+	 * Pattern for keys that hold an ID belonging to something other than an
+	 * attachment -- a user, a term, a comment, a form entry.
+	 *
+	 * Only the weak numeric match is withheld from these, never a strong one, so
+	 * a key on this list that really does contain an upload URL still counts.
+	 *
+	 * Keep it to names that state the object type outright. A key that could
+	 * plausibly hold a media ID -- image_id, media_id, attachment_id,
+	 * thumbnail_id -- must stay off it, or a live file starts reporting as
+	 * unreferenced.
+	 *
+	 * @return string Regex tested against the key, or '' to disable the check.
+	 */
+	protected static function foreign_id_key_pattern() {
+		return (string) apply_filters(
+			'uams_mra_foreign_id_key_pattern',
+			'#(^|_)(user|author|customer|post|page|parent|term|category|tag|comment|order|site|blog|form|entry)_id$#i'
+		);
+	}
+
+	/**
+	 * Does this key name an ID belonging to something other than an attachment.
+	 *
+	 * @param string $key Meta or option name.
+	 * @return bool
+	 */
+	protected static function is_foreign_id_key( $key ) {
+		$pattern = self::foreign_id_key_pattern();
+
+		return '' !== $pattern && 1 === preg_match( $pattern, (string) $key );
+	}
+
+	/**
 	 * Meta keys that describe the attachment itself and must never count as a reference.
 	 *
 	 * @return array
@@ -890,7 +927,12 @@ class UAMS_MRA_Scanner {
 			}
 		}
 
-		if ( ! $allow_numeric ) {
+		// A key whose name says it holds some other object's ID -- source_user_id,
+		// parent_id -- can still hold a number that collides with a real
+		// attachment ID. Refuse it the weak numeric match. Strong evidence in the
+		// same value, an upload URL or a JSON "id" key, was already collected
+		// above and stands.
+		if ( ! $allow_numeric || self::is_foreign_id_key( $key ) ) {
 			return $hits;
 		}
 

@@ -21,6 +21,23 @@ Adds **Media > Media Audit** to the admin menu.
 
 **Weak references** (`Referenced by ID only`): a custom field storing a bare attachment ID with no surrounding context. This is the standard ACF image and gallery field pattern, so it is on by default. These files show as in use but are listed separately under the **Referenced by ID only** filter so you can spot-check them.
 
+A bare number is weak evidence, and numbers collide. A field named
+`source_user_id` holding `1215` means user 1215 on some other system, not
+attachment 1215 here. So keys whose name states they hold another object's ID —
+matching `(^|_)(user|author|customer|post|page|parent|term|category|tag|comment|order|site|blog|form|entry)_id$`
+— are refused the weak match. Adjust the list through the
+`uams_mra_foreign_id_key_pattern` filter; return `''` to disable the check.
+
+This withholds only the *weak* match. If one of those fields really does hold an
+upload URL or a JSON `"id"` key, that is strong evidence and still counts. Keys
+that could legitimately hold a media ID — `image_id`, `media_id`,
+`attachment_id`, `thumbnail_id` — are deliberately absent from the pattern, and
+anything you add to it risks a live file reporting as unreferenced.
+
+Meta keys that describe the attachment itself (`_wp_attached_file` and friends)
+never count as a reference, in any of the four meta passes. Extend that list with
+the `uams_mra_skipped_meta_keys` filter.
+
 URL matching normalizes away every generated size, so `hero-1024x768.jpg`, `hero-scaled.jpg`, and `hero-e1712345678901.jpg` all resolve back to attachment `hero.jpg`.
 
 ## Filters on the results screen
