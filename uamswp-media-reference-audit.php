@@ -3,7 +3,7 @@
  * Plugin Name:       UAMS Media Reference Audit
  * Plugin URI:        https://www.uams.edu/
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Brent Passmore
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'UAMS_MRA_VERSION', '1.0.2' );
+define( 'UAMS_MRA_VERSION', '1.0.3' );
 define( 'UAMS_MRA_FILE', __FILE__ );
 define( 'UAMS_MRA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'UAMS_MRA_URL', plugin_dir_url( __FILE__ ) );

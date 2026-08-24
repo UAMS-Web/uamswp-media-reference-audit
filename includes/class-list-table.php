@@ -90,16 +90,19 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 			'all'          => array( __( 'All media', 'uams-mra' ), $s['total'] ?? 0 ),
 		);
 
+		// Built from the registered menu rather than a second copy of the slug, so
+		// this cannot drift from UAMS_MRA_Admin::SLUG again. menu_page_url() also
+		// resolves against the current site, which matters on multisite.
+		$base = menu_page_url( UAMS_MRA_Admin::SLUG, false );
+
+		if ( ! $base ) {
+			$base = add_query_arg( 'page', UAMS_MRA_Admin::SLUG, admin_url( 'upload.php' ) );
+		}
+
 		$out = array();
 
 		foreach ( $views as $key => $view ) {
-			$url = add_query_arg(
-				array(
-					'page' => 'uams-mra',
-					'view' => $key,
-				),
-				admin_url( 'upload.php' )
-			);
+			$url = add_query_arg( 'view', $key, $base );
 
 			$out[ $key ] = sprintf(
 				'<a href="%s"%s>%s <span class="count">(%s)</span></a>',
