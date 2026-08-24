@@ -1,0 +1,172 @@
+.uams-mra-intro {
+	max-width: 60em;
+}
+
+.uams-mra-panel {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 12px 16px;
+	margin: 16px 0;
+}
+
+.uams-mra-panel-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.uams-mra-panel-head h2 {
+	margin: 0 0 4px;
+	font-size: 1.1em;
+}
+
+.uams-mra-panel-head p {
+	margin: 0;
+}
+
+.uams-mra-progress {
+	margin-top: 14px;
+}
+
+.uams-mra-bar {
+	background: #f0f0f1;
+	border-radius: 3px;
+	height: 8px;
+	overflow: hidden;
+}
+
+.uams-mra-bar span {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: #2271b1;
+	transition: width 0.25s ease;
+}
+
+.uams-mra-progress p {
+	margin: 8px 0 0;
+	color: #50575e;
+}
+
+.uams-mra-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 12px;
+	margin: 16px 0;
+}
+
+.uams-mra-stat {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-left: 4px solid #2271b1;
+	border-radius: 4px;
+	padding: 12px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.uams-mra-stat-label {
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #50575e;
+}
+
+.uams-mra-stat-value {
+	font-size: 22px;
+	line-height: 1.2;
+}
+
+.uams-mra-muted {
+	color: #646970;
+}
+
+.uams-mra-file {
+	font-family: Consolas, Monaco, monospace;
+	font-size: 12px;
+	color: #50575e;
+	word-break: break-all;
+}
+
+.uams-mra-meta {
+	font-size: 12px;
+	color: #646970;
+}
+
+.uams-mra-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	line-height: 1.6;
+	white-space: nowrap;
+	border: 1px solid transparent;
+}
+
+.uams-mra-badge-ok {
+	background: #edfaef;
+	border-color: #68de7c;
+	color: #14562a;
+}
+
+.uams-mra-badge-info {
+	background: #f0f6fc;
+	border-color: #72aee6;
+	color: #0a4b78;
+}
+
+.uams-mra-badge-warn {
+	background: #fcf9e8;
+	border-color: #dba617;
+	color: #674f09;
+}
+
+.uams-mra-badge-danger {
+	background: #fcf0f1;
+	border-color: #d63638;
+	color: #8a1f22;
+}
+
+.uams-mra-refs {
+	margin: 0;
+	font-size: 12px;
+}
+
+.uams-mra-refs li {
+	margin: 0 0 2px;
+}
+
+.uams-mra-force {
+	margin: 8px 0 24px;
+}
+
+.uams-mra-settings-heading {
+	margin-top: 32px;
+	padding-top: 16px;
+	border-top: 1px solid #dcdcde;
+}
+
+.column-thumb {
+	width: 72px;
+}
+
+.column-thumb img {
+	width: 60px;
+	height: 60px;
+	object-fit: cover;
+	border-radius: 3px;
+	background: #f0f0f1;
+}
+
+.column-bytes,
+.column-date {
+	width: 110px;
+}
+
+.column-status {
+	width: 150px;
+}
