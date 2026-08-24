@@ -331,6 +331,7 @@ class UAMS_MRA_Scanner {
 				$row->meta_key,
 				$row->meta_value,
 				! empty( $state['settings']['include_numeric_meta'] )
+					&& self::source_allows_numeric_match( $source )
 			);
 
 			foreach ( $hits as $attachment_id => $confidence ) {
@@ -402,6 +403,7 @@ class UAMS_MRA_Scanner {
 				$row->option_name,
 				$row->option_value,
 				! empty( $state['settings']['include_numeric_meta'] )
+					&& self::source_allows_numeric_match( 'option' )
 			);
 
 			foreach ( $hits as $attachment_id => $confidence ) {
@@ -501,6 +503,7 @@ class UAMS_MRA_Scanner {
 				$row->meta_key,
 				$row->meta_value,
 				! empty( $state['settings']['include_numeric_meta'] )
+					&& self::source_allows_numeric_match( $source_type )
 			);
 
 			foreach ( $hits as $attachment_id => $confidence ) {
@@ -736,6 +739,41 @@ class UAMS_MRA_Scanner {
 		$pattern = self::foreign_id_key_pattern();
 
 		return '' !== $pattern && 1 === preg_match( $pattern, (string) $key );
+	}
+
+	/**
+	 * Which source types may earn a weak numeric match.
+	 *
+	 * usermeta is off. WordPress and its plugins park screen preferences,
+	 * counters, and progress blobs there -- gform_recent_forms, _sfwd-quizzes,
+	 * users_network_per_page -- and a bare number in one of those means nothing
+	 * to the media library. Measured against a real network: of 69 weak usermeta
+	 * matches, none were a genuine reference, while every genuine one came from
+	 * postmeta or an option.
+	 *
+	 * This withholds only the weak match. An upload URL or a JSON "id" key in
+	 * usermeta is strong evidence and is still recorded.
+	 *
+	 * Sites that store a user's photo as a bare attachment ID -- an ACF user
+	 * field -- should switch usermeta back on through the filter.
+	 *
+	 * @param string $source_type Source type being scanned.
+	 * @return bool
+	 */
+	protected static function source_allows_numeric_match( $source_type ) {
+		$allowed = apply_filters(
+			'uams_mra_numeric_match_sources',
+			array(
+				'postmeta'      => true,
+				'revision_meta' => true,
+				'option'        => true,
+				'termmeta'      => true,
+				'commentmeta'   => true,
+				'usermeta'      => false,
+			)
+		);
+
+		return ! empty( $allowed[ $source_type ] );
 	}
 
 	/**

@@ -34,6 +34,22 @@ that could legitimately hold a media ID — `image_id`, `media_id`,
 `attachment_id`, `thumbnail_id` — are deliberately absent from the pattern, and
 anything you add to it risks a live file reporting as unreferenced.
 
+Weak matching is also off for **user meta** entirely. WordPress and its plugins
+park screen preferences, counters, and progress blobs there — `gform_recent_forms`,
+`_sfwd-quizzes`, `users_network_per_page` — and a bare number in one of those
+means nothing to the media library. Measured against a real UAMS network: of 69
+weak user-meta matches, none was a genuine reference, while every genuine one
+came from post meta or an option. Strong evidence in user meta — an actual
+upload URL, a JSON `"id"` key — still counts. If a site stores a user's photo as
+a bare attachment ID in an ACF user field, switch it back on:
+
+```php
+add_filter( 'uams_mra_numeric_match_sources', function ( $sources ) {
+	$sources['usermeta'] = true;
+	return $sources;
+} );
+```
+
 Meta keys that describe the attachment itself (`_wp_attached_file` and friends)
 never count as a reference, in any of the four meta passes. Extend that list with
 the `uams_mra_skipped_meta_keys` filter.
