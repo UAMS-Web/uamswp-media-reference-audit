@@ -170,3 +170,187 @@
 .column-status {
 	width: 150px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Triage
+ * ------------------------------------------------------------------------- */
+
+.uams-mra-tier-intro {
+	margin: 4px 0 12px;
+	max-width: 70ch;
+}
+
+.uams-mra-tiers {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+	margin: 0 0 16px;
+}
+
+.uams-mra-tier-card {
+	display: block;
+	padding: 14px 16px 14px 18px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 3px;
+	text-decoration: none;
+	color: inherit;
+}
+
+.uams-mra-tier-card:hover,
+.uams-mra-tier-card:focus {
+	border-color: #c3c4c7;
+	border-left-color: currentColor;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+
+.uams-mra-tier-card.is-current {
+	background: #f6f7f7;
+	box-shadow: inset 0 0 0 1px #c3c4c7;
+}
+
+.uams-mra-tier-card .uams-mra-stat-value {
+	display: block;
+	margin: 2px 0 4px;
+}
+
+.uams-mra-tier-card .uams-mra-muted {
+	display: block;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.uams-mra-tier-name {
+	font-weight: 600;
+	font-size: 12px;
+	letter-spacing: .02em;
+	text-transform: uppercase;
+}
+
+.uams-mra-tier-verify { border-left-color: #d63638; }
+.uams-mra-tier-verify .uams-mra-tier-name { color: #8a1f22; }
+.uams-mra-tier-ask { border-left-color: #dba617; }
+.uams-mra-tier-ask .uams-mra-tier-name { color: #674f09; }
+.uams-mra-tier-clear { border-left-color: #68de7c; }
+.uams-mra-tier-clear .uams-mra-tier-name { color: #14562a; }
+
+.uams-mra-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+/* Tier chip inside the results table. */
+.uams-mra-tier {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	line-height: 1.6;
+	white-space: nowrap;
+	border: 1px solid transparent;
+	cursor: help;
+}
+
+.uams-mra-tier-verify.uams-mra-tier { background: #fcf0f1; border-color: #d63638; color: #8a1f22; }
+.uams-mra-tier-ask.uams-mra-tier { background: #fcf9e8; border-color: #dba617; color: #674f09; }
+.uams-mra-tier-clear.uams-mra-tier { background: #edfaef; border-color: #68de7c; color: #14562a; }
+
+.uams-mra-tri {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	min-width: 190px;
+}
+
+.uams-mra-tri-buttons {
+	display: inline-flex;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	overflow: hidden;
+	background: #fff;
+}
+
+.uams-mra-tri-btn {
+	appearance: none;
+	border: 0;
+	border-right: 1px solid #c3c4c7;
+	background: transparent;
+	color: #50575e;
+	font: inherit;
+	font-size: 12px;
+	line-height: 1;
+	padding: 6px 10px;
+	cursor: pointer;
+}
+
+.uams-mra-tri-btn:last-child {
+	border-right: 0;
+}
+
+.uams-mra-tri-btn:hover {
+	background: #f0f0f1;
+	color: #1d2327;
+}
+
+.uams-mra-tri-btn:focus-visible {
+	outline: 2px solid #2271b1;
+	outline-offset: -2px;
+}
+
+.uams-mra-tri-btn[data-d="keep"][aria-pressed="true"] {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+}
+
+.uams-mra-tri-btn[data-d="ask"][aria-pressed="true"] {
+	background: #dba617;
+	border-color: #dba617;
+	color: #1d2327;
+}
+
+.uams-mra-tri-btn[data-d="delete"][aria-pressed="true"] {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+}
+
+.uams-mra-tri-note {
+	width: 100%;
+	max-width: 240px;
+	font-size: 12px;
+	padding: 4px 7px;
+}
+
+.uams-mra-tri-note[hidden] {
+	display: none;
+}
+
+.uams-mra-tri-state {
+	font-size: 11px;
+	min-height: 14px;
+	color: #14562a;
+}
+
+.uams-mra-tri-state[data-ok="0"] {
+	color: #8a1f22;
+}
+
+.uams-mra-marked {
+	margin: 0 0 24px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+@media screen and (max-width: 782px) {
+	.uams-mra-tri {
+		min-width: 0;
+	}
+}

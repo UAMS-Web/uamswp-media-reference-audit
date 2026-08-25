@@ -2,9 +2,15 @@
 /**
  * Uninstall cleanup.
  *
- * Drops the three working tables and the three options the plugin creates.
- * Nothing here is worth preserving: every row is derived from a scan and is
- * rebuilt from scratch the next time one runs.
+ * Drops the three working tables and the three options the plugin creates, and
+ * removes the triage meta from every attachment. The tables and options are
+ * derived from a scan and rebuild themselves; the triage marks do NOT -- they
+ * are human judgement, and this deletes them.
+ *
+ * That is deliberate. WordPress asks "delete these files and data?" before
+ * running this file, and orphaned post meta would be unreachable afterwards on
+ * a host with no database access. Export the CSV first if the marks matter: it
+ * carries the tier, decision, and note for every file.
  *
  * This file runs without the plugin bootstrap, so the table suffixes and option
  * names are repeated as literals rather than read from UAMS_MRA_Store. When a
@@ -19,14 +25,16 @@ global $wpdb;
 
 $uams_mra_tables  = array( 'uams_mra_index', 'uams_mra_refs', 'uams_mra_results' );
 $uams_mra_options = array( 'uams_mra_settings', 'uams_mra_scan_state', 'uams_mra_db_version' );
+$uams_mra_meta    = array( '_uams_mra_disposition', '_uams_mra_note' );
 
 /**
  * Remove one site's tables and options.
  *
  * @param array $tables  Table names without the site prefix.
  * @param array $options Option names.
+ * @param array $meta    Post meta keys.
  */
-function uams_mra_uninstall_site( array $tables, array $options ) {
+function uams_mra_uninstall_site( array $tables, array $options, array $meta ) {
 	global $wpdb;
 
 	foreach ( $tables as $table ) {
@@ -36,6 +44,10 @@ function uams_mra_uninstall_site( array $tables, array $options ) {
 
 	foreach ( $options as $option ) {
 		delete_option( $option );
+	}
+
+	foreach ( $meta as $key ) {
+		delete_post_meta_by_key( $key );
 	}
 }
 
@@ -50,9 +62,9 @@ if ( is_multisite() ) {
 
 	foreach ( $uams_mra_sites as $uams_mra_site_id ) {
 		switch_to_blog( $uams_mra_site_id );
-		uams_mra_uninstall_site( $uams_mra_tables, $uams_mra_options );
+		uams_mra_uninstall_site( $uams_mra_tables, $uams_mra_options, $uams_mra_meta );
 		restore_current_blog();
 	}
 } else {
-	uams_mra_uninstall_site( $uams_mra_tables, $uams_mra_options );
+	uams_mra_uninstall_site( $uams_mra_tables, $uams_mra_options, $uams_mra_meta );
 }

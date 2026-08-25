@@ -111,4 +111,105 @@
 			}
 		} );
 	}
+
+	/* ------------------------------------------------------------------
+	 * Triage: a decision and a note per file, saved as they are made.
+	 * ---------------------------------------------------------------- */
+
+	var noteTimers = {};
+
+	function triageSave( wrap, disposition, note, done ) {
+		var body = new FormData();
+		body.append( 'action', 'uams_mra_triage' );
+		body.append( 'nonce', UAMSMRA.triageNonce );
+		body.append( 'id', wrap.getAttribute( 'data-id' ) );
+		body.append( 'd', disposition );
+		body.append( 'note', note );
+
+		var state = wrap.querySelector( '.uams-mra-tri-state' );
+
+		return fetch( UAMSMRA.ajaxUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			body: body
+		} ).then( function ( response ) {
+			return response.json();
+		} ).then( function ( json ) {
+			if ( ! json || ! json.success ) {
+				throw new Error( 'save failed' );
+			}
+
+			if ( state ) {
+				state.textContent = UAMSMRA.i18n.saved;
+				state.setAttribute( 'data-ok', '1' );
+				window.setTimeout( function () { state.textContent = ''; }, 1600 );
+			}
+
+			// Keep the standing delete button honest about how many files it covers.
+			var marked = document.getElementById( 'uams-mra-delete-marked' );
+			if ( marked && json.data && json.data.deleteLabel ) {
+				if ( json.data.counts.disp.delete > 0 ) {
+					marked.textContent = json.data.deleteLabel;
+					marked.closest( '.uams-mra-marked' ).hidden = false;
+				} else {
+					marked.closest( '.uams-mra-marked' ).hidden = true;
+				}
+			}
+
+			if ( done ) { done( json.data ); }
+		} ).catch( function () {
+			if ( state ) {
+				state.textContent = UAMSMRA.i18n.saveFailed;
+				state.setAttribute( 'data-ok', '0' );
+			}
+		} );
+	}
+
+	document.addEventListener( 'click', function ( event ) {
+		var button = event.target.closest( '.uams-mra-tri-btn' );
+		if ( ! button ) { return; }
+
+		var wrap = button.closest( '.uams-mra-tri' );
+		var note = wrap.querySelector( '.uams-mra-tri-note' );
+		var wanted = button.getAttribute( 'data-d' );
+		var already = 'true' === button.getAttribute( 'aria-pressed' );
+		var next = already ? '' : wanted;
+
+		wrap.querySelectorAll( '.uams-mra-tri-btn' ).forEach( function ( other ) {
+			other.setAttribute( 'aria-pressed', other.getAttribute( 'data-d' ) === next ? 'true' : 'false' );
+		} );
+
+		wrap.setAttribute( 'data-d', next );
+
+		if ( note ) {
+			if ( next || note.value ) { note.hidden = false; } else { note.hidden = true; }
+		}
+
+		triageSave( wrap, next, note ? note.value : '' );
+	} );
+
+	document.addEventListener( 'input', function ( event ) {
+		var note = event.target.closest( '.uams-mra-tri-note' );
+		if ( ! note ) { return; }
+
+		var wrap = note.closest( '.uams-mra-tri' );
+		var id = wrap.getAttribute( 'data-id' );
+
+		// One save when typing stops, not one per keystroke.
+		window.clearTimeout( noteTimers[ id ] );
+		noteTimers[ id ] = window.setTimeout( function () {
+			var pressed = wrap.querySelector( '.uams-mra-tri-btn[aria-pressed="true"]' );
+			triageSave( wrap, pressed ? pressed.getAttribute( 'data-d' ) : '', note.value );
+		}, 700 );
+	} );
+
+	var deleteMarked = document.getElementById( 'uams-mra-delete-marked' );
+	if ( deleteMarked ) {
+		deleteMarked.addEventListener( 'click', function ( event ) {
+			if ( ! window.confirm( UAMSMRA.i18n.confirmMarked ) ) {
+				event.preventDefault();
+			}
+		} );
+	}
+
 }() );

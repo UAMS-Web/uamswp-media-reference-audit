@@ -127,6 +127,7 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 			'thumb'    => __( 'Preview', 'uams-mra' ),
 			'title'    => __( 'File', 'uams-mra' ),
 			'status'   => __( 'Status', 'uams-mra' ),
+			'triage'   => __( 'Decision', 'uams-mra' ),
 			'attached' => __( 'Attached to', 'uams-mra' ),
 			'refs'     => __( 'Referenced in', 'uams-mra' ),
 			'bytes'    => __( 'Disk space', 'uams-mra' ),
@@ -181,6 +182,16 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 			$params[] = $like;
 		}
 
+		$tier = self::current_tier();
+		if ( '' !== $tier ) {
+			$where .= ' AND ( ' . UAMS_MRA_Triage::tier_where( $tier ) . ' )';
+		}
+
+		$disposition = self::current_disposition();
+		if ( '' !== $disposition ) {
+			$where .= ' AND ( ' . UAMS_MRA_Triage::disposition_where( $disposition ) . ' )';
+		}
+
 		$orderby_allowed = array( 'title', 'bytes', 'post_date', 'attachment_id' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$orderby = isset( $_REQUEST['orderby'] ) ? sanitize_key( wp_unslash( $_REQUEST['orderby'] ) ) : 'bytes';
@@ -205,7 +216,41 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 			)
 		);
 
+		// These IDs never pass through WP_Query, so nothing has primed their meta.
+		// Without this the Decision column costs two queries a row.
+		if ( $this->items ) {
+			update_meta_cache( 'post', wp_list_pluck( $this->items, 'attachment_id' ) );
+		}
+
 		$this->_column_headers = array( $this->get_columns(), array(), $this->get_sortable_columns(), 'title' );
+	}
+
+	/**
+	 * Tier currently filtered to, or '' for every tier.
+	 *
+	 * @return string
+	 */
+	public static function current_tier() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$tier = isset( $_REQUEST['tier'] ) ? sanitize_key( wp_unslash( $_REQUEST['tier'] ) ) : '';
+
+		return array_key_exists( $tier, UAMS_MRA_Triage::tiers() ) ? $tier : '';
+	}
+
+	/**
+	 * Disposition currently filtered to, or '' for any.
+	 *
+	 * @return string
+	 */
+	public static function current_disposition() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$value = isset( $_REQUEST['disp'] ) ? sanitize_key( wp_unslash( $_REQUEST['disp'] ) ) : '';
+
+		if ( 'none' === $value ) {
+			return 'none';
+		}
+
+		return array_key_exists( $value, UAMS_MRA_Triage::dispositions() ) ? $value : '';
 	}
 
 	/**
@@ -378,5 +423,45 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	 */
 	public function no_items() {
 		esc_html_e( 'No media matches this filter. Run a scan if you have not yet, or pick another filter above.', 'uams-mra' );
+	}
+
+	/**
+	 * Decision column: the tier the scan derived, and the mark a person set.
+	 *
+	 * @param array $item Row.
+	 * @return string
+	 */
+	public function column_triage( $item ) {
+		$id    = (int) $item['attachment_id'];
+		$tier  = UAMS_MRA_Triage::tier( $item );
+		$tiers = UAMS_MRA_Triage::tiers();
+		$mark  = UAMS_MRA_Triage::get( $id );
+
+		$out = '<div class="uams-mra-tri" data-id="' . $id . '" data-tier="' . esc_attr( $tier ) . '"'
+			. ' data-d="' . esc_attr( $mark['d'] ) . '">';
+
+		$out .= '<span class="uams-mra-tier uams-mra-tier-' . esc_attr( $tier ) . '" title="'
+			. esc_attr( $tiers[ $tier ]['desc'] ) . '">'
+			. esc_html( $tiers[ $tier ]['label'] ) . '</span>';
+
+		$out .= '<span class="uams-mra-tri-buttons">';
+		foreach ( UAMS_MRA_Triage::dispositions() as $key => $label ) {
+			$on   = ( $mark['d'] === $key );
+			$out .= '<button type="button" class="uams-mra-tri-btn" data-d="' . esc_attr( $key ) . '"'
+				. ' aria-pressed="' . ( $on ? 'true' : 'false' ) . '">'
+				. esc_html( $label ) . '</button>';
+		}
+		$out .= '</span>';
+
+		$out .= '<input type="text" class="uams-mra-tri-note" value="' . esc_attr( $mark['n'] ) . '"'
+			. ' maxlength="' . (int) UAMS_MRA_Triage::NOTE_MAX . '"'
+			. ' placeholder="' . esc_attr__( 'Note, or who to ask…', 'uams-mra' ) . '"'
+			. ' aria-label="' . esc_attr__( 'Note about this file', 'uams-mra' ) . '"'
+			. ( ( $mark['d'] || $mark['n'] ) ? '' : ' hidden' ) . ' />';
+
+		$out .= '<span class="uams-mra-tri-state" aria-live="polite"></span>';
+		$out .= '</div>';
+
+		return $out;
 	}
 }

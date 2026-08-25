@@ -56,6 +56,38 @@ the `uams_mra_skipped_meta_keys` filter.
 
 URL matching normalizes away every generated size, so `hero-1024x768.jpg`, `hero-scaled.jpg`, and `hero-e1712345678901.jpg` all resolve back to attachment `hero.jpg`.
 
+## Triage
+
+A scan tells you what nothing points at. It cannot tell you what is safe to
+delete. The **Triage** panel closes that gap: every file gets a *tier* from the
+scan and a *decision* from you.
+
+| Tier | What lands there | Why |
+|---|---|---|
+| Verify | Attached to a post | The parent page may display it in a way a database scan cannot see |
+| Ask team | Unattached documents, video, audio | Handed out by email, print, and QR code, where no reference ever reaches the database |
+| Low risk | Unattached images | An image nothing embeds is genuinely unused — the case the scan is reliable for |
+
+Tiers are derived on every render and stored nowhere, so they stay correct after
+a rescan. Adjust which file types count as distributable with the
+`uams_mra_distributable_mimes` filter.
+
+Each row then takes a decision — **Keep**, **Ask**, or **Delete** — plus an
+optional note. These save as you click, and live in post meta on the attachment
+rather than in the results tables, which are truncated at the start of every
+scan. That means a decision survives rescanning, is shared with everyone who can
+reach the screen, and disappears by itself when the file is deleted.
+
+Filter by tier and by decision (including **Undecided**) to work the list down.
+When you are ready, **Delete the N files marked Delete** acts on the marks
+rather than the checkboxes — so the triage is the work queue, not a document you
+transcribe from. The reference guard still applies: a file with recorded
+references is skipped unless you tick the override box.
+
+The CSV export carries `tier`, `decision`, and `note` for every row. That is
+also the backup: uninstalling the plugin deletes the marks, since orphaned post
+meta would be unreachable on a host with no database access.
+
 ## Filters on the results screen
 
 | Filter | Meaning |
@@ -147,7 +179,12 @@ Three tables are created per site: `{prefix}uams_mra_index`, `{prefix}uams_mra_r
 ## Uninstall
 
 Deleting the plugin from **Plugins** runs `uninstall.php`, which drops all three
-tables and removes the plugin's options. On multisite it walks every site, since
-the tables are per site. Nothing worth keeping is lost — every row is derived
-from a scan and is rebuilt the next time one runs. Your media files are not
-touched.
+tables, removes the plugin's options, and deletes the triage meta from every
+attachment. On multisite it walks every site, since the tables are per site.
+
+The tables and options rebuild themselves on the next scan. **The triage marks do
+not** — they are human judgement, and this deletes them. Export the CSV first if
+they matter. The alternative, leaving the meta behind, would strand rows nobody
+on a shell-less host could ever clean up.
+
+Your media files are not touched.

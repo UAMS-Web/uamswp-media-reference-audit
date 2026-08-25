@@ -798,6 +798,11 @@ class UAMS_MRA_Scanner {
 					'_wp_trash_meta_status',
 					'_wp_trash_meta_time',
 					'_wp_desired_post_slug',
+					// This plugin's own triage. The note is free text, so a note
+					// that quotes an upload URL would otherwise be recorded as a
+					// strong reference to whatever file it names.
+					UAMS_MRA_Triage::META_DISPOSITION,
+					UAMS_MRA_Triage::META_NOTE,
 				)
 			)
 		);

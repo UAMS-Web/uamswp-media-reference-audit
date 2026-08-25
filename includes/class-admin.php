@@ -24,6 +24,7 @@ class UAMS_MRA_Admin {
 		add_action( 'admin_post_uams_mra_export', array( $this, 'export_csv' ) );
 		add_action( 'wp_ajax_uams_mra_scan_start', array( $this, 'ajax_start' ) );
 		add_action( 'wp_ajax_uams_mra_scan_step', array( $this, 'ajax_step' ) );
+		add_action( 'wp_ajax_uams_mra_triage', array( $this, 'ajax_triage' ) );
 	}
 
 	/**
@@ -68,12 +69,16 @@ class UAMS_MRA_Admin {
 			'UAMSMRA',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'uams_mra_scan' ),
+				'nonce'       => wp_create_nonce( 'uams_mra_scan' ),
+				'triageNonce' => wp_create_nonce( 'uams_mra_triage' ),
 				'i18n'    => array(
 					'confirmDelete' => __( 'This permanently deletes the selected files and every generated size. It cannot be undone. Continue?', 'uams-mra' ),
 					'confirmScan'   => __( 'Start a new scan? This replaces the previous results.', 'uams-mra' ),
 					'failed'        => __( 'The scan stopped with an error. Reload the page and try again.', 'uams-mra' ),
 					'noSelection'   => __( 'Select at least one file first.', 'uams-mra' ),
+					'saved'         => __( 'Saved', 'uams-mra' ),
+					'saveFailed'    => __( 'Not saved', 'uams-mra' ),
+					'confirmMarked' => __( 'Permanently delete every file marked Delete? This cannot be undone.', 'uams-mra' ),
 				),
 			)
 		);
@@ -94,6 +99,7 @@ class UAMS_MRA_Admin {
 
 		$this->maybe_save_settings();
 		$this->maybe_delete();
+		$this->maybe_delete_marked();
 	}
 
 	/**
@@ -150,57 +156,140 @@ class UAMS_MRA_Admin {
 			return;
 		}
 
-		$force   = ! empty( $_POST['uams_mra_force'] );
+		$this->report_delete( $this->delete_ids( $ids, ! empty( $_POST['uams_mra_force'] ) ) );
+	}
+
+	/**
+	 * Delete every file currently marked Delete.
+	 *
+	 * Deliberately a button of its own rather than an entry in the bulk-actions
+	 * menu: it acts on the marks, not on the ticked checkboxes, and a menu entry
+	 * that quietly ignores the selection would be a trap.
+	 */
+	protected function maybe_delete_marked() {
+		if ( ! isset( $_POST['uams_mra_delete_marked'] ) ) {
+			return;
+		}
+
+		check_admin_referer( 'bulk-media_items' );
+
+		$ids = UAMS_MRA_Triage::ids_marked( 'delete' );
+
+		if ( empty( $ids ) ) {
+			add_settings_error( 'uams-mra', 'uams_mra_none', __( 'Nothing is marked Delete, so nothing was deleted.', 'uams-mra' ), 'warning' );
+			return;
+		}
+
+		$this->report_delete( $this->delete_ids( $ids, ! empty( $_POST['uams_mra_force'] ) ) );
+	}
+
+	/**
+	 * Permanently delete attachments, honouring the reference guard.
+	 *
+	 * @param array $ids   Attachment IDs.
+	 * @param bool  $force Delete even when references were recorded.
+	 * @return array {deleted, skipped, bytes}
+	 */
+	protected function delete_ids( array $ids, $force ) {
+		global $wpdb;
+
+		$table   = UAMS_MRA_Store::results_table();
 		$deleted = 0;
 		$skipped = 0;
 		$bytes   = 0;
 
-		global $wpdb;
-		$table = UAMS_MRA_Store::results_table();
-
 		foreach ( $ids as $id ) {
+			$id = (int) $id;
+
 			if ( 'attachment' !== get_post_type( $id ) ) {
 				continue;
 			}
 
-			$refs = (int) $wpdb->get_var( $wpdb->prepare( "SELECT ref_count FROM {$table} WHERE attachment_id = %d", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT ref_count, bytes FROM {$table} WHERE attachment_id = %d", $id ), ARRAY_A );
 
-			if ( $refs > 0 && ! $force ) {
+			if ( $row && (int) $row['ref_count'] > 0 && ! $force ) {
 				++$skipped;
 				continue;
 			}
 
-			$size = (int) $wpdb->get_var( $wpdb->prepare( "SELECT bytes FROM {$table} WHERE attachment_id = %d", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-
 			if ( wp_delete_attachment( $id, true ) ) {
 				++$deleted;
-				$bytes += $size;
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$bytes += $row ? (int) $row['bytes'] : 0;
 				$wpdb->delete( $table, array( 'attachment_id' => $id ), array( '%d' ) );
 			}
 		}
 
+		return array(
+			'deleted' => $deleted,
+			'skipped' => $skipped,
+			'bytes'   => $bytes,
+		);
+	}
+
+	/**
+	 * Turn a delete run into an admin notice.
+	 *
+	 * @param array $result From delete_ids().
+	 */
+	protected function report_delete( array $result ) {
 		$message = sprintf(
 			/* translators: 1: number of files, 2: disk space freed. */
 			__( 'Deleted %1$s files and freed %2$s.', 'uams-mra' ),
-			number_format_i18n( $deleted ),
-			size_format( $bytes, 1 )
+			number_format_i18n( $result['deleted'] ),
+			size_format( $result['bytes'], 1 )
 		);
 
-		if ( $skipped ) {
+		if ( $result['skipped'] ) {
 			$message .= ' ' . sprintf(
 				/* translators: %s: number of files. */
 				__( 'Kept %s files that still have references. Tick the override box to delete those.', 'uams-mra' ),
-				number_format_i18n( $skipped )
+				number_format_i18n( $result['skipped'] )
 			);
 		}
 
-		add_settings_error( 'uams-mra', 'uams_mra_deleted', $message, $skipped ? 'warning' : 'success' );
+		add_settings_error( 'uams-mra', 'uams_mra_deleted', $message, $result['skipped'] ? 'warning' : 'success' );
 	}
 
 	/* ---------------------------------------------------------------------
 	 * AJAX
 	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Save one file's disposition and note.
+	 */
+	public function ajax_triage() {
+		check_ajax_referer( 'uams_mra_triage', 'nonce' );
+
+		if ( ! current_user_can( UAMS_MRA_CAP ) ) {
+			wp_send_json_error( array( 'message' => __( 'You do not have permission to change this.', 'uams-mra' ) ), 403 );
+		}
+
+		$id = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0;
+
+		if ( ! $id || 'attachment' !== get_post_type( $id ) ) {
+			wp_send_json_error( array( 'message' => __( 'That file no longer exists.', 'uams-mra' ) ), 404 );
+		}
+
+		$disposition = isset( $_POST['d'] ) ? sanitize_key( wp_unslash( $_POST['d'] ) ) : '';
+		$note        = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+
+		$mark   = UAMS_MRA_Triage::set( $id, $disposition, $note );
+		$counts = UAMS_MRA_Triage::counts();
+
+		wp_send_json_success(
+			array(
+				'mark'        => $mark,
+				'counts'      => $counts,
+				'deleteLabel' => sprintf(
+					/* translators: 1: number of files, 2: disk space. */
+					__( 'Delete the %1$s files marked Delete (%2$s)', 'uams-mra' ),
+					number_format_i18n( $counts['disp']['delete'] ),
+					size_format( $counts['delete_bytes'], 1 )
+				),
+			)
+		);
+	}
 
 	/**
 	 * Begin a scan.
@@ -297,6 +386,9 @@ class UAMS_MRA_Admin {
 				'reference_count',
 				'strong_reference_count',
 				'references',
+				'tier',
+				'decision',
+				'note',
 			)
 		);
 
@@ -310,7 +402,10 @@ class UAMS_MRA_Admin {
 				ARRAY_A
 			);
 
+			update_meta_cache( 'post', wp_list_pluck( $rows, 'attachment_id' ) );
+
 			foreach ( $rows as $row ) {
+				$mark   = UAMS_MRA_Triage::get( (int) $row['attachment_id'] );
 				$refs   = UAMS_MRA_Store::get_refs( (int) $row['attachment_id'], 10 );
 				$labels = array();
 				foreach ( $refs as $ref ) {
@@ -333,6 +428,9 @@ class UAMS_MRA_Admin {
 						$row['ref_count'],
 						$row['ref_count_strict'],
 						implode( ' | ', $labels ),
+						UAMS_MRA_Triage::tier( $row ),
+						$mark['d'],
+						$mark['n'],
 					)
 				);
 			}
@@ -357,6 +455,8 @@ class UAMS_MRA_Admin {
 		$settings = uams_mra_settings();
 		$scanned  = ! empty( $state['finished'] );
 		$view     = isset( $_REQUEST['view'] ) ? sanitize_key( wp_unslash( $_REQUEST['view'] ) ) : 'orphaned'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$triage = $scanned ? UAMS_MRA_Triage::counts() : array();
 
 		$table = new UAMS_MRA_List_Table();
 		$table->prepare_items();
@@ -421,6 +521,73 @@ class UAMS_MRA_Admin {
 				</div>
 			<?php endif; ?>
 
+			<?php if ( $scanned && ! empty( $summary['total'] ) && ! empty( $triage ) ) : ?>
+				<h2 class="uams-mra-settings-heading"><?php esc_html_e( 'Triage', 'uams-mra' ); ?></h2>
+				<p class="uams-mra-muted uams-mra-tier-intro">
+					<?php esc_html_e( 'Every file gets a tier from the scan and a decision from you. Decisions are stored on the file itself, so they survive the next scan and everyone with access sees the same marks.', 'uams-mra' ); ?>
+				</p>
+
+				<div class="uams-mra-tiers">
+					<?php
+					$current_tier = UAMS_MRA_List_Table::current_tier();
+					foreach ( UAMS_MRA_Triage::tiers() as $key => $tier ) :
+						$url = add_query_arg(
+							array(
+								'view' => $view,
+								'tier' => ( $current_tier === $key ) ? false : $key,
+							),
+							menu_page_url( self::SLUG, false )
+						);
+						?>
+						<a class="uams-mra-tier-card uams-mra-tier-<?php echo esc_attr( $key ); ?><?php echo $current_tier === $key ? ' is-current' : ''; ?>"
+							href="<?php echo esc_url( $url ); ?>">
+							<span class="uams-mra-tier-name"><?php echo esc_html( $tier['label'] ); ?></span>
+							<strong class="uams-mra-stat-value"><?php echo esc_html( number_format_i18n( $triage['tier'][ $key ] ) ); ?></strong>
+							<span class="uams-mra-muted"><?php echo esc_html( $tier['desc'] ); ?></span>
+						</a>
+					<?php endforeach; ?>
+				</div>
+
+				<form method="get" class="uams-mra-filters">
+					<input type="hidden" name="page" value="<?php echo esc_attr( self::SLUG ); ?>" />
+					<input type="hidden" name="view" value="<?php echo esc_attr( $view ); ?>" />
+
+					<label for="uams-mra-filter-tier" class="screen-reader-text"><?php esc_html_e( 'Filter by tier', 'uams-mra' ); ?></label>
+					<select name="tier" id="uams-mra-filter-tier">
+						<option value=""><?php esc_html_e( 'Every tier', 'uams-mra' ); ?></option>
+						<?php foreach ( UAMS_MRA_Triage::tiers() as $key => $tier ) : ?>
+							<option value="<?php echo esc_attr( $key ); ?>" <?php selected( UAMS_MRA_List_Table::current_tier(), $key ); ?>>
+								<?php echo esc_html( $tier['label'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+
+					<label for="uams-mra-filter-disp" class="screen-reader-text"><?php esc_html_e( 'Filter by decision', 'uams-mra' ); ?></label>
+					<select name="disp" id="uams-mra-filter-disp">
+						<option value=""><?php esc_html_e( 'Any decision', 'uams-mra' ); ?></option>
+						<option value="none" <?php selected( UAMS_MRA_List_Table::current_disposition(), 'none' ); ?>>
+							<?php
+							/* translators: %s: number of files. */
+							echo esc_html( sprintf( __( 'Undecided (%s)', 'uams-mra' ), number_format_i18n( $triage['none'] ) ) );
+							?>
+						</option>
+						<?php foreach ( UAMS_MRA_Triage::dispositions() as $key => $label ) : ?>
+							<option value="<?php echo esc_attr( $key ); ?>" <?php selected( UAMS_MRA_List_Table::current_disposition(), $key ); ?>>
+								<?php echo esc_html( $label . ' (' . number_format_i18n( $triage['disp'][ $key ] ) . ')' ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+
+					<?php submit_button( __( 'Filter', 'uams-mra' ), 'secondary', '', false ); ?>
+
+					<?php if ( UAMS_MRA_List_Table::current_tier() || UAMS_MRA_List_Table::current_disposition() ) : ?>
+						<a class="button-link" href="<?php echo esc_url( add_query_arg( 'view', $view, menu_page_url( self::SLUG, false ) ) ); ?>">
+							<?php esc_html_e( 'Clear filters', 'uams-mra' ); ?>
+						</a>
+					<?php endif; ?>
+				</form>
+			<?php endif; ?>
+
 			<form method="post" id="uams-mra-results-form">
 				<?php
 				wp_nonce_field( 'bulk-media_items' );
@@ -437,6 +604,20 @@ class UAMS_MRA_Admin {
 						<?php esc_html_e( 'Also delete files that still have references. Leave this off unless you have checked each one.', 'uams-mra' ); ?>
 					</label>
 				</p>
+
+				<?php if ( ! empty( $triage ) ) : ?>
+					<p class="uams-mra-marked"<?php echo $triage['disp']['delete'] > 0 ? '' : ' hidden'; ?>>
+						<button type="submit" name="uams_mra_delete_marked" value="1" id="uams-mra-delete-marked" class="button button-secondary">
+							<?php
+							/* translators: 1: number of files, 2: disk space. */
+							echo esc_html( sprintf( __( 'Delete the %1$s files marked Delete (%2$s)', 'uams-mra' ), number_format_i18n( $triage['disp']['delete'] ), size_format( $triage['delete_bytes'], 1 ) ) );
+							?>
+						</button>
+						<span class="uams-mra-muted">
+							<?php esc_html_e( 'Acts on every file marked Delete, not on the checkboxes above.', 'uams-mra' ); ?>
+						</span>
+					</p>
+				<?php endif; ?>
 			</form>
 
 			<p>
