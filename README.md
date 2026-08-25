@@ -69,7 +69,8 @@ scan and a *decision* from you.
 | Low risk | Unattached images | An image nothing embeds is genuinely unused — the case the scan is reliable for |
 
 Tiers are derived on every render and stored nowhere, so they stay correct after
-a rescan. Adjust which file types count as distributable with the
+a rescan. The tier counts cover whichever filter is selected, not the whole
+library, so they always describe the list underneath them. Adjust which file types count as distributable with the
 `uams_mra_distributable_mimes` filter.
 
 Each row then takes a decision — **Keep**, **Ask**, or **Delete** — plus an

@@ -280,14 +280,20 @@ class UAMS_MRA_Triage {
 	}
 
 	/**
-	 * Counts for the dashboard cards.
+	 * Counts for the triage cards.
 	 *
+	 * Scoped to a view, because the cards sit above a table that is showing one.
+	 * Counting the whole library there would advertise numbers the list below
+	 * cannot produce.
+	 *
+	 * @param string $scope WHERE fragment limiting the count, or '' for everything.
 	 * @return array
 	 */
-	public static function counts() {
+	public static function counts( $scope = '' ) {
 		global $wpdb;
 
 		$table = UAMS_MRA_Store::results_table();
+		$scope = '' === $scope ? '1=1' : $scope;
 
 		$out = array(
 			'tier'         => array(),
@@ -303,7 +309,9 @@ class UAMS_MRA_Triage {
 		foreach ( array_keys( self::tiers() ) as $tier ) {
 			$where = self::tier_where( $tier );
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$out['tier'][ $tier ] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" );
+			$out['tier'][ $tier ] = (int) $wpdb->get_var(
+				"SELECT COUNT(*) FROM {$table} WHERE ( {$scope} ) AND ( {$where} )"
+			);
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -313,7 +321,7 @@ class UAMS_MRA_Triage {
 				 FROM {$table} r
 				 INNER JOIN {$wpdb->postmeta} pm
 				         ON pm.post_id = r.attachment_id AND pm.meta_key = %s
-				 WHERE pm.meta_value <> ''
+				 WHERE pm.meta_value <> '' AND ( {$scope} )
 				 GROUP BY pm.meta_value",
 				self::META_DISPOSITION
 			),
@@ -335,7 +343,7 @@ class UAMS_MRA_Triage {
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$total       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		$total       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE ( {$scope} )" );
 		$out['none'] = max( 0, $total - $marked );
 
 		return $out;

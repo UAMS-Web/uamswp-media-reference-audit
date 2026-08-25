@@ -456,7 +456,7 @@ class UAMS_MRA_Admin {
 		$scanned  = ! empty( $state['finished'] );
 		$view     = isset( $_REQUEST['view'] ) ? sanitize_key( wp_unslash( $_REQUEST['view'] ) ) : 'orphaned'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		$triage = $scanned ? UAMS_MRA_Triage::counts() : array();
+		$triage = $scanned ? UAMS_MRA_Triage::counts( UAMS_MRA_List_Table::where_for_view( $view ) ) : array();
 
 		$table = new UAMS_MRA_List_Table();
 		$table->prepare_items();
@@ -525,6 +525,8 @@ class UAMS_MRA_Admin {
 				<h2 class="uams-mra-settings-heading"><?php esc_html_e( 'Triage', 'uams-mra' ); ?></h2>
 				<p class="uams-mra-muted uams-mra-tier-intro">
 					<?php esc_html_e( 'Every file gets a tier from the scan and a decision from you. Decisions are stored on the file itself, so they survive the next scan and everyone with access sees the same marks.', 'uams-mra' ); ?>
+					<br />
+					<?php esc_html_e( 'These counts cover the filter selected below, not the whole library.', 'uams-mra' ); ?>
 				</p>
 
 				<div class="uams-mra-tiers">

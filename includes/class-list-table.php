@@ -56,7 +56,20 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	 * @return string
 	 */
 	protected function view_where() {
-		switch ( $this->current_view() ) {
+		return self::where_for_view( $this->current_view() );
+	}
+
+	/**
+	 * WHERE fragment for one view.
+	 *
+	 * Public and static so the triage cards can count inside the view being
+	 * looked at, rather than reporting on the whole library.
+	 *
+	 * @param string $view View key.
+	 * @return string
+	 */
+	public static function where_for_view( $view ) {
+		switch ( $view ) {
 			case 'orphaned':
 				return 'ref_count = 0 AND is_attached = 0';
 			case 'unreferenced':
