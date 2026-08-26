@@ -3,7 +3,7 @@
  * Plugin Name:       UAMS Media Reference Audit
  * Plugin URI:        https://www.uams.edu/
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
- * Version:           1.1.1
+ * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Brent Passmore
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'UAMS_MRA_VERSION', '1.1.1' );
+define( 'UAMS_MRA_VERSION', '1.2.0' );
 define( 'UAMS_MRA_FILE', __FILE__ );
 define( 'UAMS_MRA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'UAMS_MRA_URL', plugin_dir_url( __FILE__ ) );
@@ -25,6 +25,8 @@ define( 'UAMS_MRA_CAP', 'manage_options' );
 
 require_once UAMS_MRA_DIR . 'includes/class-store.php';
 require_once UAMS_MRA_DIR . 'includes/class-triage.php';
+require_once UAMS_MRA_DIR . 'includes/class-selection.php';
+require_once UAMS_MRA_DIR . 'includes/class-archive.php';
 require_once UAMS_MRA_DIR . 'includes/class-index.php';
 require_once UAMS_MRA_DIR . 'includes/class-scanner.php';
 require_once UAMS_MRA_DIR . 'includes/class-admin.php';
@@ -110,6 +112,31 @@ function uams_mra_maybe_install() {
 	}
 }
 add_action( 'admin_init', 'uams_mra_maybe_install' );
+
+add_action( UAMS_MRA_Archive::CLEANUP_HOOK, array( 'UAMS_MRA_Archive', 'cleanup' ) );
+
+/**
+ * Keep the daily archive cleanup scheduled.
+ *
+ * Archives sit in uploads and are a safety net for one sitting's decisions, not
+ * storage. Without this a few aborted 165 MB jobs quietly become a disk problem.
+ */
+function uams_mra_schedule_cleanup() {
+	if ( ! wp_next_scheduled( UAMS_MRA_Archive::CLEANUP_HOOK ) ) {
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', UAMS_MRA_Archive::CLEANUP_HOOK );
+	}
+}
+add_action( 'admin_init', 'uams_mra_schedule_cleanup' );
+
+register_deactivation_hook( __FILE__, 'uams_mra_deactivate' );
+
+/**
+ * Unschedule the cleanup event and remove any archives left on disk.
+ */
+function uams_mra_deactivate() {
+	wp_clear_scheduled_hook( UAMS_MRA_Archive::CLEANUP_HOOK );
+	UAMS_MRA_Archive::cleanup_all();
+}
 
 /**
  * Load translations.

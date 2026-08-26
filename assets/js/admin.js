@@ -212,4 +212,100 @@
 		} );
 	}
 
+	/* ------------------------------------------------------------------
+	 * Archive: batched zip build on the review screen.
+	 * ---------------------------------------------------------------- */
+
+	var archiveButton = document.getElementById( 'uams-mra-archive' );
+
+	if ( archiveButton ) {
+		var archivePanel = document.getElementById( 'uams-mra-archive-progress' );
+		var archiveText = document.getElementById( 'uams-mra-archive-text' );
+		var archiveParts = document.getElementById( 'uams-mra-archive-parts' );
+		var archiveBar = archivePanel ? archivePanel.querySelector( '.uams-mra-bar span' ) : null;
+
+		var archivePost = function ( action ) {
+			var body = new FormData();
+			body.append( 'action', action );
+			body.append( 'nonce', UAMSMRA.archiveNonce );
+
+			return fetch( UAMSMRA.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				body: body
+			} ).then( function ( response ) {
+				return response.json();
+			} );
+		};
+
+		var archivePaint = function ( data ) {
+			if ( archiveBar ) { archiveBar.style.width = data.percent + '%'; }
+			if ( archiveText ) {
+				archiveText.textContent = data.done
+					? UAMSMRA.i18n.archiveDone + ' ' + data.progress
+					: UAMSMRA.i18n.archiving + ' ' + data.progress;
+			}
+
+			if ( ! archiveParts ) { return; }
+
+			archiveParts.innerHTML = '';
+			data.parts.forEach( function ( part ) {
+				var link = document.createElement( 'a' );
+				link.className = 'button';
+				link.href = part.url;
+				link.textContent = 'Download part ' + part.part + ' (' + part.files + ' files, ' + part.size + ')';
+				archiveParts.appendChild( link );
+			} );
+		};
+
+		var archiveFail = function ( message ) {
+			if ( archiveText ) {
+				archiveText.textContent = message || UAMSMRA.i18n.archiveFailed;
+			}
+			archiveButton.disabled = false;
+		};
+
+		var archiveLoop = function () {
+			archivePost( 'uams_mra_archive_step' ).then( function ( response ) {
+				if ( ! response || ! response.success ) {
+					archiveFail( response && response.data ? response.data.message : '' );
+					return;
+				}
+
+				archivePaint( response.data );
+
+				if ( response.data.done ) {
+					archiveButton.disabled = false;
+					return;
+				}
+
+				archiveLoop();
+			} ).catch( function () { archiveFail(); } );
+		};
+
+		archiveButton.addEventListener( 'click', function () {
+			archiveButton.disabled = true;
+			if ( archivePanel ) { archivePanel.hidden = false; }
+			if ( archiveParts ) { archiveParts.innerHTML = ''; }
+
+			archivePost( 'uams_mra_archive_start' ).then( function ( response ) {
+				if ( ! response || ! response.success ) {
+					archiveFail( response && response.data ? response.data.message : '' );
+					return;
+				}
+				archivePaint( response.data );
+				archiveLoop();
+			} ).catch( function () { archiveFail(); } );
+		} );
+	}
+
+	var deleteSelection = document.getElementById( 'uams-mra-delete-selection' );
+	if ( deleteSelection ) {
+		deleteSelection.addEventListener( 'click', function ( event ) {
+			if ( ! window.confirm( UAMSMRA.i18n.confirmDelete ) ) {
+				event.preventDefault();
+			}
+		} );
+	}
+
 }() );

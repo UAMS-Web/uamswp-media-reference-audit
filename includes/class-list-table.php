@@ -43,7 +43,7 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	 *
 	 * @return string
 	 */
-	protected function current_view() {
+	public static function current_view() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$view = isset( $_REQUEST['view'] ) ? sanitize_key( wp_unslash( $_REQUEST['view'] ) ) : 'orphaned';
 		$allowed = array( 'all', 'orphaned', 'unreferenced', 'unattached', 'weak', 'referenced' );
@@ -56,7 +56,7 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	 * @return string
 	 */
 	protected function view_where() {
-		return self::where_for_view( $this->current_view() );
+		return self::where_for_view( self::current_view() );
 	}
 
 	/**
@@ -175,15 +175,10 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	/**
 	 * Load rows.
 	 */
-	public function prepare_items() {
+	public static function build_query() {
 		global $wpdb;
 
-		$per_page = 50;
-		$paged    = max( 1, (int) $this->get_pagenum() );
-		$offset   = ( $paged - 1 ) * $per_page;
-		$table    = UAMS_MRA_Store::results_table();
-
-		$where  = $this->view_where();
+		$where  = self::where_for_view( self::current_view() );
 		$params = array();
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -204,6 +199,27 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 		if ( '' !== $disposition ) {
 			$where .= ' AND ( ' . UAMS_MRA_Triage::disposition_where( $disposition ) . ' )';
 		}
+
+		return array(
+			'where'  => $where,
+			'params' => $params,
+		);
+	}
+
+	/**
+	 * Load rows.
+	 */
+	public function prepare_items() {
+		global $wpdb;
+
+		$per_page = 50;
+		$paged    = max( 1, (int) $this->get_pagenum() );
+		$offset   = ( $paged - 1 ) * $per_page;
+		$table    = UAMS_MRA_Store::results_table();
+
+		$query  = self::build_query();
+		$where  = $query['where'];
+		$params = $query['params'];
 
 		$orderby_allowed = array( 'title', 'bytes', 'post_date', 'attachment_id' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended

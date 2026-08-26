@@ -354,3 +354,86 @@
 		min-width: 0;
 	}
 }
+
+/* ---------------------------------------------------------------------------
+ * Selection, review, archive
+ * ------------------------------------------------------------------------- */
+
+.uams-mra-select {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+	margin: 0 0 24px;
+}
+
+.uams-mra-select-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	padding: 16px 18px;
+}
+
+.uams-mra-select-card h3 {
+	margin: 0 0 4px;
+	font-size: 14px;
+}
+
+.uams-mra-select-card p {
+	margin: 0 0 10px;
+	font-size: 13px;
+}
+
+.uams-mra-select-card textarea {
+	margin: 0 0 10px;
+	font-size: 12px;
+}
+
+.uams-mra-parts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 12px 0 0;
+}
+
+.uams-mra-parts:empty {
+	display: none;
+}
+
+.uams-mra-discard {
+	margin: 14px 0 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.uams-mra-review-table {
+	margin: 20px 0 0;
+}
+
+.uams-mra-review-table td {
+	vertical-align: top;
+}
+
+.uams-mra-danger {
+	margin: 20px 0 32px;
+	padding: 16px 18px;
+	background: #fcf0f1;
+	border: 1px solid #f0b4b6;
+	border-radius: 3px;
+}
+
+.uams-mra-danger .uams-mra-force {
+	margin: 0 0 12px;
+}
+
+#uams-mra-delete-selection {
+	border-color: #d63638;
+	color: #8a1f22;
+}
+
+#uams-mra-delete-selection:hover {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+}
