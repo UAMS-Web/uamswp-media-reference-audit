@@ -3,7 +3,7 @@
  * Plugin Name:       UAMS Media Reference Audit
  * Plugin URI:        https://www.uams.edu/
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
- * Version:           1.2.0
+ * Version:           1.11.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Brent Passmore
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'UAMS_MRA_VERSION', '1.2.0' );
+define( 'UAMS_MRA_VERSION', '1.11.0' );
 define( 'UAMS_MRA_FILE', __FILE__ );
 define( 'UAMS_MRA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'UAMS_MRA_URL', plugin_dir_url( __FILE__ ) );
@@ -28,6 +28,7 @@ require_once UAMS_MRA_DIR . 'includes/class-triage.php';
 require_once UAMS_MRA_DIR . 'includes/class-selection.php';
 require_once UAMS_MRA_DIR . 'includes/class-archive.php';
 require_once UAMS_MRA_DIR . 'includes/class-index.php';
+require_once UAMS_MRA_DIR . 'includes/class-repoint.php';
 require_once UAMS_MRA_DIR . 'includes/class-scanner.php';
 require_once UAMS_MRA_DIR . 'includes/class-admin.php';
 require_once UAMS_MRA_DIR . 'includes/class-list-table.php';
@@ -50,11 +51,18 @@ function uams_mra_default_settings() {
 		'include_termmeta'    => 1,
 		'include_comments'    => 1,
 		'include_network'     => 0, // Multisite: scan sibling sites for cross-site URL references.
+		'include_render'      => 1, // Fetch the published parent page and look for the file in the rendered HTML.
+		'include_offsite'     => 1, // Record uploads URLs pointing at another site, for the Offsite Media report.
 		'extra_paths'         => '', // Extra upload path prefixes, one per line, for CDN or offloaded media.
 		'batch_posts'         => 200,
 		'batch_meta'          => 2000,
 		'batch_index'         => 500,
 		'batch_finalize'      => 200,
+		'batch_render'        => 3,   // Pages fetched per batch. Each one is an HTTP request, so keep it small.
+		'batch_repoint'       => 5,   // Offsite URLs compared or rewritten per batch.
+		'batch_sideload'      => 1,   // Files downloaded per batch. Each one is a full transfer.
+		'sideload_max_mb'     => 64,  // Refuse to pull over anything larger than this.
+		'render_max_pages'    => 300, // Ceiling on pages fetched in one scan. Anything past it is reported, never dropped silently.
 	);
 }
 

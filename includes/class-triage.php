@@ -52,7 +52,7 @@ class UAMS_MRA_Triage {
 		return array(
 			'verify' => array(
 				'label' => __( 'Verify', 'uams-mra' ),
-				'desc'  => __( 'Attached to a post. The parent page may display it in a way a database scan cannot see.', 'uams-mra' ),
+				'desc'  => __( 'Attached to a post, and the parent page has not been read. The page may display it in a way a database scan cannot see.', 'uams-mra' ),
 			),
 			'ask'    => array(
 				'label' => __( 'Ask team', 'uams-mra' ),
@@ -60,7 +60,7 @@ class UAMS_MRA_Triage {
 			),
 			'clear'  => array(
 				'label' => __( 'Low risk', 'uams-mra' ),
-				'desc'  => __( 'An unattached image. An image nothing embeds is genuinely unused, so this is the tier the scan is reliable for.', 'uams-mra' ),
+				'desc'  => __( 'An image that is either unattached, or attached to a page that was opened and does not display it. Check the page yourself if it varies by date or visitor.', 'uams-mra' ),
 			),
 		);
 	}
@@ -130,13 +130,18 @@ class UAMS_MRA_Triage {
 	 * @return string
 	 */
 	public static function tier_where( $tier ) {
+		// A file whose parent page was fetched and does not display it has had
+		// the one check "verify" was asking for. It drops to whatever tier it
+		// would sit in with no parent at all, which is the mime question.
+		$settled = "( is_attached = 0 OR render_state = 'absent' )";
+
 		switch ( $tier ) {
 			case 'verify':
-				return 'is_attached = 1';
+				return "is_attached = 1 AND render_state <> 'absent'";
 			case 'ask':
-				return 'is_attached = 0 AND ' . self::distributable_sql();
+				return $settled . ' AND ' . self::distributable_sql();
 			case 'clear':
-				return 'is_attached = 0 AND NOT ' . self::distributable_sql();
+				return $settled . ' AND NOT ' . self::distributable_sql();
 			default:
 				return '1=1';
 		}
@@ -149,7 +154,9 @@ class UAMS_MRA_Triage {
 	 * @return string
 	 */
 	public static function tier( $row ) {
-		if ( ! empty( $row['is_attached'] ) ) {
+		$render = isset( $row['render_state'] ) ? (string) $row['render_state'] : '';
+
+		if ( ! empty( $row['is_attached'] ) && 'absent' !== $render ) {
 			return 'verify';
 		}
 

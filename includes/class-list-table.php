@@ -44,10 +44,53 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 	 * @return string
 	 */
 	public static function current_view() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$view = isset( $_REQUEST['view'] ) ? sanitize_key( wp_unslash( $_REQUEST['view'] ) ) : 'orphaned';
 		$allowed = array( 'all', 'orphaned', 'unreferenced', 'unattached', 'weak', 'referenced' );
-		return in_array( $view, $allowed, true ) ? $view : 'orphaned';
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$view = isset( $_REQUEST['view'] ) ? sanitize_key( wp_unslash( $_REQUEST['view'] ) ) : '';
+
+		if ( '' === $view ) {
+			return self::default_view();
+		}
+
+		return in_array( $view, $allowed, true ) ? $view : self::default_view();
+	}
+
+	/**
+	 * Which view to open on when the URL does not name one.
+	 *
+	 * The first view with something in it, in order of how much it wants
+	 * attention. Landing on a fixed view means a site where that one happens to
+	 * be empty opens on a blank table and three zeroed tier cards, which reads
+	 * as a broken scan rather than a clean one -- and the counts underneath are
+	 * scoped to the view, so they zero out with it.
+	 *
+	 * @return string View key.
+	 */
+	public static function default_view() {
+		$s = UAMS_MRA_Store::summary();
+
+		// No scan yet. Keep the original landing so the empty state still tells
+		// people to run one.
+		if ( empty( $s['total'] ) ) {
+			return 'orphaned';
+		}
+
+		$candidates = array(
+			'orphaned'     => $s['orphaned'] ?? 0,
+			'unreferenced' => $s['unreferenced'] ?? 0,
+			'unattached'   => $s['unattached'] ?? 0,
+			'weak'         => $s['weak_only'] ?? 0,
+		);
+
+		foreach ( $candidates as $view => $count ) {
+			if ( $count > 0 ) {
+				return $view;
+			}
+		}
+
+		// Nothing needs attention. Show the library rather than an empty filter.
+		return 'all';
 	}
 
 	/**
@@ -360,7 +403,67 @@ class UAMS_MRA_List_Table extends WP_List_Table {
 			$badges[] = '<span class="uams-mra-badge uams-mra-badge-warn">' . esc_html__( 'Parent in trash', 'uams-mra' ) . '</span>';
 		}
 
+		$render = $this->render_badge( $item );
+		if ( '' !== $render ) {
+			$badges[] = $render;
+		}
+
 		return implode( ' ', $badges );
+	}
+
+	/**
+	 * Badge describing what happened when the parent page was opened.
+	 *
+	 * The three failure states are kept distinct on purpose. "Not on the page"
+	 * is evidence; "page unreachable" and "not checked" are the absence of it,
+	 * and must never look like the same thing on screen.
+	 *
+	 * @param array $item Row.
+	 * @return string
+	 */
+	protected function render_badge( $item ) {
+		$state = isset( $item['render_state'] ) ? (string) $item['render_state'] : '';
+
+		if ( '' === $state ) {
+			return '';
+		}
+
+		$map = array(
+			'found'   => array( 'ok', __( 'Shown on the page', 'uams-mra' ) ),
+			'offsite' => array( 'info', __( 'Same name served elsewhere', 'uams-mra' ) ),
+			'absent'  => array( 'danger', __( 'Not on the page', 'uams-mra' ) ),
+			'error'   => array( 'warn', __( 'Page unreachable', 'uams-mra' ) ),
+			'skipped' => array( 'warn', __( 'Page not checked', 'uams-mra' ) ),
+		);
+
+		if ( ! isset( $map[ $state ] ) ) {
+			return '';
+		}
+
+		list( $class, $label ) = $map[ $state ];
+
+		$checked = isset( $item['render_checked_at'] ) ? (string) $item['render_checked_at'] : '';
+		$title   = ( $checked && '0000-00-00 00:00:00' !== $checked )
+			/* translators: %s: date and time the parent page was read. */
+			? sprintf( __( 'Page read %s', 'uams-mra' ), $checked )
+			: '';
+
+		$note = isset( $item['render_note'] ) ? (string) $item['render_note'] : '';
+		if ( '' !== $note ) {
+			$title = $note . ( $title ? ' -- ' . $title : '' );
+		}
+
+		$badge = '<span class="uams-mra-badge uams-mra-badge-' . esc_attr( $class ) . '"'
+			. ( $title ? ' title="' . esc_attr( $title ) . '"' : '' ) . '>'
+			. esc_html( $label ) . '</span>';
+
+		$url = isset( $item['render_url'] ) ? (string) $item['render_url'] : '';
+
+		if ( $url && in_array( $state, array( 'absent', 'found', 'offsite' ), true ) ) {
+			$badge = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . $badge . '</a>';
+		}
+
+		return $badge;
 	}
 
 	/**
