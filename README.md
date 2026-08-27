@@ -83,7 +83,7 @@ finished with **no reference and a published parent**, fetches that parent's
 permalink over HTTP, and looks for the file in the HTML the page actually
 returns. That is usually a handful of pages rather than the whole site.
 
-Each file comes back in one of four states, shown as a badge on the results
+Each file comes back in one of five states, shown as a badge on the results
 screen and exported as `page_check`:
 
 | State | Meaning | Effect |
@@ -419,11 +419,11 @@ Requires WordPress 6.0 and PHP 7.4.
 
 The scan runs in batches over AJAX and can be closed and restarted. On a large library or a slow host, lower the batch sizes under Scan settings. The postmeta pass is usually the slowest step because it reads every row in `wp_postmeta`.
 
-Three tables are created per site: `{prefix}uams_mra_index`, `{prefix}uams_mra_refs`, and `{prefix}uams_mra_results`. All three are truncated at the start of each scan.
+Four tables are created per site: `{prefix}uams_mra_index`, `{prefix}uams_mra_refs`, `{prefix}uams_mra_results`, and `{prefix}uams_mra_offsite`. All four are truncated at the start of each scan.
 
 ## Uninstall
 
-Deleting the plugin from **Plugins** runs `uninstall.php`, which drops all three
+Deleting the plugin from **Plugins** runs `uninstall.php`, which drops all four
 tables, removes the plugin's options, and deletes the triage meta from every
 attachment. On multisite it walks every site, since the tables are per site.
 
