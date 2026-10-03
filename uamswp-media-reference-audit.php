@@ -81,9 +81,9 @@ add_action('wpmu_new_blog', 'uams_mra_new_site_tables');
 add_action('wp_initialize_site', 'uams_mra_new_site_tables_modern');
 
 /**
- * Legacy multisite hook.
+ * Legacy multisite hook, and the modern one's worker.
  *
- * @param  int  $blog_id  Site ID.
+ * @param  int|string  $blog_id  Site ID: an int from `wpmu_new_blog`, a numeric string from `WP_Site::$blog_id`.
  */
 function uams_mra_new_site_tables($blog_id): void
 {
