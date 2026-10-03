@@ -9,6 +9,8 @@ use Rector\DeadCode\Rector\Property\RemoveUselessVarTagRector;
 use Rector\Php81\Rector\Array_\ArrayToFirstClassCallableRector;
 use Rector\Php81\Rector\Property\ReadOnlyPropertyRector;
 use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\AddParamFromDimFetchKeyUseRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\StrictArrayParamDimFetchRector;
 use Rector\ValueObject\PhpVersion;
 
 // Shared starting Rector configuration (UAMS-Web/uams-claude-skills#10). Copy it
@@ -67,6 +69,17 @@ $sweepOnlyRules = [
     // removal silently stops working, with nothing to see at the call site
     // (uamswp-migration-api docs/DECISIONS.md D-016).
     ArrayToFirstClassCallableRector::class,
+
+    // Native parameter types inferred from how the body uses the parameter
+    // (`$state['step']` makes `$state` an `array`; `$map[$status]` makes
+    // `$status` a `string`). Neither parameter has a type today, so a caller
+    // passing something else -- an option read back as `false`, a hook
+    // argument, `null` -- gets a notice and carries on; with the type it gets
+    // a fatal `TypeError`. Whether every caller is safe is a judgment about
+    // callers Rector cannot see at this path scope, the same reason
+    // LocallyCalledStaticMethodToNonStaticRector is held back above.
+    StrictArrayParamDimFetchRector::class,
+    AddParamFromDimFetchKeyUseRector::class,
 ];
 
 // Rules skipped in BOTH profiles, scoped to one file. Use this list for a
