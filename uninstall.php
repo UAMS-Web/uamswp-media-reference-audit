@@ -32,7 +32,7 @@ $uams_mra_meta = ['_uams_mra_disposition', '_uams_mra_note'];
  * @param  array  $options  Option names.
  * @param  array  $meta  Post meta keys.
  */
-function uams_mra_uninstall_site(array $tables, array $options, array $meta)
+function uams_mra_uninstall_site(array $tables, array $options, array $meta): void
 {
     global $wpdb;
 

@@ -37,7 +37,7 @@ class UAMS_MRA_Selection
      *
      * @return array Attachment IDs.
      */
-    public static function ids_matching_filter()
+    public static function ids_matching_filter(): array
     {
         global $wpdb;
 
@@ -66,7 +66,7 @@ class UAMS_MRA_Selection
      * @param  string  $text  Pasted text.
      * @return array {ids, unmatched}
      */
-    public static function resolve_text($text)
+    public static function resolve_text($text): array
     {
         $tokens = preg_split('#[\r\n,;]+#', (string) $text);
         $ids = [];
@@ -100,7 +100,7 @@ class UAMS_MRA_Selection
      * @param  string  $token  ID, URL, or filename.
      * @return int Attachment ID, or 0.
      */
-    protected static function resolve_token($token)
+    protected static function resolve_token($token): int
     {
         if (ctype_digit($token)) {
             return get_post_type((int) $token) === 'attachment' ? (int) $token : 0;
@@ -114,7 +114,7 @@ class UAMS_MRA_Selection
 
             // A CDN or a rewritten host will not resolve, but the filename still can.
             $path = (string) wp_parse_url($token, PHP_URL_PATH);
-            $token = $path ? $path : $token;
+            $token = $path ?: $token;
         }
 
         return self::id_by_filename(basename($token));
@@ -129,7 +129,7 @@ class UAMS_MRA_Selection
      * @param  string  $filename  Basename.
      * @return int Attachment ID, or 0.
      */
-    protected static function id_by_filename($filename)
+    protected static function id_by_filename($filename): int
     {
         global $wpdb;
 
@@ -159,7 +159,7 @@ class UAMS_MRA_Selection
      * @param  array  $ids  Attachment IDs.
      * @return array The stored IDs.
      */
-    public static function store(array $ids)
+    public static function store(array $ids): array
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
 
@@ -177,7 +177,7 @@ class UAMS_MRA_Selection
      *
      * @return array Attachment IDs.
      */
-    public static function get()
+    public static function get(): array
     {
         $ids = get_user_meta(get_current_user_id(), self::META_KEY, true);
 
@@ -187,7 +187,7 @@ class UAMS_MRA_Selection
     /**
      * Forget the working set.
      */
-    public static function clear()
+    public static function clear(): void
     {
         delete_user_meta(get_current_user_id(), self::META_KEY);
     }
@@ -198,11 +198,11 @@ class UAMS_MRA_Selection
      * @param  array  $ids  Attachment IDs.
      * @return array Rows.
      */
-    public static function rows(array $ids)
+    public static function rows(array $ids): array
     {
         global $wpdb;
 
-        if (empty($ids)) {
+        if ($ids === []) {
             return [];
         }
 
@@ -223,9 +223,8 @@ class UAMS_MRA_Selection
      * Totals for a set of rows.
      *
      * @param  array  $rows  Results rows.
-     * @return array
      */
-    public static function totals(array $rows)
+    public static function totals(array $rows): array
     {
         $out = [
             'count' => count($rows),

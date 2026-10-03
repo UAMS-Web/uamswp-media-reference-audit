@@ -1,5 +1,8 @@
 <?php
 
+use function WP_CLI\Utils\format_items;
+use function WP_CLI\Utils\make_progress_bar;
+
 /**
  * WP-CLI commands.
  */
@@ -26,7 +29,7 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      */
-    public function scan($args, $assoc_args)
+    public function scan($args, $assoc_args): void
     {
         UAMS_MRA_Store::install();
 
@@ -96,7 +99,7 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      */
-    public function list($args, $assoc_args)
+    public function list($args, $assoc_args): void
     {
         global $wpdb;
 
@@ -130,14 +133,14 @@ class UAMS_MRA_CLI
                 'id' => $row['attachment_id'],
                 'file' => $row['file'],
                 'size' => size_format((int) $row['bytes'], 1),
-                'attached' => $row['parent_id'] ? $row['parent_id'] : '',
+                'attached' => $row['parent_id'] ?: '',
                 'refs' => $row['ref_count'],
                 'strong' => $row['ref_count_strict'],
                 'uploaded' => substr($row['post_date'], 0, 10),
             ];
         }
 
-        WP_CLI\Utils\format_items($format, $out, ['id', 'file', 'size', 'attached', 'refs', 'strong', 'uploaded']);
+        format_items($format, $out, ['id', 'file', 'size', 'attached', 'refs', 'strong', 'uploaded']);
     }
 
     /**
@@ -168,7 +171,7 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      */
-    public function delete($args, $assoc_args)
+    public function delete($args, $assoc_args): void
     {
         global $wpdb;
 
@@ -200,6 +203,7 @@ class UAMS_MRA_CLI
             foreach ($rows as $row) {
                 WP_CLI::log($row['attachment_id']."\t".$row['file']."\t".size_format((int) $row['bytes'], 1));
             }
+
             WP_CLI::success(sprintf('Dry run. %d files, %s would be freed.', count($rows), size_format($bytes, 1)));
 
             return;
@@ -208,13 +212,14 @@ class UAMS_MRA_CLI
         WP_CLI::confirm(sprintf('Permanently delete %d files and free %s?', count($rows), size_format($bytes, 1)), $assoc_args);
 
         $deleted = 0;
-        $progress = WP_CLI\Utils\make_progress_bar('Deleting', count($rows));
+        $progress = make_progress_bar('Deleting', count($rows));
 
         foreach ($rows as $row) {
             if (wp_delete_attachment((int) $row['attachment_id'], true)) {
                 $deleted++;
                 $wpdb->delete($table, ['attachment_id' => (int) $row['attachment_id']], ['%d']);
             }
+
             $progress->tick();
         }
 
@@ -233,7 +238,7 @@ class UAMS_MRA_CLI
      *
      * @param  array  $args  Positional args.
      */
-    public function why($args)
+    public function why($args): void
     {
         $id = (int) $args[0];
         $refs = UAMS_MRA_Store::get_refs($id, 100);
@@ -251,20 +256,19 @@ class UAMS_MRA_CLI
                 'source' => $ref->source_id,
                 'label' => $ref->source_label,
                 'confidence' => (int) $ref->confidence >= 2 ? 'strong' : 'by ID',
-                'site' => $ref->site_id ? $ref->site_id : '',
+                'site' => $ref->site_id ?: '',
             ];
         }
 
-        WP_CLI\Utils\format_items('table', $out, ['type', 'source', 'label', 'confidence', 'site']);
+        format_items('table', $out, ['type', 'source', 'label', 'confidence', 'site']);
     }
 
     /**
      * Map a status keyword to a WHERE fragment.
      *
      * @param  string  $status  Status keyword.
-     * @return string
      */
-    protected static function where_for($status)
+    protected static function where_for($status): string
     {
         $map = [
             'all' => '1=1',

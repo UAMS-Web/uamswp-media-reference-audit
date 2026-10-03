@@ -16,10 +16,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 {
     /**
      * Counts used for the view links.
-     *
-     * @var array
      */
-    protected $summary = [];
+    protected array $summary;
 
     /**
      * Constructor.
@@ -96,7 +94,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     protected function get_views()
     {
         $s = $this->summary;
-        $current = $this->current_view();
+        $current = static::current_view();
 
         $views = [
             'orphaned' => [__('Unattached and unreferenced', 'uams-mra'), $s['orphaned'] ?? 0],
@@ -217,7 +215,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     /**
      * Load rows.
      */
-    public function prepare_items()
+    public function prepare_items(): void
     {
         global $wpdb;
 
@@ -400,7 +398,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
             return esc_html(sprintf(__('Post %d (deleted)', 'uams-mra'), $parent));
         }
 
-        return '<a href="'.esc_url($link).'">'.esc_html($title ? $title : '#'.$parent).'</a>';
+        return '<a href="'.esc_url($link).'">'.esc_html($title ?: '#'.$parent).'</a>';
     }
 
     /**
@@ -470,7 +468,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     /**
      * Empty state.
      */
-    public function no_items()
+    public function no_items(): void
     {
         esc_html_e('No media matches this filter. Run a scan if you have not yet, or pick another filter above.', 'uams-mra');
     }
@@ -502,10 +500,11 @@ class UAMS_MRA_List_Table extends WP_List_Table
                 .' aria-pressed="'.($on ? 'true' : 'false').'">'
                 .esc_html($label).'</button>';
         }
+
         $out .= '</span>';
 
         $out .= '<input type="text" class="uams-mra-tri-note" value="'.esc_attr($mark['n']).'"'
-            .' maxlength="'.(int) UAMS_MRA_Triage::NOTE_MAX.'"'
+            .' maxlength="'.UAMS_MRA_Triage::NOTE_MAX.'"'
             .' placeholder="'.esc_attr__('Note, or who to ask…', 'uams-mra').'"'
             .' aria-label="'.esc_attr__('Note about this file', 'uams-mra').'"'
             .(($mark['d'] || $mark['n']) ? '' : ' hidden').' />';

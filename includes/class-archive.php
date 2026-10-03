@@ -47,10 +47,8 @@ class UAMS_MRA_Archive
 
     /**
      * Is zipping possible on this host.
-     *
-     * @return bool
      */
-    public static function available()
+    public static function available(): bool
     {
         return class_exists('ZipArchive');
     }
@@ -60,7 +58,7 @@ class UAMS_MRA_Archive
      *
      * @return int Bytes.
      */
-    public static function part_max_bytes()
+    public static function part_max_bytes(): int
     {
         return (int) apply_filters('uams_mra_archive_part_bytes', 200 * MB_IN_BYTES);
     }
@@ -70,7 +68,7 @@ class UAMS_MRA_Archive
      *
      * @return array {bytes, files}
      */
-    public static function step_budget()
+    public static function step_budget(): array
     {
         return (array) apply_filters(
             'uams_mra_archive_step_budget',
@@ -110,7 +108,7 @@ class UAMS_MRA_Archive
     /**
      * Throw away the current job and its files.
      */
-    public static function discard()
+    public static function discard(): void
     {
         $job = self::get_job();
 
@@ -140,7 +138,7 @@ class UAMS_MRA_Archive
 
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
 
-        if (empty($ids)) {
+        if ($ids === []) {
             return new WP_Error('uams_mra_empty', __('Nothing is selected, so there is nothing to archive.', 'uams-mra'));
         }
 
@@ -281,15 +279,13 @@ class UAMS_MRA_Archive
     /* ---------------------------------------------------------------------
      * Parts
      * ------------------------------------------------------------------ */
-
     /**
      * Absolute path of one part.
      *
      * @param  array  $job  Job.
      * @param  int  $part  Part number.
-     * @return string
      */
-    protected static function part_path(array $job, $part)
+    protected static function part_path(array $job, $part): string
     {
         return $job['dir'].'/'.self::part_name($part);
     }
@@ -298,9 +294,8 @@ class UAMS_MRA_Archive
      * Filename of one part.
      *
      * @param  int  $part  Part number.
-     * @return string
      */
-    public static function part_name($part)
+    public static function part_name($part): string
     {
         $host = sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST));
 
@@ -314,7 +309,7 @@ class UAMS_MRA_Archive
      * @param  int  $part  Part number.
      * @return int Bytes.
      */
-    protected static function part_bytes(array $job, $part)
+    protected static function part_bytes(array $job, $part): int
     {
         $path = self::part_path($job, $part);
 
@@ -352,7 +347,7 @@ class UAMS_MRA_Archive
         $uploads = wp_get_upload_dir();
         $base = trailingslashit($uploads['basedir']);
 
-        if (strpos($path, $base) === 0) {
+        if (strpos($path, (string) $base) === 0) {
             return substr($path, strlen($base));
         }
 
@@ -363,9 +358,8 @@ class UAMS_MRA_Archive
      * Is this format already compressed.
      *
      * @param  string  $path  File path.
-     * @return bool
      */
-    protected static function is_precompressed($path)
+    protected static function is_precompressed($path): bool
     {
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
@@ -379,16 +373,14 @@ class UAMS_MRA_Archive
     /* ---------------------------------------------------------------------
      * Manifest
      * ------------------------------------------------------------------ */
-
     /**
      * One manifest line.
      *
      * @param  int  $id  Attachment ID.
      * @param  string  $local  Path inside the zip.
      * @param  int  $size  Bytes.
-     * @return array
      */
-    protected static function manifest_row($id, $local, $size)
+    protected static function manifest_row($id, $local, $size): array
     {
         $post = get_post($id);
         $mark = UAMS_MRA_Triage::get($id);
@@ -414,7 +406,7 @@ class UAMS_MRA_Archive
      * @param  int  $part  Part number.
      * @return array Rows.
      */
-    protected static function read_manifest(array $job, $part)
+    protected static function read_manifest(array $job, $part): array
     {
         $path = self::part_path($job, $part);
 
@@ -441,6 +433,7 @@ class UAMS_MRA_Archive
             if ($i === 0 || trim((string) $line) === '') {
                 continue; // Header.
             }
+
             $rows[] = str_getcsv($line, ',', '"', '');
         }
 
@@ -480,13 +473,10 @@ class UAMS_MRA_Archive
     /* ---------------------------------------------------------------------
      * Storage
      * ------------------------------------------------------------------ */
-
     /**
      * Directory holding every job.
-     *
-     * @return string
      */
-    public static function base_dir()
+    public static function base_dir(): string
     {
         $uploads = wp_get_upload_dir();
 
@@ -550,7 +540,7 @@ class UAMS_MRA_Archive
      * Used on deactivation: leaving zips of deleted media in uploads after the
      * plugin is switched off is exactly the kind of thing nobody finds again.
      */
-    public static function cleanup_all()
+    public static function cleanup_all(): void
     {
         $base = self::base_dir();
 
@@ -570,7 +560,7 @@ class UAMS_MRA_Archive
      * one sitting, not long-term storage, and a library's worth of zips sitting
      * in uploads is its own disk problem.
      */
-    public static function cleanup()
+    public static function cleanup(): void
     {
         $base = self::base_dir();
 

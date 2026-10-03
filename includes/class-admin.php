@@ -31,7 +31,7 @@ class UAMS_MRA_Admin
     /**
      * Register the submenu.
      */
-    public function add_menu()
+    public function add_menu(): void
     {
         add_submenu_page(
             'upload.php',
@@ -47,9 +47,8 @@ class UAMS_MRA_Admin
      * Is the current screen ours.
      *
      * @param  string  $hook  Hook suffix.
-     * @return bool
      */
-    protected function is_screen($hook)
+    protected function is_screen($hook): bool
     {
         return 'media_page_'.self::SLUG === $hook;
     }
@@ -59,7 +58,7 @@ class UAMS_MRA_Admin
      *
      * @param  string  $hook  Hook suffix.
      */
-    public function enqueue($hook)
+    public function enqueue($hook): void
     {
         if (! $this->is_screen($hook)) {
             return;
@@ -95,7 +94,7 @@ class UAMS_MRA_Admin
     /**
      * Handle settings saves and bulk deletes.
      */
-    public function handle_requests()
+    public function handle_requests(): void
     {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         if (! isset($_GET['page']) || $_GET['page'] !== self::SLUG) {
@@ -165,7 +164,7 @@ class UAMS_MRA_Admin
         $ids = isset($_POST['ids']) ? array_map('absint', (array) wp_unslash($_POST['ids'])) : [];
         $ids = array_filter($ids);
 
-        if (empty($ids)) {
+        if ($ids === []) {
             add_settings_error('uams-mra', 'uams_mra_none', __('No files were selected, so nothing was deleted.', 'uams-mra'), 'warning');
 
             return;
@@ -191,7 +190,7 @@ class UAMS_MRA_Admin
 
         $ids = UAMS_MRA_Triage::ids_marked('delete');
 
-        if (empty($ids)) {
+        if ($ids === []) {
             add_settings_error('uams-mra', 'uams_mra_none', __('Nothing is marked Delete, so nothing was deleted.', 'uams-mra'), 'warning');
 
             return;
@@ -207,7 +206,7 @@ class UAMS_MRA_Admin
      * @param  bool  $force  Delete even when references were recorded.
      * @return array {deleted, skipped, bytes}
      */
-    protected function delete_ids(array $ids, $force)
+    protected function delete_ids(array $ids, $force): array
     {
         global $wpdb;
 
@@ -344,9 +343,9 @@ class UAMS_MRA_Admin
         if ($from_filter) {
             $ids = UAMS_MRA_Selection::ids_matching_filter();
 
-            if (empty($ids)) {
+            if ($ids === []) {
                 $this->notice(__('That filter matches no files.', 'uams-mra'), 'warning');
-                wp_safe_redirect(wp_get_referer() ? wp_get_referer() : self::url());
+                wp_safe_redirect(wp_get_referer() ?: self::url());
                 exit;
             }
 
@@ -360,7 +359,7 @@ class UAMS_MRA_Admin
 
         if (empty($resolved['ids'])) {
             $this->notice(__('None of that matched a file in the last scan. Paste attachment IDs, filenames, or URLs.', 'uams-mra'), 'warning');
-            wp_safe_redirect(wp_get_referer() ? wp_get_referer() : self::url());
+            wp_safe_redirect(wp_get_referer() ?: self::url());
             exit;
         }
 
@@ -396,7 +395,7 @@ class UAMS_MRA_Admin
 
         $ids = UAMS_MRA_Selection::get();
 
-        if (empty($ids)) {
+        if ($ids === []) {
             $this->notice(__('Nothing is selected, so nothing was deleted.', 'uams-mra'), 'warning');
             wp_safe_redirect(self::url());
             exit;
@@ -449,7 +448,7 @@ class UAMS_MRA_Admin
     /**
      * Begin building the archive.
      */
-    public function ajax_archive_start()
+    public function ajax_archive_start(): void
     {
         check_ajax_referer('uams_mra_archive', 'nonce');
 
@@ -469,7 +468,7 @@ class UAMS_MRA_Admin
     /**
      * Add the next batch to the archive.
      */
-    public function ajax_archive_step()
+    public function ajax_archive_step(): void
     {
         check_ajax_referer('uams_mra_archive', 'nonce');
 
@@ -490,9 +489,8 @@ class UAMS_MRA_Admin
      * Shape a job for the browser.
      *
      * @param  array  $job  Job.
-     * @return array
      */
-    protected function archive_payload(array $job)
+    protected function archive_payload(array $job): array
     {
         $total = max(1, count($job['ids']));
         $parts = [];
@@ -535,7 +533,7 @@ class UAMS_MRA_Admin
     /**
      * Stream one archive part to the browser.
      */
-    public function download_archive()
+    public function download_archive(): void
     {
         if (! current_user_can(UAMS_MRA_CAP)) {
             wp_die(esc_html__('You do not have permission to download this.', 'uams-mra'));
@@ -588,7 +586,7 @@ class UAMS_MRA_Admin
         $job = UAMS_MRA_Archive::get_job();
         $tiers = UAMS_MRA_Triage::tiers();
 
-        if ($rows) {
+        if ($rows !== []) {
             update_meta_cache('post', wp_list_pluck($rows, 'attachment_id'));
         }
         ?>
@@ -601,7 +599,7 @@ class UAMS_MRA_Admin
 				<a href="<?php echo esc_url(self::url()); ?>">&larr; <?php esc_html_e('Back to results', 'uams-mra'); ?></a>
 			</p>
 
-			<?php if (empty($rows)) { ?>
+			<?php if ($rows === []) { ?>
 				<p><?php esc_html_e('Nothing is selected. Go back and choose a filter or paste a list.', 'uams-mra'); ?></p>
 				</div>
 				<?php
@@ -739,7 +737,7 @@ class UAMS_MRA_Admin
 							<td>
 								<strong><a href="<?php echo esc_url((string) get_edit_post_link($id)); ?>"><?php echo esc_html($row['title'] !== '' ? $row['title'] : __('(no title)', 'uams-mra')); ?></a></strong>
 								<div class="uams-mra-file"><?php echo esc_html($row['file']); ?></div>
-								<div class="uams-mra-meta">ID <?php echo (int) $id; ?> &middot; <?php echo esc_html($row['mime']); ?></div>
+								<div class="uams-mra-meta">ID <?php echo $id; ?> &middot; <?php echo esc_html($row['mime']); ?></div>
 							</td>
 							<td>
 								<span class="uams-mra-tier uams-mra-tier-<?php echo esc_attr($tier); ?>"><?php echo esc_html($tiers[$tier]['label']); ?></span>
@@ -800,7 +798,7 @@ class UAMS_MRA_Admin
     /**
      * Save one file's disposition and note.
      */
-    public function ajax_triage()
+    public function ajax_triage(): void
     {
         check_ajax_referer('uams_mra_triage', 'nonce');
 
@@ -837,7 +835,7 @@ class UAMS_MRA_Admin
     /**
      * Begin a scan.
      */
-    public function ajax_start()
+    public function ajax_start(): void
     {
         check_ajax_referer('uams_mra_scan', 'nonce');
 
@@ -851,7 +849,7 @@ class UAMS_MRA_Admin
     /**
      * Advance the scan by one batch.
      */
-    public function ajax_step()
+    public function ajax_step(): void
     {
         check_ajax_referer('uams_mra_scan', 'nonce');
 
@@ -866,9 +864,8 @@ class UAMS_MRA_Admin
      * Shape state for the progress UI.
      *
      * @param  array  $state  Scan state.
-     * @return array
      */
-    protected function progress($state)
+    protected function progress($state): array
     {
         $done = ('done' === ($state['step'] ?? 'done'));
 
@@ -888,7 +885,7 @@ class UAMS_MRA_Admin
     /**
      * Stream results as CSV.
      */
-    public function export_csv()
+    public function export_csv(): void
     {
         if (! current_user_can(UAMS_MRA_CAP)) {
             wp_die(esc_html__('You do not have permission to export this report.', 'uams-mra'));
@@ -1002,7 +999,7 @@ class UAMS_MRA_Admin
     /**
      * Output the admin page.
      */
-    public function render()
+    public function render(): void
     {
         $this->flash_notice();
 
@@ -1086,7 +1083,7 @@ class UAMS_MRA_Admin
 				</div>
 			<?php } ?>
 
-			<?php if ($scanned && ! empty($summary['total']) && ! empty($triage)) { ?>
+			<?php if ($scanned && ! empty($summary['total']) && $triage !== []) { ?>
 				<h2 class="uams-mra-settings-heading"><?php esc_html_e('Triage', 'uams-mra'); ?></h2>
 				<p class="uams-mra-muted uams-mra-tier-intro">
 					<?php esc_html_e('Every file gets a tier from the scan and a decision from you. Decisions are stored on the file itself, so they survive the next scan and everyone with access sees the same marks.', 'uams-mra'); ?>
@@ -1096,7 +1093,7 @@ class UAMS_MRA_Admin
 
 				<div class="uams-mra-tiers">
 					<?php
-                    $current_tier = UAMS_MRA_List_Table::current_tier();
+			        $current_tier = UAMS_MRA_List_Table::current_tier();
 			    foreach (UAMS_MRA_Triage::tiers() as $key => $tier) {
 			        $url = add_query_arg(
 			            [
@@ -1157,7 +1154,7 @@ class UAMS_MRA_Admin
 
 			<form method="post" id="uams-mra-results-form">
 				<?php
-                wp_nonce_field('bulk-media_items');
+			    wp_nonce_field('bulk-media_items');
         echo '<input type="hidden" name="page" value="'.esc_attr(self::SLUG).'" />';
         echo '<input type="hidden" name="view" value="'.esc_attr($view).'" />';
         $table->views();
@@ -1172,7 +1169,7 @@ class UAMS_MRA_Admin
 					</label>
 				</p>
 
-				<?php if (! empty($triage)) { ?>
+				<?php if ($triage !== []) { ?>
 					<p class="uams-mra-marked"<?php echo $triage['disp']['delete'] > 0 ? '' : ' hidden'; ?>>
 						<button type="submit" name="uams_mra_delete_marked" value="1" id="uams-mra-delete-marked" class="button button-secondary">
 							<?php
@@ -1207,8 +1204,8 @@ class UAMS_MRA_Admin
 						<input type="hidden" name="tier" value="<?php echo esc_attr(UAMS_MRA_List_Table::current_tier()); ?>" />
 						<input type="hidden" name="disp" value="<?php echo esc_attr(UAMS_MRA_List_Table::current_disposition()); ?>" />
 						<?php
-                        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-                        $search_term = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
+				        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				        $search_term = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
 			    ?>
 						<input type="hidden" name="s" value="<?php echo esc_attr($search_term); ?>" />
 

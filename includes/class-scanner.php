@@ -31,10 +31,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Current scan state.
-     *
-     * @return array
      */
-    public static function get_state()
+    public static function get_state(): array
     {
         $state = get_option(self::STATE_OPTION, []);
 
@@ -46,7 +44,7 @@ class UAMS_MRA_Scanner
      *
      * @param  array  $state  State.
      */
-    public static function set_state($state)
+    public static function set_state($state): void
     {
         update_option(self::STATE_OPTION, $state, false);
     }
@@ -56,7 +54,7 @@ class UAMS_MRA_Scanner
      *
      * @return array State.
      */
-    public static function start()
+    public static function start(): array
     {
         global $wpdb;
 
@@ -91,13 +89,13 @@ class UAMS_MRA_Scanner
     {
         $state = self::get_state();
 
-        if (empty($state) || 'done' === ($state['step'] ?? '')) {
+        if ($state === [] || 'done' === ($state['step'] ?? '')) {
             return $state;
         }
 
         $method = 'step_'.$state['step'];
 
-        if (! method_exists(__CLASS__, $method)) {
+        if (! method_exists(self::class, $method)) {
             return self::advance($state);
         }
 
@@ -265,6 +263,7 @@ class UAMS_MRA_Scanner
                 if ((int) $attachment_id === (int) $row->ID) {
                     continue;
                 }
+
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => $row->post_type === 'revision' ? 'revision' : 'content',
@@ -325,9 +324,11 @@ class UAMS_MRA_Scanner
             if (isset($skip_keys[$row->meta_key])) {
                 continue;
             }
+
             if ($row->post_type === 'revision' && empty($state['settings']['include_revisions'])) {
                 continue;
             }
+
             if ((string) $row->meta_value === '') {
                 continue;
             }
@@ -347,6 +348,7 @@ class UAMS_MRA_Scanner
                 if ((int) $attachment_id === (int) $row->post_id) {
                     continue;
                 }
+
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => $source,
@@ -509,6 +511,7 @@ class UAMS_MRA_Scanner
             if (isset($skip_keys[$row->meta_key])) {
                 continue;
             }
+
             if ((string) $row->meta_value === '') {
                 continue;
             }
@@ -584,7 +587,7 @@ class UAMS_MRA_Scanner
             $cursor = (int) $row->ID;
 
             $paths = self::extract_paths($row->post_content, $target_base);
-            if (empty($paths)) {
+            if ($paths === []) {
                 continue;
             }
 
@@ -670,7 +673,7 @@ class UAMS_MRA_Scanner
 
         $parent_statuses = [];
         $parents = array_filter(array_map('intval', wp_list_pluck($rows, 'post_parent')));
-        if (! empty($parents)) {
+        if ($parents !== []) {
             $parents = array_values(array_unique($parents));
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -739,7 +742,7 @@ class UAMS_MRA_Scanner
      *
      * @return string Regex tested against the key, or '' to disable the check.
      */
-    protected static function foreign_id_key_pattern()
+    protected static function foreign_id_key_pattern(): string
     {
         return (string) apply_filters(
             'uams_mra_foreign_id_key_pattern',
@@ -751,9 +754,8 @@ class UAMS_MRA_Scanner
      * Does this key name an ID belonging to something other than an attachment.
      *
      * @param  string  $key  Meta or option name.
-     * @return bool
      */
-    protected static function is_foreign_id_key($key)
+    protected static function is_foreign_id_key($key): bool
     {
         $pattern = self::foreign_id_key_pattern();
 
@@ -777,9 +779,8 @@ class UAMS_MRA_Scanner
      * field -- should switch usermeta back on through the filter.
      *
      * @param  string  $source_type  Source type being scanned.
-     * @return bool
      */
-    protected static function source_allows_numeric_match($source_type)
+    protected static function source_allows_numeric_match($source_type): bool
     {
         $allowed = apply_filters(
             'uams_mra_numeric_match_sources',
@@ -798,10 +799,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Meta keys that describe the attachment itself and must never count as a reference.
-     *
-     * @return array
      */
-    protected static function skipped_meta_keys()
+    protected static function skipped_meta_keys(): array
     {
         return array_flip(
             apply_filters(
@@ -831,10 +830,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Upload path prefixes used to spot media URLs.
-     *
-     * @return array
      */
-    public static function upload_path_prefixes()
+    public static function upload_path_prefixes(): array
     {
         $uploads = wp_get_upload_dir();
         $base = (string) wp_parse_url($uploads['baseurl'], PHP_URL_PATH);
@@ -858,9 +855,8 @@ class UAMS_MRA_Scanner
      *
      * @param  string  $content  Text to scan.
      * @param  array  $prefixes  Upload path prefixes. Defaults to the current site.
-     * @return array
      */
-    public static function extract_paths($content, $prefixes = null)
+    public static function extract_paths($content, $prefixes = null): array
     {
         $content = (string) $content;
 
@@ -871,14 +867,12 @@ class UAMS_MRA_Scanner
         // JSON and slash-escaped content stores paths as \/ sequences.
         $content = str_replace(['\\/', '&#047;', '&#x2F;'], '/', $content);
 
-        if ($prefixes === null) {
-            $prefixes = self::upload_path_prefixes();
-        }
+        $prefixes ??= self::upload_path_prefixes();
 
         $found = [];
 
         foreach ($prefixes as $prefix) {
-            if (stripos($content, $prefix) === false) {
+            if (stripos($content, (string) $prefix) === false) {
                 continue;
             }
 
@@ -891,6 +885,7 @@ class UAMS_MRA_Scanner
                     if (stripos($path, 'sites/') === 0) {
                         continue;
                     }
+
                     $found[] = $path;
                 }
             }
@@ -903,9 +898,8 @@ class UAMS_MRA_Scanner
      * Pull attachment IDs out of post content.
      *
      * @param  string  $content  Post content.
-     * @return array
      */
-    public static function extract_ids_from_content($content)
+    public static function extract_ids_from_content($content): array
     {
         $content = (string) $content;
         $ids = [];
@@ -914,12 +908,15 @@ class UAMS_MRA_Scanner
         if (preg_match_all('#wp-image-(\d+)#i', $content, $m)) {
             $ids = array_merge($ids, $m[1]);
         }
+
         if (preg_match_all('#wp-att-(\d+)#i', $content, $m)) {
             $ids = array_merge($ids, $m[1]);
         }
+
         if (preg_match_all('#attachment_(\d+)#i', $content, $m)) {
             $ids = array_merge($ids, $m[1]);
         }
+
         if (preg_match_all('#attachment[_-]?id["\']?\s*[=:]\s*["\']?(\d+)#i', $content, $m)) {
             $ids = array_merge($ids, $m[1]);
         }
@@ -937,6 +934,7 @@ class UAMS_MRA_Scanner
                 if (preg_match_all('#"id"\s*:\s*(\d+)#', $block, $bm)) {
                     $ids = array_merge($ids, $bm[1]);
                 }
+
                 if (preg_match_all('#"ids"\s*:\s*\[([\d,\s]*)\]#', $block, $bm)) {
                     foreach ($bm[1] as $list) {
                         $ids = array_merge($ids, preg_split('#[\s,]+#', trim($list)));
@@ -956,7 +954,7 @@ class UAMS_MRA_Scanner
      * @param  bool  $allow_numeric  Treat bare numeric values matching an attachment as a reference.
      * @return array attachment_id => confidence
      */
-    public static function scan_meta_value($key, $value, $allow_numeric = true)
+    public static function scan_meta_value($key, $value, $allow_numeric = true): array
     {
         $value = (string) $value;
         $hits = [];
@@ -972,7 +970,7 @@ class UAMS_MRA_Scanner
 
         // Strong: any upload URL in the value.
         $paths = self::extract_paths($value);
-        if (! empty($paths)) {
+        if ($paths !== []) {
             foreach (UAMS_MRA_Index::resolve_paths($paths) as $id) {
                 $hits[$id] = 2;
             }
@@ -984,13 +982,15 @@ class UAMS_MRA_Scanner
             if (preg_match_all('#"(?:id|ids|image_id|attachment_id|thumbnail_id|media_id)"\s*:\s*(\d+)#i', $value, $m)) {
                 $json_ids = array_merge($json_ids, $m[1]);
             }
+
             if (preg_match_all('#"ids"\s*:\s*\[([\d,\s]*)\]#', $value, $m)) {
                 foreach ($m[1] as $list) {
                     $json_ids = array_merge($json_ids, preg_split('#[\s,]+#', trim($list)));
                 }
             }
         }
-        if (! empty($json_ids)) {
+
+        if ($json_ids !== []) {
             foreach (UAMS_MRA_Index::filter_attachment_ids($json_ids) as $id) {
                 $hits[$id] = 2;
             }
@@ -1021,9 +1021,7 @@ class UAMS_MRA_Scanner
         }
 
         foreach (UAMS_MRA_Index::filter_attachment_ids($candidates) as $id) {
-            if (! isset($hits[$id])) {
-                $hits[$id] = 1;
-            }
+            $hits[$id] ??= 1;
         }
 
         return $hits;
@@ -1034,9 +1032,8 @@ class UAMS_MRA_Scanner
      *
      * @param  array  $data  Data.
      * @param  int  $depth  Recursion depth.
-     * @return array
      */
-    protected static function collect_ids_from_array($data, $depth = 0)
+    protected static function collect_ids_from_array($data, $depth = 0): array
     {
         if ($depth > 6) {
             return [];
@@ -1074,9 +1071,8 @@ class UAMS_MRA_Scanner
      * Readable source label for a post row.
      *
      * @param  object  $row  Row with post_type, post_title, post_status.
-     * @return string
      */
-    protected static function post_label($row)
+    protected static function post_label($row): string
     {
         $title = isset($row->post_title) && $row->post_title !== '' ? $row->post_title : __('(no title)', 'uams-mra');
         $type = $row->post_type ?? 'post';
@@ -1096,9 +1092,8 @@ class UAMS_MRA_Scanner
      *
      * @param  int  $attachment_id  Attachment ID.
      * @param  string  $file  Relative file from _wp_attached_file.
-     * @return int
      */
-    public static function attachment_bytes($attachment_id, $file = '')
+    public static function attachment_bytes($attachment_id, $file = ''): int
     {
         $uploads = wp_get_upload_dir();
         $basedir = trailingslashit($uploads['basedir']);
@@ -1114,6 +1109,7 @@ class UAMS_MRA_Scanner
         $bytes = 0;
         $subdir = trailingslashit(dirname($file));
         $subdir = (trim($subdir, '/') === '.') ? '' : $subdir;
+
         $targets = [$file];
 
         $meta = wp_get_attachment_metadata($attachment_id);
@@ -1122,6 +1118,7 @@ class UAMS_MRA_Scanner
             if (! empty($meta['original_image'])) {
                 $targets[] = $subdir.$meta['original_image'];
             }
+
             if (! empty($meta['sizes']) && is_array($meta['sizes'])) {
                 foreach ($meta['sizes'] as $size) {
                     if (! empty($size['file'])) {

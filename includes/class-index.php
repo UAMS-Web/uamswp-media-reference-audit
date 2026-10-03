@@ -19,7 +19,7 @@ class UAMS_MRA_Index
      * @param  string  $file  Relative or absolute path or URL fragment.
      * @return array {path_norm, base_norm}
      */
-    public static function normalize($file)
+    public static function normalize($file): array
     {
         $file = (string) $file;
         $file = preg_replace('#[?\#].*$#', '', $file);
@@ -33,8 +33,8 @@ class UAMS_MRA_Index
 
         $dir = ltrim(str_replace('\\', '/', dirname($file)), '/');
         $base = basename($file);
-        $ext = strtolower((string) pathinfo($base, PATHINFO_EXTENSION));
-        $name = (string) pathinfo($base, PATHINFO_FILENAME);
+        $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+        $name = pathinfo($base, PATHINFO_FILENAME);
 
         $name = preg_replace('#-\d{1,5}x\d{1,5}$#', '', $name);
         $name = preg_replace('#-scaled$#', '', $name);
@@ -48,13 +48,11 @@ class UAMS_MRA_Index
         $parts = array_values(
             array_filter(
                 explode('/', $dir),
-                static function ($segment) {
-                    return $segment !== '' && $segment !== '.' && $segment !== '..';
-                }
+                static fn ($segment): bool => ! in_array($segment, ['', '.', '..'], true)
             )
         );
         $tail = array_slice($parts, -2);
-        $path_norm = (! empty($tail) ? implode('/', $tail).'/' : '').$base_norm;
+        $path_norm = ($tail !== [] ? implode('/', $tail).'/' : '').$base_norm;
 
         return [
             mb_substr($path_norm, 0, 255),
@@ -69,7 +67,7 @@ class UAMS_MRA_Index
      * @param  int  $limit  Batch size.
      * @return array {count, last_id}
      */
-    public static function build_batch($after, $limit)
+    public static function build_batch($after, $limit): array
     {
         global $wpdb;
 
@@ -100,6 +98,7 @@ class UAMS_MRA_Index
             if (! $file) {
                 $file = (string) get_post_meta($row->ID, '_wp_attached_file', true);
             }
+
             [$path_norm, $base_norm] = self::normalize($file);
 
             $values[] = '(%d,%s,%s)';
@@ -125,11 +124,11 @@ class UAMS_MRA_Index
      * @param  array  $candidates  Raw path or URL fragments.
      * @return array Attachment IDs.
      */
-    public static function resolve_paths(array $candidates)
+    public static function resolve_paths(array $candidates): array
     {
         global $wpdb;
 
-        if (empty($candidates)) {
+        if ($candidates === []) {
             return [];
         }
 
@@ -142,7 +141,7 @@ class UAMS_MRA_Index
             }
         }
 
-        if (empty($bases)) {
+        if ($bases === []) {
             return [];
         }
 
@@ -165,14 +164,13 @@ class UAMS_MRA_Index
      * Filter a list of integers down to those that are real attachment IDs.
      *
      * @param  array  $ids  Candidate IDs.
-     * @return array
      */
-    public static function filter_attachment_ids(array $ids)
+    public static function filter_attachment_ids(array $ids): array
     {
         global $wpdb;
 
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-        if (empty($ids)) {
+        if ($ids === []) {
             return [];
         }
 

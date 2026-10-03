@@ -37,10 +37,8 @@ if (defined('WP_CLI') && WP_CLI) {
 
 /**
  * Default settings.
- *
- * @return array
  */
-function uams_mra_default_settings()
+function uams_mra_default_settings(): array
 {
     return [
         'include_revisions' => 1, // Count a reference found only in a revision.
@@ -74,7 +72,7 @@ register_activation_hook(__FILE__, 'uams_mra_activate');
 /**
  * Create tables on activation. On multisite, only for the activated site.
  */
-function uams_mra_activate()
+function uams_mra_activate(): void
 {
     UAMS_MRA_Store::install();
 }
@@ -87,11 +85,12 @@ add_action('wp_initialize_site', 'uams_mra_new_site_tables_modern');
  *
  * @param  int  $blog_id  Site ID.
  */
-function uams_mra_new_site_tables($blog_id)
+function uams_mra_new_site_tables($blog_id): void
 {
     if (! is_plugin_active_for_network(plugin_basename(UAMS_MRA_FILE))) {
         return;
     }
+
     switch_to_blog($blog_id);
     UAMS_MRA_Store::install();
     restore_current_blog();
@@ -102,7 +101,7 @@ function uams_mra_new_site_tables($blog_id)
  *
  * @param  WP_Site  $site  Site object.
  */
-function uams_mra_new_site_tables_modern($site)
+function uams_mra_new_site_tables_modern($site): void
 {
     uams_mra_new_site_tables($site->blog_id);
 }
@@ -110,12 +109,13 @@ function uams_mra_new_site_tables_modern($site)
 /**
  * Make sure tables exist for the current site before we use them.
  */
-function uams_mra_maybe_install()
+function uams_mra_maybe_install(): void
 {
     if (get_option('uams_mra_db_version') !== UAMS_MRA_VERSION) {
         UAMS_MRA_Store::install();
     }
 }
+
 add_action('admin_init', 'uams_mra_maybe_install');
 
 add_action(UAMS_MRA_Archive::CLEANUP_HOOK, ['UAMS_MRA_Archive', 'cleanup']);
@@ -126,12 +126,13 @@ add_action(UAMS_MRA_Archive::CLEANUP_HOOK, ['UAMS_MRA_Archive', 'cleanup']);
  * Archives sit in uploads and are a safety net for one sitting's decisions, not
  * storage. Without this a few aborted 165 MB jobs quietly become a disk problem.
  */
-function uams_mra_schedule_cleanup()
+function uams_mra_schedule_cleanup(): void
 {
     if (! wp_next_scheduled(UAMS_MRA_Archive::CLEANUP_HOOK)) {
         wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', UAMS_MRA_Archive::CLEANUP_HOOK);
     }
 }
+
 add_action('admin_init', 'uams_mra_schedule_cleanup');
 
 register_deactivation_hook(__FILE__, 'uams_mra_deactivate');
@@ -139,7 +140,7 @@ register_deactivation_hook(__FILE__, 'uams_mra_deactivate');
 /**
  * Unschedule the cleanup event and remove any archives left on disk.
  */
-function uams_mra_deactivate()
+function uams_mra_deactivate(): void
 {
     wp_clear_scheduled_hook(UAMS_MRA_Archive::CLEANUP_HOOK);
     UAMS_MRA_Archive::cleanup_all();
@@ -148,10 +149,11 @@ function uams_mra_deactivate()
 /**
  * Load translations.
  */
-function uams_mra_load_textdomain()
+function uams_mra_load_textdomain(): void
 {
     load_plugin_textdomain('uams-mra', false, dirname(plugin_basename(UAMS_MRA_FILE)).'/languages');
 }
+
 add_action('plugins_loaded', 'uams_mra_load_textdomain');
 
 new UAMS_MRA_Admin;

@@ -43,10 +43,8 @@ class UAMS_MRA_Triage
 
     /**
      * Tiers, most cautious first.
-     *
-     * @return array
      */
-    public static function tiers()
+    public static function tiers(): array
     {
         return [
             'verify' => [
@@ -66,10 +64,8 @@ class UAMS_MRA_Triage
 
     /**
      * Dispositions a person can set.
-     *
-     * @return array
      */
-    public static function dispositions()
+    public static function dispositions(): array
     {
         return [
             'keep' => __('Keep', 'uams-mra'),
@@ -84,10 +80,8 @@ class UAMS_MRA_Triage
      * Anything listed here lands in the "ask team" tier when it is unattached,
      * because its absence from the database says very little about whether it
      * is still in circulation.
-     *
-     * @return array
      */
-    public static function distributable_mimes()
+    public static function distributable_mimes(): array
     {
         return (array) apply_filters(
             'uams_mra_distributable_mimes',
@@ -110,10 +104,8 @@ class UAMS_MRA_Triage
      *
      * Built once here so the tier a row is shown in and the tier it is counted
      * in can never disagree.
-     *
-     * @return string
      */
-    protected static function distributable_sql()
+    protected static function distributable_sql(): string
     {
         $mimes = array_map('esc_sql', self::distributable_mimes());
         $list = "'".implode("','", $mimes)."'";
@@ -129,9 +121,8 @@ class UAMS_MRA_Triage
      * WHERE fragment selecting one tier from the results table.
      *
      * @param  string  $tier  Tier key.
-     * @return string
      */
-    public static function tier_where($tier)
+    public static function tier_where($tier): string
     {
         switch ($tier) {
             case 'verify':
@@ -149,9 +140,8 @@ class UAMS_MRA_Triage
      * Tier for one results row.
      *
      * @param  array  $row  Results row.
-     * @return string
      */
-    public static function tier($row)
+    public static function tier($row): string
     {
         if (! empty($row['is_attached'])) {
             return 'verify';
@@ -170,9 +160,8 @@ class UAMS_MRA_Triage
      * WHERE fragment selecting rows by disposition.
      *
      * @param  string  $disposition  One of the disposition keys, or 'none'.
-     * @return string
      */
-    public static function disposition_where($disposition)
+    public static function disposition_where($disposition): string
     {
         global $wpdb;
 
@@ -199,7 +188,7 @@ class UAMS_MRA_Triage
      * @param  int  $attachment_id  Attachment ID.
      * @return array {d, n}
      */
-    public static function get($attachment_id)
+    public static function get($attachment_id): array
     {
         $attachment_id = (int) $attachment_id;
 
@@ -220,7 +209,7 @@ class UAMS_MRA_Triage
      * @param  string  $note  Note text, or '' to clear.
      * @return array The stored triage.
      */
-    public static function set($attachment_id, $disposition, $note)
+    public static function set($attachment_id, $disposition, $note): array
     {
         $attachment_id = (int) $attachment_id;
 
@@ -261,7 +250,7 @@ class UAMS_MRA_Triage
      * @param  string  $disposition  Disposition key.
      * @return array Attachment IDs.
      */
-    public static function ids_marked($disposition)
+    public static function ids_marked($disposition): array
     {
         global $wpdb;
 
@@ -295,9 +284,8 @@ class UAMS_MRA_Triage
      * cannot produce.
      *
      * @param  string  $scope  WHERE fragment limiting the count, or '' for everything.
-     * @return array
      */
-    public static function counts($scope = '')
+    public static function counts($scope = ''): array
     {
         global $wpdb;
 
@@ -344,6 +332,7 @@ class UAMS_MRA_Triage
             if (! isset($out['disp'][$key])) {
                 continue;
             }
+
             $out['disp'][$key] = (int) $row['n'];
             $marked += (int) $row['n'];
             if ($key === 'delete') {

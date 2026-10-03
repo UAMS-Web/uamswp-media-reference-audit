@@ -15,16 +15,16 @@ class UAMS_MRA_Store
      *
      * @var string|null
      */
-    protected static $prefix_override = null;
+    protected static $prefix_override;
 
     /**
      * Pin table names to another site's prefix, or pass null to clear.
      *
      * @param  string|null  $prefix  Table prefix.
      */
-    public static function set_prefix_override($prefix)
+    public static function set_prefix_override($prefix): void
     {
-        self::$prefix_override = $prefix ? $prefix : null;
+        self::$prefix_override = $prefix ?: null;
     }
 
     /**
@@ -36,35 +36,29 @@ class UAMS_MRA_Store
     {
         global $wpdb;
 
-        return self::$prefix_override ? self::$prefix_override : $wpdb->prefix;
+        return self::$prefix_override ?: $wpdb->prefix;
     }
 
     /**
      * Attachment lookup index table name.
-     *
-     * @return string
      */
-    public static function index_table()
+    public static function index_table(): string
     {
         return self::prefix().'uams_mra_index';
     }
 
     /**
      * Reference hits table name.
-     *
-     * @return string
      */
-    public static function refs_table()
+    public static function refs_table(): string
     {
         return self::prefix().'uams_mra_refs';
     }
 
     /**
      * Final per attachment results table name.
-     *
-     * @return string
      */
-    public static function results_table()
+    public static function results_table(): string
     {
         return self::prefix().'uams_mra_results';
     }
@@ -72,7 +66,7 @@ class UAMS_MRA_Store
     /**
      * Create or upgrade tables.
      */
-    public static function install()
+    public static function install(): void
     {
         global $wpdb;
         require_once ABSPATH.'wp-admin/includes/upgrade.php';
@@ -134,7 +128,7 @@ class UAMS_MRA_Store
     /**
      * Empty working tables before a fresh scan.
      */
-    public static function reset()
+    public static function reset(): void
     {
         global $wpdb;
         // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
@@ -149,10 +143,10 @@ class UAMS_MRA_Store
      *
      * @param  array  $rows  Each row: attachment_id, source_type, source_id, source_label, site_id, confidence.
      */
-    public static function add_refs(array $rows)
+    public static function add_refs(array $rows): void
     {
         global $wpdb;
-        if (empty($rows)) {
+        if ($rows === []) {
             return;
         }
 
@@ -208,10 +202,8 @@ class UAMS_MRA_Store
 
     /**
      * Summary counts for the dashboard.
-     *
-     * @return array
      */
-    public static function summary()
+    public static function summary(): array
     {
         global $wpdb;
         $t = self::results_table();
