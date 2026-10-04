@@ -195,8 +195,14 @@ To deploy to a UAMS host, zip the plugin directory and upload it through
 ```bash
 cd ..
 zip -r uamswp-media-reference-audit.zip uamswp-media-reference-audit \
-  -x '*.git*' -x '*.DS_Store'
+  -x '*.git*' -x '*.DS_Store' \
+  -x 'uamswp-media-reference-audit/vendor/*' -x 'uamswp-media-reference-audit/tests/*' \
+  -x 'uamswp-media-reference-audit/.phpstan/*' -x 'uamswp-media-reference-audit/composer.*' \
+  -x 'uamswp-media-reference-audit/rector*.php' -x 'uamswp-media-reference-audit/phpstan.neon.dist' \
+  -x 'uamswp-media-reference-audit/pint.json'
 ```
+
+The extra exclusions keep the development tooling below out of the upload.
 
 On multisite, activate per site rather than network-wide unless every site needs
 it. Tables are created per site, either on activation or on the first admin
@@ -205,6 +211,33 @@ request after that.
 Then go to **Media > Media Audit** and run a scan.
 
 Requires WordPress 6.0 and PHP 7.4.
+
+## Development
+
+The plugin has no runtime dependencies. `composer.json` holds development tools
+only: Rector, PHPStan with the WordPress extension and stubs, and Pint, set up
+from the shared `code-quality` skill in UAMS-Web/uams-claude-skills. They run on
+your PHP (Pint needs 8.3 or later); `rector.php` and `phpstan.neon.dist` are
+pinned to the plugin's floor, PHP 7.4, so neither suggests syntax 7.4 cannot
+parse.
+
+```bash
+composer install
+
+composer test:pint       # formatting check; `composer pint` fixes
+composer test:refactor   # Rector's gating profile, dry run; `composer refactor` applies
+composer stan            # PHPStan, at the level in phpstan.neon.dist
+```
+
+`composer refactor:sweep` runs Rector's sweep profile, which adds the rules held
+back from the gate; review its diff rather than applying it wholesale.
+
+The commit that first formatted the code with Pint is listed in
+`.git-blame-ignore-revs`. Tell `git blame` to skip it, once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 ## Performance notes
 

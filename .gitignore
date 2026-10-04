@@ -10,3 +10,6 @@
 /vendor/
 /node_modules/
 *.log
+
+# Static analysis cache (phpstan.neon.dist tmpDir)
+/.phpstan/

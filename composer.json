@@ -1,0 +1,29 @@
+{
+    "name": "uams-web/uamswp-media-reference-audit",
+    "description": "Development tooling only. The plugin has no runtime Composer dependencies.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.13",
+        "php-stubs/wordpress-stubs": "^6.9",
+        "php-stubs/wp-cli-stubs": "^2.12",
+        "phpstan/phpstan": "^2.1",
+        "rector/rector": "^2.5",
+        "szepeviktor/phpstan-wordpress": "^2.0"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "stan": "phpstan analyse --no-progress --memory-limit=2G",
+        "refactor": "rector",
+        "refactor:sweep": "rector --config=rector-sweep.php --clear-cache",
+        "test:refactor": "rector --dry-run",
+        "test:refactor:sweep": "rector --dry-run --config=rector-sweep.php --clear-cache",
+        "pint": "pint",
+        "test:pint": "pint --test"
+    }
+}
