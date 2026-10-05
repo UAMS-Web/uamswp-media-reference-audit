@@ -6,17 +6,23 @@ use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRe
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveDuplicatedReturnSelfDocblockRector;
 use Rector\DeadCode\Rector\Property\RemoveUselessVarTagRector;
-use Rector\Php81\Rector\Array_\ArrayToFirstClassCallableRector;
 use Rector\Php81\Rector\Property\ReadOnlyPropertyRector;
 use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
 use Rector\TypeDeclaration\Rector\ClassMethod\AddParamFromDimFetchKeyUseRector;
 use Rector\TypeDeclaration\Rector\ClassMethod\StrictArrayParamDimFetchRector;
 use Rector\ValueObject\PhpVersion;
 
+// WordPress repositories: uncomment the import below together with the matching
+// `ArrayToFirstClassCallableRector::class` entry in `$sweepOnlyRules`. A `use`
+// inside that array is a parse error; keep the import here with the others.
+use Rector\Php81\Rector\Array_\ArrayToFirstClassCallableRector;
+
 // Shared starting Rector configuration (UAMS-Web/uams-claude-skills#10). Copy it
 // to the repository root as `rector.php`, together with `rector-sweep.php`, and
-// fill in every line marked PLACEHOLDER. The structure below is what the
-// repositories that already run Rector share; keep it when you edit.
+// fill in every line marked PLACEHOLDER (replace the value and remove or
+// rewrite the PLACEHOLDER marker so it does not remain as a TODO). The
+// structure below is what the repositories that already run Rector share;
+// keep it when you edit.
 //
 // Two profiles over one rule corpus. This file is the single source of truth
 // for the sets both share; the profile only changes which rules are skipped.
@@ -62,6 +68,18 @@ $sweepOnlyRules = [
     RemoveUselessVarTagRector::class,
     RemoveDuplicatedReturnSelfDocblockRector::class,
 
+    // These type-declaration rules infer parameter types from how the body
+    // indexes or keys an argument. On untyped public/plugin API that still
+    // accepts bad input with a notice, the new type turns the same call into
+    // a TypeError fatal. Apply under the sweep profile and review call sites
+    // before promoting either rule into the gate.
+    StrictArrayParamDimFetchRector::class,
+    AddParamFromDimFetchKeyUseRector::class,
+
+    // WordPress repositories: uncomment the rule below and the matching `use`
+    // at the top of this file (not inside this array -- a `use` here is a
+    // parse error).
+    //
     // `add_action('x', [$this, 'method'])` registers a callback WordPress later
     // matches *by identity* for `remove_action()` / `has_action()`. A
     // first-class callable builds a fresh Closure at each evaluation, so the
@@ -69,17 +87,6 @@ $sweepOnlyRules = [
     // removal silently stops working, with nothing to see at the call site
     // (uamswp-migration-api docs/DECISIONS.md D-016).
     ArrayToFirstClassCallableRector::class,
-
-    // Native parameter types inferred from how the body uses the parameter
-    // (`$state['step']` makes `$state` an `array`; `$map[$status]` makes
-    // `$status` a `string`). Neither parameter has a type today, so a caller
-    // passing something else -- an option read back as `false`, a hook
-    // argument, `null` -- gets a notice and carries on; with the type it gets
-    // a fatal `TypeError`. Whether every caller is safe is a judgment about
-    // callers Rector cannot see at this path scope, the same reason
-    // LocallyCalledStaticMethodToNonStaticRector is held back above.
-    StrictArrayParamDimFetchRector::class,
-    AddParamFromDimFetchKeyUseRector::class,
 ];
 
 // Rules skipped in BOTH profiles, scoped to one file. Use this list for a
@@ -105,14 +112,16 @@ $sweepOnlyRules = [
 $neverRules = [];
 
 return RectorConfig::configure()
-    // the directories holding first-party PHP. Never a vendor
+    // Filled: the directories holding first-party PHP. Never a vendor
     // directory, and in a fork of a vendor plugin only the paths that hold our
     // modifications.
     ->withPaths([
         __DIR__.'/includes',
+        __DIR__.'/uamswp-media-reference-audit.php',
+        __DIR__.'/uninstall.php',
     ])
-    // The PHP files at the repository root: the plugin header file and
-    // uninstall.php.
+    // WordPress plugins: also analyze the PHP files at the repository root (the
+    // plugin header file). Uncomment for those.
     ->withRootFiles()
     ->withSkip([
         ...$neverRules,
@@ -126,7 +135,7 @@ return RectorConfig::configure()
         privatization: true,
         earlyReturn: true,
     )
-    // the LOWEST PHP version the repository supports, from
+    // Filled: the LOWEST PHP version the repository supports, from
     // composer.json's `php` constraint or the plugin header's `Requires PHP`.
     // Rector runs on the developer's PHP, which is usually newer; this pin is
     // what stops it rewriting code into syntax the supported version cannot
