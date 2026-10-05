@@ -1,0 +1,44 @@
+{
+  "base": "main",
+  "php": "8.2",
+  "chain": false,
+  "guard": {
+    "deny": [
+      "sentinel-key\\.php$",
+      "wp-config\\.php$",
+      "\\.sql(\\.gz)?$",
+      "\\.(csv|tsv|xlsx?)$",
+      "\\.env(\\.|$)",
+      "\\.pem$",
+      "\\.key$"
+    ]
+  },
+  "jobs": [
+    {
+      "name": "lint",
+      "run": "php -l",
+      "each": ["**/*.php", "!vendor/**"],
+      "always": true
+    },
+    {
+      "name": "pint",
+      "run": "vendor/bin/pint --test",
+      "paths": ["**/*.php", "!vendor/**", "pint.json", "composer.lock"]
+    },
+    {
+      "name": "rector",
+      "run": "vendor/bin/rector --dry-run",
+      "paths": ["**/*.php", "!vendor/**", "rector.php", "composer.lock"]
+    },
+    {
+      "name": "phpstan",
+      "run": "vendor/bin/phpstan analyse --no-progress --memory-limit=2G",
+      "paths": ["**/*.php", "!vendor/**", "phpstan.neon*", "composer.lock"]
+    },
+    {
+      "name": "pest",
+      "run": "vendor/bin/pest",
+      "paths": ["**/*.php", "!vendor/**", "phpunit.xml*", "composer.lock"]
+    }
+  ]
+}
