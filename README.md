@@ -257,3 +257,13 @@ they matter. The alternative, leaving the meta behind, would strand rows nobody
 on a shell-less host could ever clean up.
 
 Your media files are not touched.
+
+
+## Tests
+
+```bash
+composer install
+composer test:unit
+```
+
+The supported PHP floor is 7.4, so this repository uses PHPUnit 9 from the shared `tests` skill templates (Pest requires PHP 8.2+).

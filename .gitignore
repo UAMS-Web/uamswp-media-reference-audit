@@ -13,3 +13,4 @@
 
 # Static analysis cache (phpstan.neon.dist tmpDir)
 /.phpstan/
+/.phpunit.result.cache
