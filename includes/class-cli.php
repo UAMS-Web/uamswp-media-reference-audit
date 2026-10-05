@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use function WP_CLI\Utils\format_items;
 use function WP_CLI\Utils\make_progress_bar;
 

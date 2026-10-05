@@ -23,18 +23,12 @@ abstract class UnitTestCase extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    /**
-     * @return void
-     */
     protected function setUp(): void
     {
         parent::setUp();
         Monkey\setUp();
     }
 
-    /**
-     * @return void
-     */
     protected function tearDown(): void
     {
         Monkey\tearDown();

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Plugin Name:       UAMS Media Reference Audit
  * Plugin URI:        https://www.uams.edu/
