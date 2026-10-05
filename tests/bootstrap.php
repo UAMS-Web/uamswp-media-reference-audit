@@ -72,237 +72,54 @@ if (uamswp_mra_tests_want_wordpress(is_array($argv) ? $argv : [])) {
 require_once dirname(__DIR__).'/vendor/antecedent/patchwork/Patchwork.php';
 
 /*
- * Plugin files open with `defined('ABSPATH') || exit;`. Define it so they load,
- * pointing at a directory that is not a WordPress install: code that requires a
- * core file through ABSPATH fails loudly here, which is the sign it belongs in
- * the Integration suite.
+ * Plugin/theme files open with an ABSPATH guard. Define it so they load,
+ * pointing at a directory that is not a WordPress install.
  */
 if (! defined('ABSPATH')) {
     define('ABSPATH', sys_get_temp_dir().'/uamswp_mra-tests-no-wordpress/');
 }
 
 /*
- * Load the files that DEFINE functions and classes, never the main plugin file:
- * it registers hooks at file scope, and Brain Monkey's add_action() and
- * add_filter() exist only inside a test. Hook registration is tested in the
- * Integration suite, or in a unit test that calls a registering function.
- * Composer-autoloaded classes need no line here.
- *
- * When the main file must load in the Unit suite (definitions and registrations
- * still mixed), wrap that require in a Brain Monkey session and stub every
- * WordPress function it calls at file scope; see the tests skill.
+ * Load definitions+registrations inside one Brain Monkey session. Do not
+ * define permanent WordPress function stubs in this file — Patchwork treats
+ * this bootstrap as too early and Brain Monkey cannot redefine them in tests
+ * (DefinedTooEarly). See the tests skill and the wordpress-theme template.
  */
+Brain\Monkey\setUp();
 
-if (! function_exists('plugin_dir_path')) {
-    function plugin_dir_path($file)
-    {
-        return dirname($file).'/';
-    }
-}
-
-if (! function_exists('plugin_dir_url')) {
-    function plugin_dir_url($file)
-    {
-        return 'https://example.test/wp-content/plugins/'.basename(dirname($file)).'/';
-    }
-}
-
-if (! function_exists('plugin_basename')) {
-    function plugin_basename($file)
-    {
-        return basename(dirname($file)).'/'.basename($file);
-    }
-}
-
-if (! function_exists('is_multisite')) {
-    function is_multisite()
-    {
-        return false;
-    }
-}
-
-if (! function_exists('get_site_option')) {
-    function get_site_option($key, $default = false)
-    {
-        return $default;
-    }
-}
-
-if (! function_exists('get_option')) {
-    function get_option($key, $default = false)
-    {
-        return $default;
-    }
-}
-
-if (! function_exists('update_option')) {
-    function update_option()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('apply_filters')) {
-    function apply_filters($tag, $value)
-    {
-        return $value;
-    }
-}
-
-if (! function_exists('add_action')) {
-    function add_action()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('add_filter')) {
-    function add_filter()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('remove_action')) {
-    function remove_action()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('remove_filter')) {
-    function remove_filter()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('do_action')) {
-    function do_action()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('register_activation_hook')) {
-    function register_activation_hook()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('register_deactivation_hook')) {
-    function register_deactivation_hook()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('register_uninstall_hook')) {
-    function register_uninstall_hook()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('load_plugin_textdomain')) {
-    function load_plugin_textdomain()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('is_admin')) {
-    function is_admin()
-    {
-        return false;
-    }
-}
-
-if (! function_exists('wp_enqueue_script')) {
-    function wp_enqueue_script()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('wp_enqueue_style')) {
-    function wp_enqueue_style()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('wp_register_script')) {
-    function wp_register_script()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('wp_register_style')) {
-    function wp_register_style()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('wp_localize_script')) {
-    function wp_localize_script()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('esc_html')) {
-    function esc_html($text)
-    {
-        return $text;
-    }
-}
-
-if (! function_exists('esc_attr')) {
-    function esc_attr($text)
-    {
-        return $text;
-    }
-}
-
-if (! function_exists('esc_url')) {
-    function esc_url($text)
-    {
-        return $text;
-    }
-}
-
-if (! function_exists('__')) {
-    function __($text)
-    {
-        return $text;
-    }
-}
-
-if (! function_exists('_e')) {
-    function _e()
-    {
-        return true;
-    }
-}
-
-if (! function_exists('esc_html__')) {
-    function esc_html__($text)
-    {
-        return $text;
-    }
-}
-
-if (! function_exists('esc_attr__')) {
-    function esc_attr__($text)
-    {
-        return $text;
-    }
-}
+Brain\Monkey\Functions\when('plugin_dir_path')->justReturn(dirname(__DIR__).'/');
+Brain\Monkey\Functions\when('plugin_dir_url')->justReturn('https://example.test/wp-content/plugins/'.basename(dirname(__DIR__)).'/');
+Brain\Monkey\Functions\when('plugin_basename')->alias(static function ($file) {
+    return basename(dirname($file)).'/'.basename($file);
+});
+Brain\Monkey\Functions\when('is_multisite')->justReturn(false);
+Brain\Monkey\Functions\when('get_site_option')->alias(static function ($key, $default = false) {
+    return $default;
+});
+Brain\Monkey\Functions\when('get_option')->alias(static function ($key, $default = false) {
+    return $default;
+});
+Brain\Monkey\Functions\when('update_option')->justReturn(null);
+Brain\Monkey\Functions\when('register_activation_hook')->justReturn(null);
+Brain\Monkey\Functions\when('register_deactivation_hook')->justReturn(null);
+Brain\Monkey\Functions\when('register_uninstall_hook')->justReturn(null);
+Brain\Monkey\Functions\when('load_plugin_textdomain')->justReturn(null);
+Brain\Monkey\Functions\when('is_admin')->justReturn(false);
+Brain\Monkey\Functions\when('wp_enqueue_script')->justReturn(null);
+Brain\Monkey\Functions\when('wp_enqueue_style')->justReturn(null);
+Brain\Monkey\Functions\when('wp_register_script')->justReturn(null);
+Brain\Monkey\Functions\when('wp_register_style')->justReturn(null);
+Brain\Monkey\Functions\when('wp_localize_script')->justReturn(null);
+Brain\Monkey\Functions\when('esc_html')->returnArg();
+Brain\Monkey\Functions\when('esc_attr')->returnArg();
+Brain\Monkey\Functions\when('esc_url')->returnArg();
+Brain\Monkey\Functions\when('__')->returnArg();
+Brain\Monkey\Functions\when('_e')->justReturn(null);
+Brain\Monkey\Functions\when('esc_html__')->returnArg();
+Brain\Monkey\Functions\when('esc_attr__')->returnArg();
 
 
 
-// cspell:ignore ABSPATH autoloaded
+Brain\Monkey\tearDown();
+
+// cspell:ignore ABSPATH
