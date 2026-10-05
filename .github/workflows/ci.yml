@@ -1,0 +1,110 @@
+# RUN_REMOTE_CI: budget kill-switch.
+# GitHub Actions minutes bill at the organization level, one pool shared by
+# every UAMS-Web repository, and only private repositories consume them. This
+# repository is private. Every job below is gated on
+# `if: vars.RUN_REMOTE_CI != 'false'`: with the variable set to `false` the jobs
+# report `skipped` and consume no runner minutes; unset, or any other value,
+# runs them as before.
+#
+# While the switch is off, the local CI runner (.claude/skills/local-ci/) is
+# the whole gate, not a fallback. Its verdict is posted on the pull request.
+# Job list mirrors local-ci.json; keep the two in step.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard against committed secrets / PII
+        run: |
+          bad=$(git ls-files | grep -E "sentinel-key\\.php$|wp-config\\.php$|\\.sql(\\.gz)?$|\\.(csv|tsv|xlsx?)$|\\.env(\\.|$)|\\.pem$|\\.key$" || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Tracked secret/PII file(s) detected:"; echo "$bad"; exit 1
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer
+      - name: php -l every PHP file
+        run: |
+          set -e
+          find . -name '*.php' -not -path './vendor/*' -not -path './vendor' -not -path './tests-legacy/*' -not -path './tests-legacy' -print0 \
+            | xargs -0 -I{} php -l "{}"
+
+  pint:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: pint
+        run: composer test:pint
+
+  rector:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: rector
+        run: composer test:refactor
+
+  phpstan:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: phpstan
+        run: composer stan
+
+  phpunit:
+    runs-on: ubuntu-latest
+    # Budget kill-switch: see the RUN_REMOTE_CI note in the header.
+    if: vars.RUN_REMOTE_CI != 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: phpunit
+        run: composer test:unit
