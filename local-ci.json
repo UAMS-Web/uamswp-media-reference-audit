@@ -1,0 +1,69 @@
+{
+  "base": "main",
+  "php": "7.4",
+  "chain": false,
+  "guard": {
+    "deny": [
+      "sentinel-key\\.php$",
+      "wp-config\\.php$",
+      "\\.sql(\\.gz)?$",
+      "\\.(csv|tsv|xlsx?)$",
+      "\\.env(\\.|$)",
+      "\\.pem$",
+      "\\.key$"
+    ]
+  },
+  "jobs": [
+    {
+      "name": "lint",
+      "run": "php -l",
+      "each": [
+        "**/*.php",
+        "!vendor/**",
+        "!tests-legacy/**"
+      ],
+      "always": true
+    },
+    {
+      "name": "pint",
+      "run": "composer test:pint",
+      "paths": [
+        "**/*.php",
+        "!vendor/**",
+        "pint.json",
+        "composer.lock"
+      ]
+    },
+    {
+      "name": "rector",
+      "run": "composer test:refactor",
+      "paths": [
+        "**/*.php",
+        "!vendor/**",
+        "rector.php",
+        "composer.lock"
+      ]
+    },
+    {
+      "name": "phpstan",
+      "run": "composer stan",
+      "paths": [
+        "**/*.php",
+        "!vendor/**",
+        "phpstan.neon*",
+        "composer.lock"
+      ]
+    },
+    {
+      "name": "phpunit",
+      "run": "composer test:unit",
+      "paths": [
+        "**/*.php",
+        "!vendor/**",
+        "phpunit.xml*",
+        "composer.lock",
+        "tests/**"
+      ]
+    }
+  ]
+}
