@@ -1,0 +1,143 @@
+#!/bin/sh
+#
+# pre-commit: refuse a commit that stages a file guard.deny forbids.
+#
+# The patterns come from `guard.deny` in local-ci.json at the repository root,
+# the same list the local CI runner's `guard` job checks over every tracked
+# file. The runner, like a GitHub Actions run, sees a file only after it has
+# been committed and pushed, and git history is permanent, so the check that
+# matters most runs here, before the commit exists.
+#
+# Install once per clone (the hook lives in the repository, git does not run
+# it from there by default):
+#
+#     git config core.hooksPath .githooks
+#
+# With node on PATH the patterns are read and matched exactly as the runner
+# does (JavaScript regular expressions), and any failure to evaluate them
+# refuses the commit. Without node, a small sh parser reads the array and
+# `grep -E` matches, which agrees for patterns like `sentinel-key\.php$` and
+# `\.sql(\.gz)?$`, the form the template uses. That parser cannot
+# read a pattern containing `]` (a character class); it refuses every commit
+# rather than guess, and so does a pattern `grep -E` cannot compile (patterns match case-insensitively in every path: `RegExp` with the `i` flag, `grep -Ei` here). A pattern
+# `grep -E` reads differently from JavaScript is matched by the runner's guard
+# job. Install node, or write the pattern without a character class (list the
+# alternatives, as the template does).
+#
+# POSIX sh only. No dependency beyond git, and node when it is present.
+
+CONFIG="local-ci.json"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "pre-commit: $CONFIG is missing; skipping the guard.deny check (not adopted yet)." >&2
+    echo "pre-commit: add $CONFIG at the repository root when adopting local-ci, or the guard never runs." >&2
+    exit 0
+fi
+
+# Added, copied, modified and renamed paths in the index. Deleted ones cannot
+# leak anything. -z and tr keep a path with a space or a quote intact.
+staged=$(git diff --cached --name-only --diff-filter=ACMR -z | tr '\0' '\n')
+
+if [ -z "$staged" ]; then
+    exit 0
+fi
+
+denied=""
+
+if command -v node >/dev/null 2>&1; then
+    # One node process: read the config, match every staged path, print
+    # "<path>\t<pattern>" per hit. A config the runner would refuse (bad JSON,
+    # a pattern that is not a regular expression) refuses the commit too,
+    # naming the problem, rather than passing with a guard that did not run.
+    denied=$(printf '%s\n' "$staged" | node -e '
+        const fs = require("fs");
+        let config;
+        try {
+            config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+        } catch (error) {
+            console.error("pre-commit: " + process.argv[1] + " is not valid JSON: " + error.message);
+            process.exit(2);
+        }
+        const guard = config && config.guard;
+        if (guard !== undefined && (!guard || typeof guard !== "object")) {
+            console.error("pre-commit: guard in " + process.argv[1] + " must be an object with a deny array.");
+            process.exit(2);
+        }
+        const deny = guard && guard.deny !== undefined ? guard.deny : [];
+        if (!Array.isArray(deny) || deny.some((p) => typeof p !== "string" || p === "")) {
+            console.error("pre-commit: guard.deny in " + process.argv[1] + " must be an array of non-empty strings.");
+            process.exit(2);
+        }
+        const patterns = deny.map((p) => { try { return new RegExp(p, "i"); } catch (error) { console.error("pre-commit: guard.deny pattern " + JSON.stringify(p) + " is invalid: " + error.message); process.exit(2); } });
+        const staged = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+        for (const file of staged) {
+            for (const [i, re] of patterns.entries()) {
+                if (re.test(file)) { console.log(file + "\t" + deny[i]); break; }
+            }
+        }
+    ' "$CONFIG")
+    rc=$?
+    # Any failure, not only the two handled above (a crash on a config shape
+    # nobody anticipated exits 1), means the guard did not run: refuse.
+    if [ "$rc" -ne 0 ]; then
+        echo "pre-commit: the guard.deny check failed (node exit $rc); refusing the commit until $CONFIG is fixed." >&2
+        exit 1
+    fi
+else
+    refuse_unread() {
+        echo "pre-commit: could not read guard.deny from $CONFIG without node ($1); refusing the commit rather than skipping the guard. Install node, or see the header of this hook." >&2
+        exit 1
+    }
+    flat=$(tr -d '\n\r' < "$CONFIG")
+    # Fallback parser: cut the deny array out, one quoted string per line,
+    # then undo JSON escaping (\\ -> \, \" -> "). The array text stops at the
+    # first `]`, so it must end with a closing quote; a `]` inside a pattern
+    # leaves it ending mid-string, and is refused rather than truncated.
+    raw=$(printf '%s' "$flat" | sed -n 's/.*"deny"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p')
+    patterns=""
+    if printf '%s' "$flat" | grep -q '"deny"[[:space:]]*:[[:space:]]*\[[[:space:]]*\]'; then
+        : # an empty deny list: nothing to match
+    elif printf '%s' "$flat" | grep -q '"deny"'; then
+        if [ -z "$raw" ] || ! printf '%s' "$raw" | grep -q '"[[:space:]]*$'; then
+            refuse_unread "a pattern containing ] or a deny value that is not an array"
+        fi
+        patterns=$(printf '%s' "$raw" \
+            | sed 's/"[[:space:]]*,[[:space:]]*"/\
+/g; s/^[[:space:]]*"//; s/"[[:space:]]*$//' \
+            | sed 's/\\\\/\\/g; s/\\"/"/g')
+        [ -z "$patterns" ] && refuse_unread "no pattern found"
+    fi
+
+    while IFS= read -r pattern; do
+        [ -z "$pattern" ] && continue
+        hits=$(printf '%s\n' "$staged" | grep -Ei -- "$pattern")
+        grc=$?
+        # 0 matched, 1 no match, anything else: grep could not use the pattern.
+        if [ "$grc" -gt 1 ]; then
+            refuse_unread "grep -E rejected the pattern $pattern"
+        fi
+        if [ -n "$hits" ]; then
+            denied="$denied$(printf '%s\n' "$hits" | while IFS= read -r hit; do printf '%s\t%s\n' "$hit" "$pattern"; done)
+"
+        fi
+    done <<EOF
+$patterns
+EOF
+fi
+
+if [ -z "$denied" ]; then
+    exit 0
+fi
+
+echo "" >&2
+echo "pre-commit: refusing this commit. A staged file matches guard.deny in $CONFIG:" >&2
+printf '%s\n' "$denied" | while IFS="$(printf '\t')" read -r file pattern; do
+    [ -z "$file" ] && continue
+    echo "    $file    (pattern: $pattern)" >&2
+done
+echo "" >&2
+echo "Unstage it (git restore --staged <file>) and keep it out of the repository." >&2
+echo "If the file belongs in the repository, change guard.deny in $CONFIG first." >&2
+echo "The local CI runner's guard job fails on the same file, so bypassing this hook" >&2
+echo "only moves the failure to the pull request." >&2
+exit 1

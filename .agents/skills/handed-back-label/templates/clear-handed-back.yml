@@ -1,0 +1,73 @@
+name: Clear handed-back
+
+# Removes the `handed-back` label when a pull request carrying it is pushed to.
+# The gate applies the label on a hand-back; a push is the pull request
+# re-entering the queue, and that is the one moment the label comes off. Doing
+# it here rather than by hand is the point: a removal the gate has to remember
+# gets missed, and a pull request still carrying the label drops out of the
+# queue depth while it waits to be gated.
+#
+# `synchronize` is the push, and only the push. Opening a pull request, applying
+# the label, and a comment are other event types, so none of them can remove it.
+#
+# Deliberately NOT gated on RUN_REMOTE_CI, where a repository gates its other
+# jobs on it. That switch is off for months at a time, and gating this on it
+# would bring back the missed removal for exactly that long. The cost is bounded
+# by the job-level `if:` below: a push to a pull request without the label is
+# skipped before a runner is dispatched, so only a push to a handed-back pull
+# request spends minutes, and that job is one API call.
+#
+# Where a repository's `.claude/settings.json` denies `gh api -X DELETE`, the
+# gate's own sessions cannot make this call. This job runs under its own
+# `GITHUB_TOKEN`, which that deny rule never sees.
+#
+# This file is a copy of the template in the shared `handed-back-label` skill
+# (UAMS-Web/uams-claude-skills#57). Change the template there, not this copy: the
+# skill's drift check fails when the two differ.
+
+on:
+  pull_request:
+    types: [synchronize]
+
+# Nothing at the workflow level; the one job states the one scope it needs.
+permissions: {}
+
+jobs:
+  clear:
+    if: contains(github.event.pull_request.labels.*.name, 'handed-back')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove the handed-back label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        # DELETE removes this one label and leaves every other label alone. A
+        # 404 means it is already gone (two pushes in quick succession both see
+        # it in their payload), which is the state this job exists to reach, so
+        # it is success rather than failure. Anything else fails.
+        #
+        # `gh` exits non-zero on the 404, so its status is read from the
+        # response's own status line rather than from the exit code, and the
+        # `|| true` keeps the runner's `-e` from ending the step before the
+        # check below has read it.
+        run: |
+          head=$(gh api -X DELETE "repos/$REPO/issues/$NUMBER/labels/handed-back" \
+            --silent -i 2>/dev/null || true)
+          status=$(printf '%s\n' "$head" | head -1 | awk '{print $2}')
+
+          if [ "$status" = 200 ]; then
+            echo "Removed handed-back from #$NUMBER."
+            exit 0
+          fi
+
+          if [ "$status" = 404 ]; then
+            echo "handed-back was already gone from #$NUMBER."
+            exit 0
+          fi
+
+          echo "::error::Removing handed-back from #$NUMBER returned '${status:-no status}'."
+          exit 1
