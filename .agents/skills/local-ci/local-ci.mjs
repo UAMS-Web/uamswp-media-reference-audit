@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// cspell:ignore gitlink gitlinks
 //
 // local-ci.mjs: the shared local CI runner (UAMS-Web/uams-claude-skills#11).
 //
@@ -129,6 +130,12 @@
 //              `tooling absent`; a run whose selected jobs were all skipped this way
 //              is NOTHING RAN, and a run where some passed and some were skipped
 //              this way is `PASS (incomplete)`, never a bare PASS.
+//     installs true: this job installs the repository's dependencies
+//              (`composer install`). The run refuses before any job when a
+//              selected job runs a `vendor/bin` tool and `vendor/autoload.php`
+//              is absent; a selected `installs` job listed before the first
+//              such job stands that refusal down, so a fresh slot reaches the
+//              job that creates `vendor/`.
 //     mutation `{"minScore": 100}`: the job's output is part of its verdict. The
 //              command's output is read for Pest's `N Mutations for M Files
 //              created` line and its `Score: N%` line, and the job fails when
@@ -148,6 +155,14 @@
 //              `--passthru-php`, because workers are their own PHP processes
 //              and otherwise run at the system CLI limit. Not combinable with
 //              `each` or `mutation`.
+//     php      "8.2": this job runs on that PHP instead of the run's, for a
+//              `php -l` over the shipped files under the supported floor while
+//              the rest of the run uses the development PHP. `run` must start
+//              with `php` or `vendor/bin/`. It resolves from
+//              LOCAL_CI_PHP_<major><minor> (LOCAL_CI_PHP_82), Herd's pinned
+//              binary, or php8.2 / php82 on PATH, never from plain `php`, and
+//              the run fails before any job when that PHP is missing or reports
+//              another version: a newer parser accepts what the floor rejects.
 //
 // PREPARE: bringing a reused slot in line with the commit (opt-in)
 //     "prepare": {
@@ -200,7 +215,8 @@
 //     it, so a repository with no PHP job runs on a machine with no PHP. A
 //     version other than the config's warns; a missing PHP fails before any
 //     job runs. --dry-run lists the search order and notes when a Herd pin is
-//     absent so the plan is not read as a guarantee that pin will run.
+//     absent so the plan is not read as a guarantee that pin will run. A job
+//     that names its own `php` resolves it separately (see `php` above).
 //
 // EXPORTS
 //     The pure functions (config parsing, glob matching, job selection, the
@@ -239,6 +255,7 @@ export function usage() {
 Usage:
   node .claude/skills/local-ci/local-ci.mjs [--all | --jobs <a,b>] [--base <ref>] [--dry-run] [--comment]
                                             [--commit-status] [--branch <name> [--worktree-path <dir>]]
+  node .claude/skills/local-ci/local-ci.mjs --drop-patch-record
 
 Options:
   --all           Run every job in local-ci.json, whatever the diff says.
@@ -259,6 +276,12 @@ Options:
   --worktree-path <dir>
                   Where the slot lives (default: a sibling of the primary
                   checkout, named <primary>-ci). Needs --branch.
+  --drop-patch-record
+                  Delete the patch record (vendor/.local-ci-patches.lock.json) in
+                  the tree this runner lives in, then exit. A repository's install
+                  script runs it before composer install, so an install that
+                  dies after re-extracting a patched package cannot leave a record
+                  that vouches for an unpatched vendor/. Takes no other option.
   -h, --help      Show this help.
 
 Config: local-ci.json at the repository root. The header of this file documents
@@ -266,7 +289,7 @@ its format; .claude/skills/local-ci/templates/local-ci.json is a worked example.
 }
 
 export function parseArgs(argv) {
-    const opts = { all: false, jobs: null, base: null, dryRun: false, comment: false, commitStatus: false, branch: null, worktreePath: null, help: false }
+    const opts = { all: false, jobs: null, base: null, dryRun: false, comment: false, commitStatus: false, branch: null, worktreePath: null, dropPatchRecord: false, help: false }
     const needsValue = (flag, value) => {
         if (value === undefined || value.startsWith('-')) {
             throw new Error(`Option ${flag} requires a value.`)
@@ -305,12 +328,18 @@ export function parseArgs(argv) {
             case '--worktree-path':
                 opts.worktreePath = needsValue(arg, argv[++i])
                 break
+            case '--drop-patch-record':
+                opts.dropPatchRecord = true
+                break
             default:
                 throw new Error(`Unknown option: ${arg} (see --help)`)
         }
     }
     if (opts.all && opts.jobs) {
         throw new Error('--all and --jobs exclude each other.')
+    }
+    if (opts.dropPatchRecord && (opts.all || opts.jobs || opts.base || opts.dryRun || opts.comment || opts.commitStatus || opts.branch || opts.worktreePath)) {
+        throw new Error('--drop-patch-record only deletes the patch record; it takes no other option.')
     }
     if (opts.worktreePath && !opts.branch) {
         throw new Error('--worktree-path only places the slot --branch uses; pass --branch too.')
@@ -339,7 +368,8 @@ const asStringList = (value, what) => {
 // only guess about, so a typo in the config fails here with the key named
 // rather than as a job that never runs.
 const TOP_LEVEL_KEYS = ['base', 'php', 'chain', 'guard', 'jobs', 'prepare', 'statusContext', 'watch']
-const JOB_KEYS = ['name', 'run', 'always', 'each', 'paths', 'requires', 'mutation', 'parallel', 'database']
+const JOB_KEYS = ['name', 'run', 'always', 'each', 'paths', 'requires', 'mutation', 'parallel', 'database', 'php', 'installs']
+const GUARD_KEYS = ['deny']
 const MUTATION_KEYS = ['minScore']
 const PARALLEL_KEYS = ['serialGroup', 'memoryLimit']
 
@@ -380,6 +410,7 @@ export function parseConfig(raw) {
         if (!config.guard || typeof config.guard !== 'object') {
             throw new Error('"guard" must be an object with a "deny" array.')
         }
+        refuseUnknownKeys(config.guard, GUARD_KEYS, '"guard"')
         deny = asStringList(config.guard.deny, '"guard.deny"').map((pattern) => {
             try {
                 // Case-insensitive: a guard protects file names, and DUMP.Sql is the same dump as dump.sql.
@@ -428,7 +459,17 @@ export function parseConfig(raw) {
             throw new Error(`${where}.parallel cannot be combined with "each" or "mutation".`)
         }
         const database = parseDatabase(job.database, `${where}.database`)
-        return { name: job.name, run: job.run.trim(), paths, each, always: job.always === true, requires, mutation, parallel, database }
+        if (job.installs !== undefined && typeof job.installs !== 'boolean') {
+            throw new Error(`${where}.installs must be true or false.`)
+        }
+        const jobPhp = job.php === undefined ? null : job.php
+        if (jobPhp !== null && (typeof jobPhp !== 'string' || !/^\d+\.\d+$/.test(jobPhp))) {
+            throw new Error(`${where}.php must be a version like "8.2".`)
+        }
+        if (jobPhp !== null && !needsPhp(job.run)) {
+            throw new Error(`${where}.php needs "run" to start with php or vendor/bin/; nothing else runs under PHP.`)
+        }
+        return { name: job.name, run: job.run.trim(), paths, each, always: job.always === true, requires, mutation, parallel, database, php: jobPhp, installs: job.installs === true }
     })
 
     const statusContext = config.statusContext === undefined ? 'local-ci' : config.statusContext
@@ -633,6 +674,29 @@ function normalizeRequirement(entry, where) {
         throw new Error(`${where} entry ${JSON.stringify(entry)} must be a path inside the repository (or "bin:<command>").`)
     }
     return path
+}
+
+// True when the run must stop before any job because a selected vendor/bin job
+// would start with no vendor/autoload.php. A selected job marked `installs`
+// that runs before the first vendor/bin job is the repository's own bootstrap,
+// so the check stands down and that job's result carries the message. `selected`
+// is in the order the jobs run.
+export function vendorMissingFor(selected, vendorPresent) {
+    if (vendorPresent) {
+        return false
+    }
+    for (const entry of selected) {
+        if (!entry.job) {
+            continue
+        }
+        if (entry.job.installs) {
+            return false
+        }
+        if (/^vendor[\\/]bin[\\/]/.test(entry.job.run)) {
+            return true
+        }
+    }
+    return false
 }
 
 // The `requires` entries that are not met, in the order written. `exists` and
@@ -1059,6 +1123,54 @@ export function phpCandidates({ version, env = process.env, platform = process.p
     return candidates
 }
 
+// A job's own PHP (`"php": "8.2"` on the job): the floor parser, where the
+// run's PHP is the development one. Unlike the run's PHP there is no fall
+// through to `php` on PATH: a newer parser accepts syntax the floor rejects,
+// so a job that names a version runs on that version or fails. In order:
+// LOCAL_CI_PHP_<major><minor> (an absolute path); Herd's version-pinned binary
+// (macOS ~/Library/Application Support/Herd/bin/php82, Windows
+// ~/.config/herd/bin/php82/php.exe); then php8.2 and php82 on PATH.
+export function jobPhpCandidates({ version, env = process.env, platform = process.platform, home = homedir() }) {
+    const digits = version.replace('.', '')
+    const variable = `LOCAL_CI_PHP_${digits}`
+    const candidates = []
+    if (env[variable]) {
+        candidates.push({ path: env[variable], source: `$${variable}` })
+    }
+    const pinned = `php${digits}`
+    if (platform === 'darwin') {
+        candidates.push({ path: posix.join(home, 'Library', 'Application Support', 'Herd', 'bin', pinned), source: `Herd ${pinned}` })
+    } else if (platform === 'win32') {
+        candidates.push({ path: join(home, '.config', 'herd', 'bin', pinned, 'php.exe'), source: `Herd ${pinned}` })
+    }
+    for (const name of [`php${version}`, pinned]) {
+        candidates.push({ path: null, bin: name, source: `PATH ${name}` })
+    }
+    return candidates
+}
+
+function resolveJobPhp(version, jobs) {
+    const variable = `LOCAL_CI_PHP_${version.replace('.', '')}`
+    for (const candidate of jobPhpCandidates({ version })) {
+        if (candidate.bin) {
+            const found = which(candidate.bin)
+            if (found) {
+                return { path: found, source: candidate.source }
+            }
+            continue
+        }
+        if (existsSync(candidate.path) && isExecutable(candidate.path)) {
+            return candidate
+        }
+        if (candidate.source === `$${variable}`) {
+            throw new Error(`${variable} points at ${candidate.path}, which does not exist or cannot be executed.`)
+        }
+    }
+    throw new Error(
+        `PHP ${version} was not found, and ${jobs.map((name) => JSON.stringify(name)).join(', ')} run${jobs.length === 1 ? 's' : ''} only on it. Install PHP ${version} (Laravel Herd on macOS and Windows) or set ${variable} to its absolute path.`,
+    )
+}
+
 function resolvePhp(config) {
     for (const [index, candidate] of phpCandidates({ version: config.php }).entries()) {
         if (!existsSync(candidate.path)) {
@@ -1236,6 +1348,41 @@ export function canonicalPath(path) {
 export const samePath = (a, b) => {
     const [x, y] = [canonicalPath(a), canonicalPath(b)]
     return isWindows ? x.toLowerCase() === y.toLowerCase() : x === y
+}
+
+// The pre-commit guard only runs in a clone whose `core.hooksPath` points at
+// `.githooks`. Git does not run a hook from inside the repository until told to,
+// so a tracked hook in a clone without the setting guards nothing.
+export const HOOK_FILE = '.githooks/pre-commit'
+export const HOOKS_COMMAND = 'git config core.hooksPath .githooks'
+
+// What the clone says about the hook: whether `.githooks/pre-commit` is tracked,
+// and the `core.hooksPath` git resolves for it (null when unset). `git config`
+// run from a linked worktree reads the shared config, so a worktree answers the
+// same as the clone it belongs to.
+export function readHooksState(repoRoot) {
+    const tracked = git(repoRoot, ['ls-files', '--', HOOK_FILE], { allowFailure: true })
+    const hooksPath = git(repoRoot, ['config', '--get', 'core.hooksPath'], { allowFailure: true })
+
+    return { hookTracked: Boolean(tracked), hooksPath: hooksPath === null || hooksPath === '' ? null : hooksPath }
+}
+
+// The one warning line for a clone whose guard is not wired, or null. A relative
+// `core.hooksPath` is resolved from the working tree root, where git runs hooks
+// from, so `.githooks`, `./.githooks` and `.githooks/` all count. Never a failure:
+// the caller prints it and carries on, so the verdict and the exit status are
+// those of the same run with the setting in place. Silent under GitHub Actions,
+// where nobody commits from the checkout.
+export function hooksPathWarning(repoRoot, { hookTracked, hooksPath }, env = process.env) {
+    if (!hookTracked || env.GITHUB_ACTIONS) {
+        return null
+    }
+    if (hooksPath !== null && samePath(resolve(repoRoot, hooksPath), join(repoRoot, '.githooks'))) {
+        return null
+    }
+    const current = hooksPath === null ? 'core.hooksPath is not set' : `core.hooksPath is ${hooksPath}`
+
+    return `${HOOK_FILE} is tracked but ${current}, so the pre-commit guard does not run in this clone. Run once: ${HOOKS_COMMAND}`
 }
 
 // The registered worktree paths, from `git worktree list --porcelain`.
@@ -1440,6 +1587,22 @@ export function syncPatchedVendor({ currentLock, recordedLock, installed, reinst
         writeRecord(currentLock)
     }
     return packages
+}
+
+// Delete the patch record, and report whether there was one. A repository's own
+// install script calls this before `composer install` (as `--drop-patch-record`
+// from a shell, or by import). syncPatchedVendor writes the record only after
+// its reinstall, which covers that reinstall and nothing before it: an install
+// that re-extracts a patched package and dies before cweagans/composer-patches
+// patches it leaves the old record standing, the next install finds the package
+// at the locked version and does nothing, the record equals patches.lock.json,
+// and the run proceeds over an unpatched package. With the record gone first, a
+// failed install leaves none, so the next run reinstalls every patched package.
+export function dropPatchRecord(repoRoot) {
+    const path = join(repoRoot, PATCH_LOCK_RECORD)
+    const existed = existsSync(path)
+    rmSync(path, { force: true })
+    return existed
 }
 
 const readOrNull = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null)
@@ -1916,7 +2079,7 @@ function runShell(command, cwd, env, { capture = false } = {}) {
     return { code: res.status ?? 1, output: `${res.stdout ?? ''}${res.stderr ?? ''}` }
 }
 
-function makeExecutor({ repoRoot, config, php, trackedFiles }) {
+function makeExecutor({ repoRoot, config, php, jobPhps = new Map(), trackedFiles }) {
     const env = { ...process.env, LOCAL_CI: '1', ...(php ? { LOCAL_CI_PHP: php.path } : {}) }
     // The handoff markers belong to the runner. A job that itself runs the
     // runner (this skill's own tests do) must not be read as a handed-off run.
@@ -1934,8 +2097,10 @@ function makeExecutor({ repoRoot, config, php, trackedFiles }) {
         }
 
         const { job } = entry
-        const jobEnv = jobEnvironment(env, job, config.jobs)
-        const command = commandFor(job.run, php ? php.path : 'php')
+        const own = job.php ? jobPhps.get(job.php) : null
+        const phpPath = own ? own.path : php ? php.path : 'php'
+        const jobEnv = { ...jobEnvironment(env, job, config.jobs), ...(own ? { LOCAL_CI_PHP: own.path } : {}) }
+        const command = commandFor(job.run, phpPath)
         if (job.mutation) {
             console.log(`  $ ${command}`)
             const { code, output } = runShell(command, repoRoot, jobEnv, { capture: true })
@@ -1952,7 +2117,7 @@ function makeExecutor({ repoRoot, config, php, trackedFiles }) {
         if (job.parallel) {
             // Both parts always run: a red parallel part must not hide whether
             // the serial tail passes. The exit code is the first failing part's.
-            const outcomes = parallelParts(job.run, job.parallel, php ? php.path : 'php').map(({ part, command: partCommand }) => {
+            const outcomes = parallelParts(job.run, job.parallel, phpPath).map(({ part, command: partCommand }) => {
                 console.log(`  [${part}] $ ${partCommand}`)
                 return { part, code: runShell(partCommand, repoRoot, jobEnv).code }
             })
@@ -2115,6 +2280,11 @@ function main(argv) {
     const scriptPath = fileURLToPath(import.meta.url)
     let repoRoot = repoRootOf(scriptPath)
 
+    if (opts.dropPatchRecord) {
+        console.log(dropPatchRecord(repoRoot) ? `Patches:    removed ${PATCH_LOCK_RECORD}` : `Patches:    no ${PATCH_LOCK_RECORD} to remove`)
+        return 0
+    }
+
     if (opts.branch) {
         if (isHandedOff()) {
             throw new Error('--branch inside a handed-off run: the slot is already prepared, and a second handoff would not terminate.')
@@ -2178,6 +2348,11 @@ function main(argv) {
         }
     }
 
+    const hooksWarning = hooksPathWarning(repoRoot, readHooksState(repoRoot))
+    if (hooksWarning) {
+        warn(hooksWarning)
+    }
+
     const changed = changedFiles(repoRoot, base, { tolerateUnresolved: Boolean(opts.all || opts.jobs) })
     const noMergeBase = requireMergeBase(changed, opts)
     if (noMergeBase) {
@@ -2193,7 +2368,14 @@ function main(argv) {
         ...opts,
         unmet: (job) => unmetRequirements(job.requires, { exists: (path) => existsSync(join(repoRoot, path)), hasBin: (name) => which(name) !== null }),
     })
-    const needs = selection.selected.some((entry) => entry.job && needsPhp(entry.job.run))
+    const needs = selection.selected.some((entry) => entry.job && needsPhp(entry.job.run) && !entry.job.php)
+    // Each version a selected job names for itself, with the jobs that name it.
+    const ownVersions = new Map()
+    for (const entry of selection.selected) {
+        if (entry.job && entry.job.php) {
+            ownVersions.set(entry.job.php, [...(ownVersions.get(entry.job.php) ?? []), entry.name])
+        }
+    }
 
     if (opts.dryRun) {
         console.log(`\nPlan (${config.chain ? 'chain: stop at the first failure' : 'every selected job runs'}):`)
@@ -2226,14 +2408,19 @@ function main(argv) {
                 )
             }
         }
+        for (const [version, jobs] of ownVersions) {
+            const candidates = jobPhpCandidates({ version })
+            console.log(`PHP ${version} for ${jobs.join(', ')} would resolve from: ${candidates.map((c) => (c.bin ? c.source : `${c.source} (${c.path})`)).join(', then ')}; nothing else.`)
+        }
         return 0
     }
 
     // Fail before any job runs, naming the remedy, rather than letting every
     // vendor/bin job fail with the shell's "not found".
-    const wantsVendor = selection.selected.some((entry) => entry.job && /^vendor[\\/]bin[\\/]/.test(entry.job.run))
-    if (wantsVendor && !existsSync(join(repoRoot, 'vendor', 'autoload.php'))) {
-        throw new Error(`vendor/ is missing in ${repoRoot}; the selected jobs run vendor/bin tools. Run \`composer install\` first.`)
+    if (vendorMissingFor(selection.selected, existsSync(join(repoRoot, 'vendor', 'autoload.php')))) {
+        throw new Error(
+            `vendor/ is missing in ${repoRoot}; the selected jobs run vendor/bin tools and no job marked "installs" runs before them. Run \`composer install\` first, or mark the job that installs dependencies "installs": true and list it before the first vendor/bin job.`,
+        )
     }
 
     let php = null
@@ -2244,6 +2431,18 @@ function main(argv) {
         if (config.php && !version.startsWith(`${config.php}.`)) {
             warn(`PHP is ${version}; ${CONFIG_FILE} names ${config.php}. Results may differ from a ${config.php} run.`)
         }
+    }
+
+    const jobPhps = new Map()
+    for (const [version, jobs] of ownVersions) {
+        const resolved = resolveJobPhp(version, jobs)
+        const reported = phpVersion(resolved.path)
+        // The version is the point of the job, so a mismatch is a failure, not a warning.
+        if (!reported.startsWith(`${version}.`)) {
+            throw new Error(`${resolved.path} (from ${resolved.source}) is PHP ${reported}, not ${version}, which ${jobs.map((name) => JSON.stringify(name)).join(', ')} need${jobs.length === 1 ? 's' : ''}.`)
+        }
+        console.log(`PHP ${version}:    ${resolved.path} (${reported}, from ${resolved.source}) for ${jobs.join(', ')}`)
+        jobPhps.set(version, resolved)
     }
 
     // Every database lock the selected jobs declare, before any job runs, so a
@@ -2260,7 +2459,7 @@ function main(argv) {
     }
 
     const trackedFiles = gitPaths(repoRoot, ['ls-files', '-z'])
-    const execute = makeExecutor({ repoRoot, config, php, trackedFiles })
+    const execute = makeExecutor({ repoRoot, config, php, jobPhps, trackedFiles })
 
     const results = runJobs(selection, {
         chain: config.chain,

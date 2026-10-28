@@ -9,6 +9,11 @@
 // edit to the copy, or a template change the copy never received, goes unnoticed. This
 // check is what notices, and a repository's pre-merge check runs it.
 //
+// A copy that differs is also read for the one edit that does harm rather than merely
+// drift: running on `edited` without the two conditions that keep a title-only edit and a
+// bot's edit from clearing a finding nobody addressed. The message then names the missing
+// condition, so the fix is not left to a line number.
+//
 // Line endings are compared as LF, so a Windows checkout with core.autocrlf does not fail
 // a copy that is otherwise identical. Every other byte counts.
 //
@@ -33,6 +38,28 @@ export const WORKFLOW_PATH = '.github/workflows/clear-handed-back.yml'
 export const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'clear-handed-back.yml')
 
 const asLf = (text) => text.replace(/\r\n/g, '\n')
+
+/**
+ * Name what a workflow that runs on `edited` is missing: the body-changed condition
+ * (`github.event.changes.body`) and the actor condition (`github.event.sender.type`).
+ * Returns an empty list for a workflow that does not run on `edited`, and for one that
+ * carries both.
+ */
+export function editedProblems(source) {
+    // Comments do not count: the template's own header names both conditions.
+    const text = source.replace(/^\s*#.*$/gm, '')
+    const trigger = text.match(/^\s*types:\s*\[([^\]]*)\]/m)
+    const types = trigger ? trigger[1].split(',').map((type) => type.trim().replace(/^['"]|['"]$/g, '')) : []
+    if (!types.includes('edited')) return []
+    const problems = []
+    if (!/github\.event\.changes\.body/.test(text)) {
+        problems.push('it runs on `edited` without `github.event.changes.body`, so a title-only or base-branch edit would clear the label.')
+    }
+    if (!/github\.event\.sender\.type/.test(text)) {
+        problems.push('it runs on `edited` without `github.event.sender.type`, so a bot that rewrites a description (a footer check, for one) would clear the label.')
+    }
+    return problems
+}
 
 /**
  * Compare the copy with the template. Returns `{ status, lines }`: the exit status and
@@ -75,6 +102,7 @@ export function checkWorkflow({ root, template = TEMPLATE_PATH }) {
         status: 1,
         lines: [
             `${copy} differs from the template ${template}, first at line ${line + 1}.`,
+            ...editedProblems(actual).map((problem) => `Unsafe: ${problem}`),
             'Change the template in UAMS-Web/uams-claude-skills, under shared/, and copy it here; do not edit the copy alone.',
         ],
     }

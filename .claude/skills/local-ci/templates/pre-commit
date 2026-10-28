@@ -1,4 +1,5 @@
 #!/bin/sh
+# cspell:ignore elif
 #
 # pre-commit: refuse a commit that stages a file guard.deny forbids.
 #

@@ -70,7 +70,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
-import { createGlyphScanner, DEFAULT_RULE_PATH, glyphDetail } from './glyphs.mjs'
+import { createGlyphScanner, DEFAULT_RULE_PATH, glyphDetail } from '../writing-comments/scripts/glyphs.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -118,12 +118,19 @@ const REPO_SLUG = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 // `owner/repo` from a git remote URL (https, ssh, or scp-like), or null.
 export function repoFromRemote(url) {
-    const match = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(String(url).trim())
+    // Anchored on the left: a host that merely ends in github.com, or a local path
+    // containing `github.com/`, is not GitHub.
+    const match = /^(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?|[^@/:\s]+@)github\.com[:/]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(String(url).trim())
     return match ? `${match[1]}/${match[2]}` : null
 }
 
+const WATCH_KEYS = ['repos', 'issueRepos', 'glyphs']
+
 // The `watch` section of a parsed local-ci.json: `{ repos, issueRepos, glyphs }`,
-// two lists (possibly empty) and a boolean. Throws on a shape it could only guess about.
+// two lists (possibly empty) and a boolean. Throws on a shape it could only guess about,
+// and on a key it does not define: a misspelled `issueRepo` or `glyph` would otherwise
+// parse as the default and the watcher would run with less than the config asked for.
+// An underscore key is refused here too, as in every nested object of the config.
 export function watchConfig(raw) {
     const section = raw && typeof raw === 'object' ? raw.watch : undefined
     if (section === undefined) {
@@ -131,6 +138,10 @@ export function watchConfig(raw) {
     }
     if (!section || typeof section !== 'object' || Array.isArray(section)) {
         throw new Error(`"watch" in ${CONFIG_FILE} must be an object such as {"repos": ["owner/repo"]}.`)
+    }
+    const unknown = Object.keys(section).filter((key) => !WATCH_KEYS.includes(key))
+    if (unknown.length > 0) {
+        throw new Error(`"watch" has no ${unknown.map((key) => JSON.stringify(key)).join(', ')}; it takes ${WATCH_KEYS.map((key) => `"${key}"`).join(', ')}.`)
     }
     const list = (value, what) => {
         if (value === undefined) {

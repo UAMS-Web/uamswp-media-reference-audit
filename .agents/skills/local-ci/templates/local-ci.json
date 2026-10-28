@@ -1,6 +1,7 @@
 {
+  "_spell": "cspell:ignore analyse .",
   "base": "main",
-  "php": "8.2",
+  "php": "8.4",
   "chain": false,
   "guard": {
     "deny": [
@@ -25,6 +26,12 @@
       "run": "node .claude/skills/synced-files/scripts/check-synced-files.mjs",
       "always": true,
       "requires": ["bin:node"]
+    },
+    {
+      "name": "download-archive",
+      "run": "node .claude/skills/download-archive-check/check-download-archive.mjs",
+      "always": true,
+      "requires": ["bin:node", "bin:git"]
     },
     {
       "name": "pint",

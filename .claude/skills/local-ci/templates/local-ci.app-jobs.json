@@ -1,5 +1,6 @@
 {
   "uams-statamic": {
+    "_spell": "cspell:ignore gitlink .",
     "base": "main",
     "php": "8.4",
     "jobs": [
@@ -87,12 +88,6 @@
         "run": "node scripts/python-tests.mjs",
         "paths": ["**/*.py", "scripts/python-tests.mjs"],
         "requires": ["scripts/python-tests.mjs", "bin:node"]
-      },
-      {
-        "name": "exports-gitlink",
-        "run": "node scripts/exports-gitlink-check.mjs",
-        "always": true,
-        "requires": ["scripts/exports-gitlink-check.mjs", "bin:node"]
       }
     ]
   },
