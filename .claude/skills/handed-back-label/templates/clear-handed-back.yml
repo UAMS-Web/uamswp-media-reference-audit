@@ -1,20 +1,31 @@
 name: Clear handed-back
 
-# Removes the `handed-back` label when a pull request carrying it is pushed to.
+# Removes the `handed-back` label when a pull request carrying it is pushed to,
+# or when a person edits its description.
 # The gate applies the label on a hand-back; a push is the pull request
-# re-entering the queue, and that is the one moment the label comes off. Doing
-# it here rather than by hand is the point: a removal the gate has to remember
-# gets missed, and a pull request still carrying the label drops out of the
-# queue depth while it waits to be gated.
+# re-entering the queue, and a description edit is the other way a finding gets
+# addressed (the finding was in the description). Those are the moments the label
+# comes off. Doing it here rather than by hand is the point: a removal the gate
+# has to remember gets missed, and a pull request still carrying the label drops
+# out of the queue depth while it waits to be gated.
 #
-# `synchronize` is the push, and only the push. Opening a pull request, applying
-# the label, and a comment are other event types, so none of them can remove it.
+# `synchronize` is the push. `edited` is the description edit, and it counts only
+# when the body changed (`github.event.changes.body` is present; a title-only or
+# base-branch edit carries `changes.title` or `changes.base` instead) and only
+# when a person made it: a bot actor (`github.event.sender.type == 'Bot'`) edits
+# bodies too, for example a workflow that rewrites a footer, and that must not
+# clear a finding nobody has addressed. Opening a pull request, applying the
+# label, and a comment are other event types, so none of them can remove it.
+#
+# A description edit on a pull request handed back for its code clears the label
+# too. That is the accepted cost: the gate's re-check finds the head unchanged
+# since the hand-back and hands it back again without re-running the jobs.
 #
 # Deliberately NOT gated on RUN_REMOTE_CI, where a repository gates its other
 # jobs on it. That switch is off for months at a time, and gating this on it
 # would bring back the missed removal for exactly that long. The cost is bounded
-# by the job-level `if:` below: a push to a pull request without the label is
-# skipped before a runner is dispatched, so only a push to a handed-back pull
+# by the job-level `if:` below: an event on a pull request without the label is
+# skipped before a runner is dispatched, so only an event on a handed-back pull
 # request spends minutes, and that job is one API call.
 #
 # Where a repository's `.claude/settings.json` denies `gh api -X DELETE`, the
@@ -27,14 +38,19 @@ name: Clear handed-back
 
 on:
   pull_request:
-    types: [synchronize]
+    types: [synchronize, edited]
 
 # Nothing at the workflow level; the one job states the one scope it needs.
 permissions: {}
 
 jobs:
   clear:
-    if: contains(github.event.pull_request.labels.*.name, 'handed-back')
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'handed-back')
+      && (github.event.action == 'synchronize'
+      || (github.event.action == 'edited'
+      && github.event.changes.body != null
+      && github.event.sender.type != 'Bot'))
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -48,7 +64,14 @@ jobs:
         # DELETE removes this one label and leaves every other label alone. A
         # 404 means it is already gone (two pushes in quick succession both see
         # it in their payload), which is the state this job exists to reach, so
-        # it is success rather than failure. Anything else fails.
+        # it is success rather than failure.
+        #
+        # Any other status is not a verdict on the label: GitHub has answered
+        # 500 for a call whose write had already taken effect. So the step reads
+        # the label set back and decides from that. The label gone is success
+        # (the log still records the status), the label still present is a
+        # failure, and a read that itself fails is a failure, since it cannot
+        # show the label is gone. A 200 or 404 costs no extra call.
         #
         # `gh` exits non-zero on the 404, so its status is read from the
         # response's own status line rather than from the exit code, and the
@@ -69,5 +92,15 @@ jobs:
             exit 0
           fi
 
-          echo "::error::Removing handed-back from #$NUMBER returned '${status:-no status}'."
-          exit 1
+          if ! labels=$(gh api "repos/$REPO/issues/$NUMBER/labels?per_page=100" --jq '.[].name'); then
+            echo "::error::Removing handed-back from #$NUMBER returned '${status:-no status}' and the label set could not be read back."
+            exit 1
+          fi
+
+          if printf '%s\n' "$labels" | grep -qxF handed-back; then
+            echo "::error::Removing handed-back from #$NUMBER returned '${status:-no status}' and the label is still present."
+            exit 1
+          fi
+
+          echo "handed-back is gone from #$NUMBER, although the removal returned '${status:-no status}'."
+          exit 0
