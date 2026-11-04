@@ -30,13 +30,13 @@ What the gate does on a red verdict, and why it applies a label rather than flip
 - **A description edit on a pull request handed back for its code clears the label too.** The workflow cannot tell which part the finding was about. The gate's re-check finds the head unchanged since the hand-back and hands it back again without re-running the jobs (`pre-merge-check`, *A finding in the description alone*), so the cost is one comment and a label that comes back.
 - A job-level `if:` skips it unless the pull request carries `handed-back`, so a push to any other pull request starts no runner and spends no minutes.
 - It removes that one label with a single `DELETE /repos/{o}/{r}/issues/{n}/labels/handed-back` under the job's own `GITHUB_TOKEN`, leaving every other label in place. A `200` or a `404` (the label is already gone) is success with no further call. Any other status is read against the label set instead of being taken as the verdict: the step lists the pull request's labels and passes when `handed-back` is absent (logging the status it saw), fails when the label is still present, and fails when the list cannot be read, since GitHub has answered `500` for a call whose write had landed.
-- It is not gated on `RUN_REMOTE_CI`, where a repository gates its other jobs on it. That switch is off for months at a time, and gating the removal on it brings the missed removal back for exactly that long.
+- It is gated on `RUN_REMOTE_CI` like the rest of CI: the job condition starts with `vars.RUN_REMOTE_CI != 'false'`, so a private repository with the variable set to `false` skips it and bills no minutes. A skipped run removes nothing: while the switch is off, a push or a description edit leaves `handed-back` in place until a run with the switch on.
 
 The job runs under its own token, so a `.claude/settings.json` that denies `gh api -X DELETE` to the gate's sessions does not reach it.
 
 ## Copying it into a repository
 
-The sync delivers this skill under `.claude/` and `.agents/` and writes no workflow under `.github/`, so a repository copies the workflow once, in its own reviewed pull request:
+The sync delivers this skill under `.claude/` and `.agents/` and creates no workflow under `.github/`, so a repository copies the workflow once, in its own reviewed pull request (after that, the sync keeps an existing copy current, see *To change the workflow* below):
 
 ```bash
 mkdir -p .github/workflows
@@ -71,12 +71,8 @@ Line endings are compared as LF, so a Windows checkout with `core.autocrlf` pass
 
 Give it no `requires`: the runner reports a job whose `requires` path is absent as skipped, with exit 0, and a missing check has to fail instead.
 
-**To change the workflow**, change the template in `UAMS-Web/uams-claude-skills`, under `shared/`, and copy it into `.github/workflows/clear-handed-back.yml` in that same pull request (this repository carries the workflow too). Then copy it in each target repository on that repository's sync pull request branch, as a one-file commit of the template the sync pull request delivers:
+**To change the workflow**, change the template in `UAMS-Web/uams-claude-skills`, under `shared/`, and copy it into `.github/workflows/clear-handed-back.yml` in that same pull request (this repository carries the workflow too). Nothing more is needed for the target repositories:
 
-```bash
-cp .claude/skills/handed-back-label/templates/clear-handed-back.yml .github/workflows/clear-handed-back.yml
-```
-
-The copy belongs on the sync branch, not in a pull request of the repository's own. The sync pull request carries the new template and never the workflow, since the sync does not write `.github/`, so the check fails on it until the copy is added. A repository's own pull request fails the same check from the other side: it copies the new template into `.github/` while `.claude/skills/handed-back-label/templates/` still holds the old one, and neither pull request can merge first.
-
-The sync rebuilds its branch and pushes it with `--force-with-lease`, so a later sync before the merge drops that commit. Redo the copy on the rebuilt branch, and run the check again before merging.
+- **The sync copies it.** When a sync delivers a changed template to a target that already has `.github/workflows/clear-handed-back.yml`, it rewrites that file in the same commit with the whole template, the comment block between `name:` and `on:` included, so a header correction reaches the copy too. A target without the file gets no `.github/` file, and a copy already matching is not touched. The sync pull request therefore carries the template and its copy together, and the drift check passes on it. A rebuilt sync branch carries the copy again, with no manual commit.
+- **The sync App holds the `workflows` permission it needs to push it.** GitHub refuses a push that changes a file under `.github/workflows/` from an App without that permission. The `uams-claude-skills-sync` App was granted `workflows` (write) in `UAMS-Web/uams-claude-skills#447`, and a dispatched sync has pushed a workflow copy as the App since. If the grant is ever removed or not accepted on an installation, a sync that must change a copy fails for that target with a message naming the permission, and pushes nothing (the target's other updates in that sync wait too, because the push is one branch). A copy edited by hand is rewritten the same way, so it needs the permission too. Restoring it is the repository owner's decision.
+- **A repository's own pull request still fails the check from the other side.** It copies the new template into `.github/` while `.claude/skills/handed-back-label/templates/` still holds the old one, and neither pull request can merge first. Change the template at the source and let the sync bring both.

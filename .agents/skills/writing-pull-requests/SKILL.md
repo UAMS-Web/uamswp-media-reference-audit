@@ -65,6 +65,8 @@ which the workflow calls from the skill's own directory, so a target needs the s
 workflow and nothing else. It lives here rather than beside the emoji rule because a rule
 cannot own a template; the rule that bans the glyph is `no-emoji-in-durable-records`.
 
+All three workflows are gated on `RUN_REMOTE_CI` with a job-level `if: vars.RUN_REMOTE_CI != 'false'`, so a private repository with the variable set to `false` skips them and bills no minutes, and a public repository runs them as before. A skipped job reports `skipped` and a skipped required check reports success, so while the switch is off the body checks have not read the body. The gate is in the template because a copy must match its template in full.
+
 The closing-keyword check runs [`scripts/check-closing-keyword-across-lines.mjs`](scripts/check-closing-keyword-across-lines.mjs) the same way. GitHub reads a newline as whitespace, so a status column whose last cell is `closed` above a row labelled `#N` is the directive `closed #N`, and a squash merge acts on it. The workflow reads the body through the API, and the script runs the `github-api-budget` same-line control before it reads anything. `--range` and `--commit` read commit messages instead. Reword a flagged pair: put the number first, or write the cell as something other than a bare keyword.
 
 ## Output format
@@ -126,10 +128,27 @@ green checks panel.
   Each PR's test plan covers its own base branch's environment; see the **`## Test plan` checklist** below.
 - **Open as draft unless it is ready to validate; flip draft → ready when it becomes ready.** A
   PR whose branch still needs work opens with `gh pr create --draft`; `gh pr ready <n>` flips it
-  once the change is genuinely ready to validate. A docs-only PR: no code, test, or build
-  surface for the gate to exercise (a `.claude/` skill or rule, a `docs/` edit): is ready on
-  creation and opens non-draft. Never present a PR as ready-to-merge before its validation path
-  can actually run against it, and never flip to ready while you know the branch is unfinished.
+  once the change is genuinely ready to validate. Where remote CI does not run on every pull
+  request, a docs-only PR: no code, test, or build surface for the gate to exercise (a `.claude/`
+  skill or rule, a `docs/` edit): is ready on creation and opens non-draft. Never present a PR as
+  ready-to-merge before its validation path can actually run against it, and never flip to ready
+  while you know the branch is unfinished.
+- **In a public repository, the draft's remote checks are the pre-PR check.** Its `ci.yml` runs on
+  every pull request, drafts included (the `RUN_REMOTE_CI` switch reaches private repositories
+  only), and the local runner's jobs mirror it. So run nothing locally as a pre-PR check: push the
+  branch and open the pull request as a draft, docs-only ones included, and flip it to ready only
+  when every remote check on its head is green. When a check is red, fix it and push to the same
+  branch; the draft re-runs, and a new pull request for the same change is never the answer. Keep
+  running a test locally while writing it, and keep a local run for the four cases remote CI
+  cannot cover:
+  - a change whose acceptance criteria name Windows or another platform remote CI does not run
+    (it runs on Ubuntu only);
+  - the full mutation run a test-coverage ticket records (remote CI runs one smoke path);
+  - a run that needs a loaded WordPress install or the importer's host application;
+  - any repository with no remote CI workflow, including a private one.
+
+  The pre-merge validation of a ready pull request is unchanged: the gate still runs it
+  (UAMS-Web/uams-claude-skills#366).
 - **When a merge order is required, state it in the body: in the PR that must merge second.**
   File-disjoint PRs need no ordering, but when PRs must merge in sequence: a shared-surface
   branch before a dependent one, a submodule companion before its pointer bump, or a cross-repo
@@ -139,9 +158,9 @@ green checks panel.
 
 ## Spell-check new words before opening
 
-Where the repository runs cspell: a `cspell.json`, a `project-words.txt` dictionary, and a `spell` job in its CI chain: a word the checker does not recognize fails validation and forces a *separate* `project-words.txt` PR after the fact. Catch it in the PR that introduces the word instead. This applies to docs-only PRs too: the ones most likely to add new words, and the ones that open non-draft (above), so there is no draft window in which CI would otherwise catch it first.
+Where the repository runs cspell: a `cspell.json`, a `project-words.txt` dictionary, and a `spell` job in its CI chain: a word the checker does not recognize fails validation and forces a *separate* `project-words.txt` PR after the fact. Catch it in the PR that introduces the word instead. Where remote CI does not run on every pull request, this applies to docs-only PRs too: the ones most likely to add new words, and the ones that open non-draft (above), so there is no draft window in which CI would otherwise catch it first.
 
-If you have added or edited any prose or identifiers (comments, docs, test names, anything cspell scans), run the spell check before opening the PR and reconcile every flagged word. For each one, decide: do **not** reflexively allow-list:
+If you have added or edited any prose or identifiers (comments, docs, test names, anything cspell scans), run the spell check before opening the PR and reconcile every flagged word. **In a public repository the draft's remote `spell` job is that check**: open the draft, and reconcile every word it flags before flipping to ready. For each one, decide: do **not** reflexively allow-list:
 
 - **A genuine misspelling** → fix it in source.
 - **A British spelling in first-party prose** → fix it to American, per [`american-english-prose`](../rule-american-english-prose/SKILL.md), which owns the convention, its arbiter, and the reasons that justify overriding it in the dictionary. Keep British only where it is baked into something you do not control: a WordPress core hook name, a third-party option key.

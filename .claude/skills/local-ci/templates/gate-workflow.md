@@ -7,7 +7,7 @@
 
 A private repository's checks run through the local CI runner, not in GitHub Actions. The existing workflow is not deleted: every job in it is gated on a repository or organization variable, so the workflow stays in the repository, keeps evaluating on every push and pull request, and dispatches nothing to a runner while the variable says so. Turning it back on is a variable change, not a revert.
 
-This is the shape `uams-statamic`, `wordpress-importer` and `uamswp-migration-api` already use on their `CI` workflows.
+This is the shape `uams-statamic`, `aether-wordpress-importer` and `aether-wordpress-migration-api` already use on their `CI` workflows.
 
 ## The gate
 

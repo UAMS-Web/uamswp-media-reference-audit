@@ -21,12 +21,14 @@ name: Clear handed-back
 # too. That is the accepted cost: the gate's re-check finds the head unchanged
 # since the hand-back and hands it back again without re-running the jobs.
 #
-# Deliberately NOT gated on RUN_REMOTE_CI, where a repository gates its other
-# jobs on it. That switch is off for months at a time, and gating this on it
-# would bring back the missed removal for exactly that long. The cost is bounded
-# by the job-level `if:` below: an event on a pull request without the label is
-# skipped before a runner is dispatched, so only an event on a handed-back pull
-# request spends minutes, and that job is one API call.
+# Gated on RUN_REMOTE_CI like the rest of CI: the job condition starts with
+# `vars.RUN_REMOTE_CI != 'false'`, so a private repository, where the variable is
+# `false`, skips it before a runner is dispatched and bills no minutes, and a public
+# repository, where the variable is unset, runs it as before. A skipped job reports
+# `skipped`, and GitHub counts a skipped required check as success, so a skipped run is
+# not a passing run: while the switch is off nothing removes the label on a push or a
+# description edit, and the label stays until the next run with the switch on. A copy
+# matches its template in full, header included, and the sync rewrites it from the template.
 #
 # Where a repository's `.claude/settings.json` denies `gh api -X DELETE`, the
 # gate's own sessions cannot make this call. This job runs under its own
@@ -46,7 +48,8 @@ permissions: {}
 jobs:
   clear:
     if: >-
-      contains(github.event.pull_request.labels.*.name, 'handed-back')
+      vars.RUN_REMOTE_CI != 'false'
+      && contains(github.event.pull_request.labels.*.name, 'handed-back')
       && (github.event.action == 'synchronize'
       || (github.event.action == 'edited'
       && github.event.changes.body != null
