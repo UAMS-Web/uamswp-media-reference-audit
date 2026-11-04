@@ -14,7 +14,7 @@ disable-model-invocation: true
 
 ## Why this is a standing order
 
-**An upstream post cannot be corrected the way an internal artifact can.** It lands on a public tracker under a maintainer's identity, and the maintainer acts on it: reproducing, triaging, merging. A wrong version, line number or reproduction output costs their time and the report's credibility, and an edit afterwards does not reach anyone who already read the original.
+**An upstream post cannot be corrected the way an internal artifact can.** It lands on a public tracker under a maintainer's identity, and the maintainer acts on it: reproducing it, prioritizing it, merging a fix. A wrong version, line number or reproduction output costs their time and the report's credibility, and an edit afterwards does not reach anyone who already read the original.
 
 **The draft is built from the author's own instruments**, the case [`adversarial-review`](../rule-adversarial-review/SKILL.md) and [`an-empty-result-is-not-evidence`](../rule-an-empty-result-is-not-evidence/SKILL.md) are written against: the probe and the material share an author, so a second pass by the same method reproduces the same blind spot. Hence the independence requirement, not just a count.
 

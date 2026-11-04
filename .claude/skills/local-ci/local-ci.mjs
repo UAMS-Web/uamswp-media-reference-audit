@@ -143,7 +143,7 @@
 //              on `0 Mutations for 0 Files created`), when the score line is
 //              absent, or when the score is below `minScore` (default 100).
 //              Not combinable with `each`.
-//     parallel `{"serialGroup": "serial", "memoryLimit": "4G"}`: runs the job as
+//     parallel `{"serialGroup": "serial", "memoryLimit": "4G", "processes": 4}`: runs the job as
 //              two parts, for a Pest suite with tests that cannot run in
 //              parallel. `run` must start with `vendor/bin/pest`. Part one is
 //              `run --parallel --exclude-group=<serialGroup>`; part two, the
@@ -153,7 +153,10 @@
 //              PHP size such as `4G`, or `-1`) is set as `-d memory_limit` on
 //              both parts and forwarded to the parallel workers with
 //              `--passthru-php`, because workers are their own PHP processes
-//              and otherwise run at the system CLI limit. Not combinable with
+//              and otherwise run at the system CLI limit. `processes` (a
+//              positive integer) caps the worker count with `--processes=<n>`
+//              on the parallel part only; absent, Pest starts one worker per
+//              logical core. Not combinable with
 //              `each` or `mutation`.
 //     php      "8.2": this job runs on that PHP instead of the run's, for a
 //              `php -l` over the shipped files under the supported floor while
@@ -214,7 +217,10 @@
 //     differs from the config). It is resolved only when a selected job needs
 //     it, so a repository with no PHP job runs on a machine with no PHP. A
 //     version other than the config's warns; a missing PHP fails before any
-//     job runs. --dry-run lists the search order and notes when a Herd pin is
+//     job runs. Where `composer.json` pins `config.platform.php` to a patch
+//     version (`8.4.27`), a PHP older than it fails before any job runs,
+//     naming both versions; a pin of major and minor only, or no pin, checks
+//     nothing (UAMS-Web/uams-claude-skills#394). --dry-run lists the search order and notes when a Herd pin is
 //     absent so the plan is not read as a guarantee that pin will run. A job
 //     that names its own `php` resolves it separately (see `php` above).
 //
@@ -371,7 +377,7 @@ const TOP_LEVEL_KEYS = ['base', 'php', 'chain', 'guard', 'jobs', 'prepare', 'sta
 const JOB_KEYS = ['name', 'run', 'always', 'each', 'paths', 'requires', 'mutation', 'parallel', 'database', 'php', 'installs']
 const GUARD_KEYS = ['deny']
 const MUTATION_KEYS = ['minScore']
-const PARALLEL_KEYS = ['serialGroup', 'memoryLimit']
+const PARALLEL_KEYS = ['serialGroup', 'memoryLimit', 'processes']
 
 // A key the config does not define is refused rather than ignored: a misspelled
 // `database` would otherwise parse as "no database" and run the job against the
@@ -521,7 +527,7 @@ function parseParallel(value, run, where) {
         return null
     }
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error(`${where} must be an object such as {"serialGroup": "serial", "memoryLimit": "4G"}.`)
+        throw new Error(`${where} must be an object such as {"serialGroup": "serial", "memoryLimit": "4G", "processes": 4}.`)
     }
     refuseUnknownKeys(value, PARALLEL_KEYS, where)
     if (!PEST_RUN.test(run.trim())) {
@@ -535,7 +541,11 @@ function parseParallel(value, run, where) {
     if (memoryLimit !== null && !PHP_SIZE.test(memoryLimit)) {
         throw new Error(`${where}.memoryLimit must be a PHP size such as "4G", "512M" or "-1".`)
     }
-    return { serialGroup, memoryLimit }
+    const processes = value.processes === undefined ? null : value.processes
+    if (value.processes !== undefined && (!Number.isInteger(processes) || processes < 1)) {
+        throw new Error(`${where}.processes must be a positive integer such as 4.`)
+    }
+    return { serialGroup, memoryLimit, processes }
 }
 
 // The two commands a `parallel` job runs. The memory limit goes on the parent as
@@ -544,8 +554,10 @@ function parseParallel(value, run, where) {
 export function parallelParts(run, parallel, php, platform = process.platform) {
     const base = parallel.memoryLimit === null ? run.trim() : `php -d memory_limit=${parallel.memoryLimit} ${run.trim()}`
     const passthru = parallel.memoryLimit === null ? '' : ` ${shellQuote(`--passthru-php=-d memory_limit=${parallel.memoryLimit}`, platform)}`
+    // The worker count goes on the parallel part only: the serial tail runs one process.
+    const processes = parallel.processes == null ? '' : ` --processes=${parallel.processes}`
     return [
-        { part: 'parallel', command: commandFor(`${base} --parallel --exclude-group=${parallel.serialGroup}${passthru}`, php, platform) },
+        { part: 'parallel', command: commandFor(`${base} --parallel${processes} --exclude-group=${parallel.serialGroup}${passthru}`, php, platform) },
         { part: 'serial', command: commandFor(`${base} --group=${parallel.serialGroup}`, php, platform) },
     ]
 }
@@ -1195,6 +1207,45 @@ function resolvePhp(config) {
     throw new Error(
         `PHP was not found. Install PHP${config.php ? ` ${config.php}` : ''} (Laravel Herd on macOS and Windows) or set LOCAL_CI_PHP to its absolute path.`,
     )
+}
+
+/**
+ * The development PHP the repository pins in `composer.json`'s `config.platform.php`, or null
+ * when there is no `composer.json` or it pins none. Throws on a `composer.json` that is not
+ * JSON, since the pin cannot then be read.
+ */
+export function platformPhp(composerText) {
+    if (composerText === null) return null
+    let composer
+    try {
+        composer = JSON.parse(composerText)
+    } catch (error) {
+        throw new Error(`composer.json is not valid JSON (${error.message}); the runner reads config.platform.php from it.`)
+    }
+    const pin = composer?.config?.platform?.php
+    return typeof pin === 'string' ? pin : null
+}
+
+const versionParts = (version) => (String(version).match(/^(\d+)\.(\d+)\.(\d+)/) ?? []).slice(1).map(Number)
+
+/**
+ * Why the run's PHP may not run, or null when it may (UAMS-Web/uams-claude-skills#394): a pin
+ * naming a patch version (`8.4.27`) refuses an older PHP, because `config.platform.php` only
+ * sets the PHP Composer resolves for and nothing else checks the PHP a machine runs. A pin of
+ * major and minor only (`8.4`), no pin, or a version this cannot read checks nothing.
+ */
+export function phpPinFinding(version, pin) {
+    if (pin === null || !/^\d+\.\d+\.\d+$/.test(pin)) return null
+    const have = versionParts(version)
+    if (have.length !== 3) return null
+    const want = versionParts(pin)
+    for (let i = 0; i < 3; i++) {
+        if (have[i] > want[i]) return null
+        if (have[i] < want[i]) {
+            return `PHP ${version} is older than ${pin}, the development PHP composer.json pins in config.platform.php. Upgrade PHP to ${pin} or later (Laravel Herd on macOS and Windows, or the system's package manager), or set LOCAL_CI_PHP to a PHP that is at least ${pin}.`
+        }
+    }
+    return null
 }
 
 function phpVersion(php) {
@@ -2428,6 +2479,10 @@ function main(argv) {
         php = resolvePhp(config)
         const version = phpVersion(php.path)
         console.log(`PHP:        ${php.path} (${version}, from ${php.source})`)
+        // Only the run's PHP: a job with its own (the floor lint) is resolved and checked below.
+        const composerPath = join(repoRoot, 'composer.json')
+        const pinned = phpPinFinding(version, platformPhp(existsSync(composerPath) ? readFileSync(composerPath, 'utf8') : null))
+        if (pinned) throw new Error(pinned)
         if (config.php && !version.startsWith(`${config.php}.`)) {
             warn(`PHP is ${version}; ${CONFIG_FILE} names ${config.php}. Results may differ from a ${config.php} run.`)
         }

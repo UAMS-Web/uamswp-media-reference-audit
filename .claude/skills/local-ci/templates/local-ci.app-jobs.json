@@ -61,7 +61,7 @@
       }
     ]
   },
-  "wordpress-importer": {
+  "aether-wordpress-importer": {
     "base": "main",
     "php": "8.4",
     "jobs": [
@@ -88,10 +88,16 @@
         "run": "node scripts/python-tests.mjs",
         "paths": ["**/*.py", "scripts/python-tests.mjs"],
         "requires": ["scripts/python-tests.mjs", "bin:node"]
+      },
+      {
+        "name": "mutate-ignore-breadth",
+        "run": "php .claude/skills/pest-testing/scripts/check-mutate-ignore-breadth.php",
+        "paths": ["**/*.php", "!vendor/**", "tests/mutate-ignore-breadth.baseline.json", "composer.lock"],
+        "requires": ["vendor/pestphp/pest-plugin-mutate", ".claude/skills/pest-testing/scripts/check-mutate-ignore-breadth.php"]
       }
     ]
   },
-  "uamswp-migration-api": {
+  "aether-wordpress-migration-api": {
     "base": "main",
     "php": "8.2",
     "jobs": [
@@ -124,6 +130,12 @@
         "run": "node --test",
         "each": ["scripts/*.test.mjs"],
         "requires": ["bin:node"]
+      },
+      {
+        "name": "mutate-ignore-breadth",
+        "run": "php .claude/skills/pest-testing/scripts/check-mutate-ignore-breadth.php",
+        "paths": ["**/*.php", "!vendor/**", "tests/mutate-ignore-breadth.baseline.json", "composer.lock"],
+        "requires": ["vendor/pestphp/pest-plugin-mutate", ".claude/skills/pest-testing/scripts/check-mutate-ignore-breadth.php"]
       }
     ]
   }

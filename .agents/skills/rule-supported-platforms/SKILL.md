@@ -26,7 +26,7 @@ The test is whether the path is *load-bearing as a location*. A path a reader is
 
 ## The DRY line
 
-This file is the standing statement on **platform parity and path portability**. The specific per-platform mechanics live where they are used, and are not restated here: bounding a command and the Git Bash perl-alarm no-op belong to [`long-running-commands`](../rule-long-running-commands/SKILL.md); the CRLF/Pint trap, the slot measurements, and the worktree/submodule behaviors belong to [`worktrees`](../rule-worktrees/SKILL.md); the PHP/Composer discovery differences belong to the repository's local CI runner.
+This file is the standing statement on **platform parity and path portability**. The specific per-platform mechanics live where they are used, and are not restated here: bounding a command and the Git Bash perl-alarm no-op belong to [`long-running-commands`](../rule-long-running-commands/SKILL.md); the CRLF/Pint trap and the worktree/submodule behaviors belong to [`worktrees`](../rule-worktrees/SKILL.md), and the slot measurements to its [evidence](../evidence-behind-rules/worktrees.md); the PHP/Composer discovery differences belong to the repository's local CI runner.
 
 The runner's own mechanics are in the [`local-ci`](../local-ci/SKILL.md) skill.
 

@@ -3,11 +3,12 @@
 // check-handed-back-workflow.mjs: fail when a repository's copy of the handed-back
 // workflow differs from the template this skill ships (UAMS-Web/uams-claude-skills#57).
 //
-// The sync delivers the template under .claude/ and .agents/ and never writes .github/,
-// so each repository copies it once, through its own reviewed pull request, to
-// .github/workflows/clear-handed-back.yml. Nothing then keeps the two together: a hand
-// edit to the copy, or a template change the copy never received, goes unnoticed. This
-// check is what notices, and a repository's pre-merge check runs it.
+// The sync delivers the template under .claude/ and .agents/ and does not create a copy
+// under .github/, so each repository copies it once, through its own reviewed pull
+// request, to .github/workflows/clear-handed-back.yml. The sync then rewrites an existing
+// copy when the template changes (UAMS-Web/uams-claude-skills#431), but a hand edit to
+// the copy, or a copy the sync could not push, still goes unnoticed. This check is what
+// notices, and a repository's pre-merge check runs it.
 //
 // A copy that differs is also read for the one edit that does harm rather than merely
 // drift: running on `edited` without the two conditions that keep a title-only edit and a
