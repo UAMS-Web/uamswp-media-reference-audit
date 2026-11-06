@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cspell:ignore gitlink gitlinks
+// cspell:ignore gitlink gitlinks PATHEXT
 //
 // local-ci.mjs: the shared local CI runner (UAMS-Web/uams-claude-skills#11).
 //
