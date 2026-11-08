@@ -39,11 +39,13 @@ A repository develops and tests on one PHP, and that is not the oldest PHP it su
 - **The supported floor** is the oldest PHP the code must run on: `require.php` in `composer.json`, a plugin or theme header's `Requires PHP`, and any documented support. No test runs on it. It is guarded instead by the settings that name it and by one job that runs on it: Rector's `withPhpVersion` keeps rewrites to syntax the floor parses, PHPStan's `phpVersion.min` reports what the floor lacks (see the [`code-quality`](../code-quality/SKILL.md) skill), and the [floor lint job](#the-floor-lint-job) parses every shipped file with the floor PHP itself.
 - **The development PHP** is what Composer resolves development dependencies for and what the suite runs on: `config.platform.php` in `composer.json`, and `php` in the shared local CI runner's `local-ci.json`. It chooses the Pest major.
 
-**The floor in every WordPress repository is PHP 8.2**, the oldest PHP any UAMS WordPress site runs, with no per-repository exception (UAMS-Web/uams-claude-skills#126). A WordPress repository whose header or `composer.json` names a lower floor raises it to 8.2 when it adopts this standard.
+**The floor in every WordPress repository is PHP 8.2**, the oldest PHP any UAMS WordPress site runs, with no per-repository exception (UAMS-Web/uams-claude-skills#126). A WordPress repository whose header or `composer.json` names a lower floor raises it to 8.2 when it adopts this standard. Its `composer.json` writes the floor `>=8.2`: WordPress's `Requires PHP` header is a minimum only, and sites do not install plugins through Composer, so there is no upper bound to state.
 
-**Every WordPress repository develops on the latest PHP 8.4 patch, 8.4.27 today, and runs Pest 5.** `config.platform.php` is `8.4.27`, and it is raised on each 8.4 security release, here and in each repository's `composer.json` and lock (UAMS-Web/uams-claude-skills#394). It can never go below 8.4.1, because every PHPUnit 13 release, which Pest 5.3 requires, needs `php >=8.4.1`. The pin also keeps Composer from resolving for a newer PHP than a teammate has. `local-ci.json`'s `php` is `8.4`, and the local CI runner refuses, before any job, a PHP older than `config.platform.php`; a job with a `php` of its own, such as the floor lint, is not held to it.
+**The floor in every Laravel app, PHP package and Statamic add-on is PHP 8.4**, written `^8.4` in `composer.json` (UAMS-Web/uams-claude-skills#579). `UAMS-Web/statamic-addon-template`'s `composer.json` requires `"php": "^8.4"`, read 2026-11-06, and a Statamic add-on keeps it. A repository that declares a lower constraint raises it in its own ticket.
 
-Outside WordPress, the development PHP is the one the repository's servers and developers run, never below the floor; a Laravel or Statamic application usually has one PHP for both. Choose the newest Pest major that PHP allows (repo.packagist.org, 2026-10-07):
+**Every repository, of every kind, develops on the latest PHP 8.4 patch, 8.4.27 today, and runs Pest 5.** `config.platform.php` is `8.4.27`, and it is raised on each 8.4 security release, here and in each repository's `composer.json` and lock (UAMS-Web/uams-claude-skills#394). It can never go below 8.4.1, because every PHPUnit 13 release, which Pest 5.3 requires, needs `php >=8.4.1`. The pin also keeps Composer from resolving for a newer PHP than a teammate has. `local-ci.json`'s `php` is `8.4`, and the local CI runner refuses, before any job, a PHP older than `config.platform.php`; a job with a `php` of its own, such as the floor lint, is not held to it.
+
+The development PHP is a separate setting from the floor, and the floor never sets it: a Laravel app, PHP package or Statamic add-on pins `config.platform.php` and `local-ci.json`'s `php` the same way, never below 8.4.1 or its floor. A repository on another development PHP today is moved by its own ticket. The newest Pest major that PHP allows is the one to run (repo.packagist.org, 2026-10-07):
 
 | Pest | PHP | PHPUnit | Latest release |
 | --- | --- | --- | --- |
@@ -336,12 +338,15 @@ Mutation-clean, not a line-% floor and not a literal `100%`. Line and statement 
 
 Where this repository already has [`adversarial-review`](../rule-adversarial-review/SKILL.md), that file holds the review side of the triage. This section is still the definition of "full."
 
+Where this repository also has [`pcov-setup`](../pcov-setup/SKILL.md) (the `pest` profile), that skill holds the three-pass walk and the instrument check.
+
 ### Preflight
 
 Before trusting a mutation score:
 
 - `0 Mutations for 0 Files created` is a **setup failure**, not green: fix the invocation (`--path`, worktree sub-path, `covers()`, driver) and re-run.
 - A mutant child that never launches can still be scored as killed. Confirm by inspection that mutant processes actually run (log growth, non-fabricated survivor output) before recording a pass.
+- Where [`pcov-setup`](../pcov-setup/SKILL.md) is present, run its instrument check (`php .claude/skills/pcov-setup/scripts/check-mutation-instrument.php`, or the repository's copy under `scripts/`) before a wave of scores.
 
 ### Closing record
 
@@ -362,6 +367,21 @@ Repositories still on PHPUnit (`tests-move`, or any target a [PHPUnit pin](#does
 
 The **mutation-clean** bar in [Bar](#bar) applies only after Pest and a coverage driver land; until then, do not claim `--mutate` results. In a WordPress repository the bar is taken on the Unit suite, which is Pest; code reachable only from the Integration suite is pinned there and its coverage measured with PHPUnit 9's driver.
 
+### Pest repositories: three-pass walk
+
+With Pest and a coverage driver, walk the population in three passes (tracker CSV from [`build-coverage-scope-csv.php`](../pcov-setup/scripts/build-coverage-scope-csv.php); full procedure in [`pcov-setup`](../pcov-setup/SKILL.md#three-pass-walk-of-the-inventory)):
+
+1. **File touched:** class FQCN referenced in `tests/` (static; not line coverage).
+2. **Meaningful line %:** record coverage % once a driver run is meaningful for that file.
+3. **Mutation-clean:** [no unexplained survivors](#bar).
+
+```bash
+php .claude/skills/pcov-setup/scripts/build-coverage-scope-csv.php --pass1
+php .claude/skills/pcov-setup/scripts/check-mutation-instrument.php
+```
+
+Keep the CSV and the shared scripts in UAMS-Web/uams-claude-skills current as the walk proceeds; sync delivers script updates into Pest targets. Coverage measurement uses `vendor/bin/pest --coverage`.
+
 ## Moving a PHPUnit suite to Pest
 Pest runs PHPUnit test classes unchanged, so a move is gradual and never a rewrite:
 
@@ -375,7 +395,7 @@ Pest runs PHPUnit test classes unchanged, so a move is gradual and never a rewri
 
 `pestphp/pest-plugin-drift` adds `vendor/bin/pest --drift`, which rewrites class-based tests into Pest function style as a mechanical first pass. Use the plugin major that matches Pest's (`^3.0`, `^4.1` or `^5.0` as of 2026-10-02). Its output still needs the audit a hand conversion gets.
 
-The per-test conversion process (time the original, convert and audit, mutation-test, review, one test at a time) and the Pest syntax guide are the `phpunit-to-pest` and `pest-testing` skills, which this repository receives once its manifest entry carries the `pest` profile.
+The per-test conversion process is the [`phpunit-to-pest`](../phpunit-to-pest/SKILL.md) skill, and Pest syntax is the [`pest-testing`](../pest-testing/SKILL.md) skill.
 
 ## Running the suite before a pull request
 
@@ -429,7 +449,9 @@ In a fork of a vendor plugin (`uamswp-seopress`, `uamswp-seopress-pro`, `UAMSWP-
 
 ## Further reading
 
-- The `pest-testing`, `phpunit-to-pest` and `pcov-setup` skills (Pest syntax, PHPUnit-to-Pest conversion, and the coverage driver that `--coverage` and `--mutate` need) arrive once this repository's manifest entry carries the `pest` profile.
+- [`pest-testing`](../pest-testing/SKILL.md): Pest syntax, datasets, which expectations take a failure message, mutation-testing triage, and the WordPress Integration suite's global-state traps.
+- [`phpunit-to-pest`](../phpunit-to-pest/SKILL.md): converting PHPUnit classes one test at a time.
+- [`pcov-setup`](../pcov-setup/SKILL.md): the coverage driver that `--coverage` and `--mutate` need, and how to tell a mutation run that executed from one that did not.
 
 - [`code-quality`](../code-quality/SKILL.md): static analysis, which analyzes `tests/` too.
 - [`adversarial-review`](../rule-adversarial-review/SKILL.md): the review a change gets before it ships, which reads its tests.

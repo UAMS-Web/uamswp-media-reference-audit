@@ -51,6 +51,13 @@ name: CI chain
 # `vitest` and `mutation-smoke` run on all three, on the seeded-fault evidence in
 # UAMS-Web/uams-claude-skills#478 (see the code-quality skill).
 #
+# Three more optional jobs serve a WordPress plugin (UAMS-Web/uams-claude-skills#607): `floor-lint` (inputs
+# `floor-lint-php` and `floor-lint-command`), `download-archive` (`download-archive-command`) and `phpcs`
+# (`phpcs-command`). Each is off until its boolean input is `true` and Linux only. A plugin caller passes
+# `linux-only: true`, `mutate: false`, those three jobs on, and `pest-command: composer test:unit` when its unit suite is
+# that script. Its WordPress integration matrix (a MySQL service, a WordPress download, single and multisite) stays a
+# plain job in the caller beside the call, listed in the `needs:` of its `CI` job; this chain does not run it.
+#
 # The `mutate` job is on unless the caller passes `mutate: false`. A repository whose source holds no code a
 # mutator changes (an add-on template with a stub) has nothing to mutate, and the job fails a run that created
 # no mutants, so it needs a way to opt out. `mutate: false` skips the job on every leg and changes nothing else:
@@ -70,7 +77,9 @@ name: CI chain
 # chain cannot give it (private submodules, a secret, a sharded run with its own reports) keeps its own Pest
 # jobs as plain jobs beside the call and lists them in the `needs:` of its `CI` job. `pest: false` skips the job
 # on every leg and changes nothing else. A `pest` job that is skipped while the input is true (a cancelled run,
-# say) still fails the `result` job.
+# say) still fails the `result` job. `pest-command` (default `composer test`) names the command it runs; the default
+# runs with a JUnit report and the skip-baseline and slowest-class checks, and any other command runs as given with
+# those two checks skipped, since it writes no report.
 #
 # The final `result` job `needs:` every job, runs `if: always()`, and fails unless each needed job succeeded.
 # A needed job reports `skipped` only when its input switched it off, and that is the one skip it accepts.
@@ -150,6 +159,38 @@ on:
         description: An npm version range to install globally before npm ci in the Node jobs; empty keeps the one Node ships.
         type: string
         default: ''
+      pest-command:
+        description: The command the pest job runs (UAMS-Web/uams-claude-skills#607). The default, composer test, runs with a JUnit report and the skip-baseline and slowest-class checks that read it; any other command runs as given and those two checks are skipped, because no report is written.
+        type: string
+        default: composer test
+      floor-lint:
+        description: Run the floor-lint job, which parses the shipped PHP files under the repository's supported floor.
+        type: boolean
+        default: false
+      floor-lint-php:
+        description: The PHP version the floor-lint job installs, the repository's supported floor.
+        type: string
+        default: '8.2'
+      floor-lint-command:
+        description: The command the floor-lint job runs.
+        type: string
+        default: php scripts/lint-floor.php
+      download-archive:
+        description: Run the download-archive job, which checks that the repository's GitHub download holds only what the plugin runs.
+        type: boolean
+        default: false
+      download-archive-command:
+        description: The command the download-archive job runs.
+        type: string
+        default: node scripts/check-download-archive.mjs
+      phpcs:
+        description: Run the phpcs job, which runs phpcs-command after a locked Composer install.
+        type: boolean
+        default: false
+      phpcs-command:
+        description: The command the phpcs job runs, the WordPress security sniffs.
+        type: string
+        default: composer test:phpcs
 
 permissions:
   contents: read
@@ -194,6 +235,9 @@ jobs:
 
       # Fails, naming the file, when a synced rule or skill was edited by hand.
       - run: node .claude/skills/synced-files/scripts/check-synced-files.mjs
+
+      # Fails, naming the file, when a copy of a shared workflow differs from its template. A repository with no copy passes.
+      - run: node .claude/skills/synced-files/scripts/check-workflow-copies.mjs
 
   no-emoji:
     name: No emoji in durable records (${{ matrix.os }})
@@ -448,18 +492,31 @@ jobs:
       # a cancelled run, so a test failure is reported by the tests and a missing or empty
       # report is reported by the checks.
       - name: Pest
+        if: inputs.pest-command == 'composer test'
         run: composer test -- --log-junit=junit.xml
+
+      # A `pest-command` other than the default runs as given. It writes no report, so the two checks
+      # below are skipped with it (UAMS-Web/uams-claude-skills#607). An empty command is a configuration
+      # error and fails, never a silent pass.
+      - name: Pest (custom command)
+        if: inputs.pest-command != 'composer test'
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.pest-command }}
+        run: |
+          if [ -z "$COMMAND" ]; then echo "::error::pest-command is empty"; exit 1; fi
+          bash -c "$COMMAND"
 
       # Fails when more tests were skipped than tests/skip-baseline.json records.
       - name: Skip baseline
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.pest-command == 'composer test' }}
         run: php .claude/skills/pest-testing/scripts/check-skip-baseline.php --report=junit.xml --baseline=tests/skip-baseline.json
 
       # Fails when one class takes over 25 percent of the summed class time, or over 900 seconds.
       # The share check is skipped, and the step says so, when the summed class time is under the
       # share-floor-seconds input; the 900-second backstop is checked either way.
       - name: Slowest class
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.pest-command == 'composer test' }}
         run: php .claude/skills/pest-testing/scripts/check-slowest-class.php --report=junit.xml --share-ceiling=25 --ceiling=900 --share-floor=${{ inputs.share-floor-seconds }}
 
   encoding-guard:
@@ -590,11 +647,94 @@ jobs:
           if [ -z "$COMMAND" ]; then echo "::error::mutation-smoke is on but mutation-smoke-command is empty"; exit 1; fi
           bash -c "$COMMAND"
 
+  floor-lint:
+    name: Floor lint (PHP ${{ inputs.floor-lint-php }}) (${{ matrix.os }})
+    if: inputs.floor-lint
+    # Legs: Linux only. Decided on UAMS-Web/uams-claude-skills#607 from what the job reads, not from a seeded fault: it parses the shipped PHP files under one pinned PHP version, and the parser reads the same bytes the same way on any platform. A caller that wants more names it in `all-platform-jobs`.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(contains(format(' {0} ', inputs.all-platform-jobs), ' floor-lint ') && '["ubuntu-latest","windows-latest","macos-latest"]' || contains(format(' {0} ', inputs.windows-jobs), ' floor-lint ') && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.floor-lint-php }}
+          coverage: none
+
+      # Parses every shipped PHP file under the supported floor. An empty command is a configuration error and fails, never a silent pass.
+      - name: Lint under the floor
+        env:
+          COMMAND: ${{ inputs.floor-lint-command }}
+        run: |
+          if [ -z "$COMMAND" ]; then echo "::error::floor-lint is on but floor-lint-command is empty"; exit 1; fi
+          bash -c "$COMMAND"
+
+  download-archive:
+    name: Download archive (${{ matrix.os }})
+    if: inputs.download-archive
+    # Legs: Linux only. Decided on UAMS-Web/uams-claude-skills#607 from what the job reads, not from a seeded fault: it runs `git archive` on `HEAD` and lists the result, and the repository pins line endings, so the list is the same on any platform. A caller that wants more names it in `all-platform-jobs`.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(contains(format(' {0} ', inputs.all-platform-jobs), ' download-archive ') && '["ubuntu-latest","windows-latest","macos-latest"]' || contains(format(' {0} ', inputs.windows-jobs), ' download-archive ') && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # Fails, naming each path, when the download holds a file the plugin does not run. An empty command is a configuration error and fails, never a silent pass.
+      - name: Check the download
+        env:
+          COMMAND: ${{ inputs.download-archive-command }}
+        run: |
+          if [ -z "$COMMAND" ]; then echo "::error::download-archive is on but download-archive-command is empty"; exit 1; fi
+          bash -c "$COMMAND"
+
+  phpcs:
+    name: phpcs (WordPress security sniffs) (${{ matrix.os }})
+    if: inputs.phpcs
+    needs: [composer-validate]
+    # Legs: Linux only. Decided on UAMS-Web/uams-claude-skills#607 from what the job reads, not from a seeded fault: phpcs reads PHP source and its own ruleset, the same files the same way on any platform. A caller that wants more names it in `all-platform-jobs`.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(contains(format(' {0} ', inputs.all-platform-jobs), ' phpcs ') && '["ubuntu-latest","windows-latest","macos-latest"]' || contains(format(' {0} ', inputs.windows-jobs), ' phpcs ') && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      # An empty command is a configuration error and fails, never a silent pass.
+      - name: Run phpcs
+        env:
+          COMMAND: ${{ inputs.phpcs-command }}
+        run: |
+          if [ -z "$COMMAND" ]; then echo "::error::phpcs is on but phpcs-command is empty"; exit 1; fi
+          bash -c "$COMMAND"
+
   # The one job that reads every other job's result. Keep `needs:` listing every other job in the
   # file; scripts/check-templates.mjs in UAMS-Web/uams-claude-skills checks it.
   result:
     name: Chain result
-    needs: [composer-validate, synced-files, no-emoji, aggregate-needs, pint, rector, phpstan, mutate-ignore, mutate, pest, encoding-guard, vitest, vite-build, mutation-smoke]
+    needs: [composer-validate, synced-files, no-emoji, aggregate-needs, pint, rector, phpstan, mutate-ignore, mutate, pest, encoding-guard, vitest, vite-build, mutation-smoke, floor-lint, download-archive, phpcs]
     if: always()
     # Legs: Linux only. It reads job results with jq.
     runs-on: ubuntu-latest
@@ -605,7 +745,7 @@ jobs:
       - name: Every needed job succeeded
         env:
           NEEDS: ${{ toJSON(needs) }}
-          SWITCHED_OFF: ${{ format('{0}{1}{2}{3}{4}{5}', !inputs.pest && 'pest ' || '', !inputs.mutate && 'mutate ' || '', !inputs.encoding-guard && 'encoding-guard ' || '', !inputs.vitest && 'vitest ' || '', !inputs.vite-build && 'vite-build ' || '', !inputs.mutation-smoke && 'mutation-smoke ' || '') }}
+          SWITCHED_OFF: ${{ format('{0}{1}{2}{3}{4}{5}{6}{7}{8}', !inputs.pest && 'pest ' || '', !inputs.mutate && 'mutate ' || '', !inputs.encoding-guard && 'encoding-guard ' || '', !inputs.vitest && 'vitest ' || '', !inputs.vite-build && 'vite-build ' || '', !inputs.mutation-smoke && 'mutation-smoke ' || '', !inputs.floor-lint && 'floor-lint ' || '', !inputs.download-archive && 'download-archive ' || '', !inputs.phpcs && 'phpcs ' || '') }}
         run: |
           results=$(echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"')
           echo "Needed job results:"
