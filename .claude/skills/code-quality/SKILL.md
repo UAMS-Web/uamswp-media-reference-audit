@@ -196,6 +196,8 @@ What the template sets, and what to keep when adapting it:
 - `concurrency` keyed on the workflow and ref for a pull request and on the workflow and commit for every other run, cancelling in-progress runs for pull requests only, so a push replaces a stale pull request run and no `main` run is cancelled, not even by the next merge (a shared push group would cancel the pending run, #473).
 - PHP, the Composer cache and the locked install live in the composite action, which `dependabot.yml` also covers (see the `update-dependencies-ticket` skill's `templates/dependabot.yml`).
 
+- The `mutate` job runs the mutation score for a repository that meets the Full coverage bar. It is the one job that installs a coverage driver: it passes `coverage: pcov` to the composite action, whose `coverage` input defaults to `none` so every other job keeps the faster, driver-free PHP. See *Adopting the `mutate` job* below.
+
 #### Which jobs run on which operating system
 
 The shared workflow (`templates/ci-reusable.yml`, published as `UAMS-Web/uams-ci-workflows`) runs a job as a matrix over `ubuntu-latest`, `windows-latest` and `macos-latest` only when its result can depend on the platform, and on `ubuntu-latest` alone otherwise (UAMS-Web/uams-claude-skills#438, #454). The legs exist to catch what one operating system shows: path handling, command-line length limits, BSD tools, case-insensitive file systems, line endings. A job that reads the same files the same way everywhere gains nothing from running three times, and on the `uams-statamic` pilot (run 41440485266, pull request 514) the platform-independent job types cost about 1,065 seconds of Windows and macOS runner time per run.
@@ -211,6 +213,7 @@ The shared workflow (`templates/ci-reusable.yml`, published as `UAMS-Web/uams-ci
 | `pint`, `rector`, `phpstan` | Linux only | They read PHP source and their own configuration. |
 | Spell check, submodule pointer guard, test isolation guard (pilot job types) | Linux only | Decided 2026-11-02: they read the same files the same way on any platform. |
 | Browser smoke (`CP browser smoke (Pest + Playwright)`, pilot job type) | Linux only | Decided 2026-11-02: no test under `tests/Browser` branches on the operating system. |
+| `floor-lint`, `download-archive`, `phpcs` (the plugin jobs, UAMS-Web/uams-claude-skills#607) | Linux only | Decided on #607 from what each job reads, with no seeded fault run: the floor lint parses shipped PHP under one pinned PHP version, the download check runs `git archive` on `HEAD` over a repository that pins line endings, and phpcs reads PHP source and its own ruleset. The plugin template ran all three on `ubuntu-latest` only before the chain carried them, so no coverage is lost. A caller that wants a Windows or macOS leg names the job in `all-platform-jobs`. |
 | `pest` (the suite, and the pilot's parallel band shards and serial group) | All three | The suite is what runs on the platforms the code ships to. |
 | `mutate-ignore` | All three | `check-mutate-ignore.php` has a branch for a CRLF runtime (its docblock names a trailing marker on one), and a Windows checkout can be CRLF. |
 | `mutate` | Ubuntu only (pinned) | Mutation tooling has needed Windows-only patches in `uams-statamic`, and the PCOV driver is installed per platform. The job is pinned to `ubuntu-latest` whatever the inputs say, in the reusable workflow and in the classification `scripts/check-templates.mjs` holds for any `ci.yml`-shaped chain (UAMS-Web/uams-ci-workflows#13, UAMS-Web/uams-claude-skills#549): on 2026-11-05 a Windows leg scored 100.00% over mutants that `ubuntu-latest` and `macos-latest` reported untested, and the tests do not detect them on any platform. |
@@ -235,6 +238,15 @@ Per-leg wall-clock time of those jobs in the control run (`uams-statamic`, run 4
 
 Narrowing the encoding guard and the Vite build to Linux removes 826 and 237 seconds of Windows and macOS runner time per run (485 + 341, and 160 + 77), 1,063 seconds in all. The mutation smoke and Vitest keep their three legs. The 1,065-second figure above is a different measurement, from the pilot run named there.
 
+**Measured on the narrowed template (UAMS-Web/uams-claude-skills#477).** `uams-statamic` pull request 623, a scratch branch since closed, switched its own encoding guard and Vite build to the shared workflow's `encoding-guard` and `vite-build` inputs (the six steps of the old encoding job as `encoding-guard-command`, `npm run build && npm run cp:build` as `vite-build-command`, `npm-version: ^11.10.0`). Run 42417275597 (head `3f33b811b`, branched from `main` at `9ec032320`, one run) gives the runner time of each leg in seconds, from each job's `started_at` and `completed_at`:
+
+| Job type | `ubuntu-latest` | `windows-latest` | `macos-latest` |
+| --- | --- | --- | --- |
+| Encoding guard | 156 | not run | not run |
+| Vite build | 41 | not run | not run |
+
+The two job types took 197 seconds of Linux runner time and no Windows or macOS time. The control run above (41666638111, the same two job types on all three legs) took 1,418 seconds: 355 on Linux and 1,063 on Windows and macOS. The saving is the 1,063 seconds of Windows and macOS runner time, and the Linux time falls from 355 to 197 seconds; the 1,065-second pilot figure is not re-derived, because its job set was not re-run. Parity basis: same repository and the same commands, but a later commit base than the control run, and the template's `.github/actions/setup` in place of the old jobs' inline setup steps, so the Linux difference mixes both and is not a measure of the narrowing. One run per figure; the spread between runs is not measured. That run's `CI` job failed, on the repository's own `local-ci.chain.test.mjs` (it checks the job list in `ci.yml`, which the scratch branch changed) and so on the Vitest job on all three legs, not on a narrowed job; those Vitest times are not used here.
+
 **Wall-clock time of each leg in the first all-platform chain (UAMS-Web/uams-statamic#348, merged as pull request 494).** Before any job was narrowed, every job of the `uams-statamic` chain except `submodule-access` and the aggregate ran on all three legs. Run 41372088216 (head `ea8025f3c`, 59 of 59 jobs `success`) gives the longest job on each leg, in minutes, from each job's `started_at` and `completed_at`:
 
 | Leg | Longest job | Minutes |
@@ -248,7 +260,9 @@ The Windows leg bound the run: its Pest band ran whole in one job (3,515 seconds
 
 **Keeping or narrowing a job in a repository.** A repository keeps a Linux-only job on all three legs with the `all-platform-jobs` input, gives a job its Windows leg without a macOS leg with the `windows-jobs` input (UAMS-Web/uams-claude-skills#529), or narrows every job with `linux-only`, on its call of the shared workflow. `ci.yml` is copied once and then owned by the repository, and the sync does not write `.github/workflows/ci.yml`, so there is no manifest key for it and nothing to leave alone.
 
-**Using the reusable workflow.** `templates/ci-reusable.yml` is the job chain as a `workflow_call` workflow (UAMS-Web/uams-claude-skills#485), which the `templates/ci.yml` caller calls (#486). It is published in `UAMS-Web/uams-ci-workflows` as `.github/workflows/ci.yml` so that a public repository can call it. The caller job is named `checks`, and the `CI` job needs it with `if: always()`, so the required context stays `CI`; `scripts/check-templates.mjs` fails the caller when the call is missing, when `CI` does not need it, or when the pinned reference is not a release tag or a full commit hash. The inputs `linux-only` (all jobs on Linux), `all-platform-jobs` (space-separated ids kept on all three) and `windows-jobs` (space-separated ids on Linux and Windows with no macOS leg; a job in both lists keeps all three) set the legs (never the `mutate` job's: it runs on `ubuntu-latest` only), and `encoding-guard`, `vitest`, `vite-build` and `mutation-smoke` switch the four optional jobs on, each with a command input. The `mutate` job mutates only the changed PHP files on a pull request and on a push, and everything `composer mutate` covers on a `schedule` or `workflow_dispatch` run, which takes the longer `mutate-full-timeout-minutes` limit (default 180, against 45 for the others); a caller adds the schedule to its own `ci.yml` (UAMS-Web/uams-claude-skills#532). The `mutate-ignore` job scans whichever of `app`, `src` and `tests` exist unless the caller names paths in `mutate-ignore-paths`, which a WordPress plugin sets to its source directory (#534). A called job reports as `<caller job id> / <job name> (<os>)`. The caller must carry `.github/actions/setup`, the synced `.claude/skills` scripts and the Composer scripts the jobs run, because every job checks out the caller's repository. `ci-reusable.yml` here is the canonical source and the published file is a byte copy.
+**Using the reusable workflow.** `templates/ci-reusable.yml` is the job chain as a `workflow_call` workflow (UAMS-Web/uams-claude-skills#485), which the `templates/ci.yml` caller calls (#486). It is published in `UAMS-Web/uams-ci-workflows` as `.github/workflows/ci.yml` so that a public repository can call it. The caller job is named `checks`, and the `CI` job needs it with `if: always()`, so the required context stays `CI`; `scripts/check-templates.mjs` fails the caller when the call is missing, when `CI` does not need it, or when the pinned reference is not a release tag or a full commit hash. The inputs `linux-only` (all jobs on Linux), `all-platform-jobs` (space-separated ids kept on all three) and `windows-jobs` (space-separated ids on Linux and Windows with no macOS leg; a job in both lists keeps all three) set the legs (never the `mutate` job's: it runs on `ubuntu-latest` only), and `encoding-guard`, `vitest`, `vite-build` and `mutation-smoke` switch the four optional jobs on, each with a command input; `floor-lint`, `download-archive` and `phpcs` switch on the three jobs a WordPress plugin runs (see *A WordPress plugin caller* below), and `pest-command` names the command the `pest` job runs. The `mutate` job mutates only the changed PHP files on a pull request and on a push, and everything `composer mutate` covers on a `schedule` or `workflow_dispatch` run, which takes the longer `mutate-full-timeout-minutes` limit (default 180, against 45 for the others); a caller adds the schedule to its own `ci.yml` (UAMS-Web/uams-claude-skills#532). The `mutate-ignore` job scans whichever of `app`, `src` and `tests` exist unless the caller names paths in `mutate-ignore-paths`, which a WordPress plugin sets to its source directory (#534). A called job reports as `<caller job id> / <job name> (<os>)`. The caller must carry `.github/actions/setup`, the synced `.claude/skills` scripts and the Composer scripts the jobs run, because every job checks out the caller's repository. `ci-reusable.yml` here is the canonical source and the published file is a byte copy.
+
+**A WordPress plugin caller (UAMS-Web/uams-claude-skills#607).** A plugin calls the same chain instead of keeping a copy of it. Its `with:` block is `linux-only: true`, `mutate: false` (the plugin template has no mutation run; a plugin whose source a mutator changes leaves it on), `floor-lint: true` with `floor-lint-php` set to the supported floor (default `8.2`) and `floor-lint-command` where the script is not `php scripts/lint-floor.php`, `download-archive: true` (default command `node scripts/check-download-archive.mjs`) and `phpcs: true` (default command `composer test:phpcs`). A plugin whose unit suite is its own Composer script sets `pest-command: composer test:unit`. With the default `composer test` the `pest` job writes a JUnit report and runs the skip-baseline and slowest-class checks that read it; with any other command it runs the command as given and those two checks are skipped, since no report exists. `mutate-ignore-paths` names the plugin's source directory (`includes`). **The WordPress integration matrix stays in the caller as a plain job beside the call**: it needs a MySQL service, a WordPress download and a single and multisite matrix, which this chain does not run (out of scope on #607). The caller lists it in the `needs:` of its `CI` job next to `checks`, as `templates/ci.yml` allows, so `CI` fails when it does. The three plugin jobs are off until their input is `true`, are each listed in the `result` job's `needs:` and switched-off list, and a skipped one passes `result` only when its input turned it off, so a failing command in a switched-on job fails the chain. The three command inputs fail on an empty value rather than passing.
 
 **Keeping the published copy identical (UAMS-Web/uams-claude-skills#490).** The published copy is `.github/workflows/ci.yml` in `UAMS-Web/uams-ci-workflows`, and a caller runs it at the release tag or commit its `uses:` line pins. Edit in this order: change `templates/ci-reusable.yml` here and merge it, copy the merged file byte for byte to the published repository, merge that, tag it, then move the pin in the callers. `scripts/check-published-workflow.mjs` compares the two. Run it from a checkout that carries the skill:
 
@@ -280,6 +294,62 @@ Apply it only after the workflows have run green once on the default branch, so 
 A repository already inside a shared organization ruleset that requires per-job names keeps that ruleset until it migrates; applying this one adds three requirements on top of those names rather than replacing them. The names stop being needed once the repository leaves the shared ruleset's list, which is an organization-level edit.
 
 A spell-check job is not in the template. The `spell-check` skill (profile `spell`) ships the `cspell.json` and `project-words.txt` seeds, the `spell` script and a `spell` job snippet for a repository that wants one.
+
+#### Adopting the `mutate` job
+
+The job is for a repository that has Pest, the patched `pest-plugin-mutate` and a `mutate` Composer script (a Statamic add-on's is `pest --mutate --path=src`). The shared workflow has no input that switches the job off, so a repository without them is not yet served by the caller; a switch is a follow-up to this slice.
+
+1. The `mutate` job is part of the shared workflow, so it is not copied. Copy the composite action's `coverage` input into `.github/actions/setup/action.yml`. An existing `.github/actions/setup/action.yml` gains the input by editing it; the default stays `none`, so the other jobs are unchanged.
+2. The shared workflow's job keeps `coverage: pcov` on its setup step. `--mutate` needs a coverage driver, and without one a run either stops with `Mutation testing requires code coverage to be enabled` or reports `0 Mutations for 0 Files created`; the [`pcov-setup`](../pcov-setup/SKILL.md) skill covers both and the per-machine install for a local run. PCOV is the driver here because it is purpose-built for coverage and much faster than Xdebug.
+3. Set the `mutate-paths` input on the call of the shared workflow (it feeds `MUTATE_PATHS` on the *Select the files to mutate* step) to the paths the `mutate` script passes to `--path` (`src` for a Statamic add-on), space-separated.
+   - **On a pull request**, the step lists the PHP files under those paths that the pull request adds, changes or renames. It reads them from GitHub's merge commit against its first parent, which is why the checkout fetches two commits, so a later change on the base branch is not counted. The run step passes the list as `--path`, which replaces the script's own. A pull request that changes no such file skips the run and the check, and the job passes with the reason printed.
+   - **On a push**, the step selects everything and the job runs the full score.
+4. The job's run step and check step stay as the shared workflow has them. The run step runs `composer mutate -- --min=100`, with `--path` on a pull request, and keeps the output in `mutate.log`; Pest fails the step on any survivor. The check step runs the `pest-testing` skill's `check-mutation-run.php` against that log, and fails a run that created no mutants, or that left any mutant untested, uncovered, pending or timed out, even when the run step passed. It runs with `if: always()` unless nothing was selected, so a failed run step still prints the log's own account.
+
+   One case passes with zero mutants: changed files that, mutated with PCOV loaded, produce none, such as an interface. Those files exist in the checkout and the coverage driver is there, which rules out the two setup failures zero mutants otherwise means, so the run step passes `--ignore-min-score-on-zero-mutations` on changed files and the check step accepts the zero with the reason printed. Zero mutants on a full run, or without PCOV, still fails.
+5. Fix a failure the way the `pest-testing` skill's mutation section describes: a survivor is killed with a test, deleted as dead code, or annotated with `@pest-mutate-ignore:<Mutator>` and a reason on the line above. An annotation that suppresses nothing, or everything, is the `mutate-ignore` job's business.
+6. A repository that gates its Actions jobs on `RUN_REMOTE_CI` adds the `if:` to the `checks` call, which gates this job with the rest. It is the slowest job in the chain, hence its 45-minute timeout; raise it when a suite needs longer, and do not remove it.
+
+   **Measure it before relying on it.** Every run first runs the whole suite under PCOV for coverage, then runs tests once per mutant, so the time grows with the suite as well as with the change. On `UAMS-Web/aether-wordpress-importer` (UAMS-Web/uams-claude-skills#406, 10,257 tests), one standard runner did not finish a pull request that changed one file:
+   - the coverage pass took 8.3 minutes and created 324 mutants;
+   - the 45-minute limit stopped it with 302 done;
+   - with a 120-minute limit, the runner lost contact at 47 minutes.
+
+   Pest's `--parallel` ran a different test workload there, so it is no remedy. A repository that large keeps its mutation run local until it has a runner that fits.
+
+The aggregate `CI` job lists `mutate` in its `needs:` like every other job, so the ruleset needs no entry for it.
+
+#### Adding the changed-tests report
+
+The `pest-testing` skill's `scripts/changed-tests-against-base.mjs` runs a pull request's changed test files against the base branch's source and reports per file (that skill's *Changed tests against base* says what the report means). It is not in the template: a repository adopts it in its own change. In `ci.yml`, beside the `checks` call, add a plain job such as the one below and list it in the `needs:` of `CI` (the `aggregate-needs` check fails otherwise):
+
+```yaml
+  changed-tests:
+    name: Changed tests against base
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Changed tests against base
+        run: node .claude/skills/pest-testing/scripts/changed-tests-against-base.mjs
+```
+
+- `fetch-depth: 0` is what makes the base branch present; without it the script fails, naming that cause.
+- **No `if:` on the job.** It reads `GITHUB_BASE_REF` and `GITHUB_EVENT_NAME` itself and reports a push as nothing to compare, so it succeeds on `main`. A job skipped by `if:` would count as a failure in the aggregate.
+- **No `${{ }}` expression in `run:`.** The base branch's name reaches the script through the environment, not through the command.
+- The job goes in the aggregate `CI` job's `needs:` like every other job. It always succeeds once its report is written, so it gates nothing but a comparison that could not run.
+- The report is written to the job summary as well as the log.
+
+In `local-ci.json`, where the runner gates jobs on the diff:
+
+```json
+{ "name": "changed-tests", "run": "node .claude/skills/pest-testing/scripts/changed-tests-against-base.mjs --base origin/main", "paths": ["tests/**"] }
+```
+
+`--base` names the same branch as `local-ci.json`'s `base`. The runner passes the PHP it resolved as `LOCAL_CI_PHP`, which the script uses. It installs dependencies in a scratch worktree on each run, so it is not quick: give it `paths` rather than `always`.
 
 ## Finding the starting static-analysis level
 
