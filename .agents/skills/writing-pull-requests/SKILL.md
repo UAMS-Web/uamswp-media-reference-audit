@@ -15,8 +15,11 @@ description: >-
   nobody meant to close. Also covers the PR lifecycle: one PR per integration branch from the issue's linked branch (a ready PR to `dev` and a draft to `staging` where both exist), each test plan scoped to its base branch's environment, open as a draft until the branch is ready
   to validate, flip draft → ready when it is, assign an owner, state the merge order of companion
   PRs in the body, and run the repository's cspell check on new prose and identifiers before
-  opening. Activate whenever drafting, rewriting, or critiquing a GitHub pull-request title or
-  body in a UAMS-Web repository.
+  opening. Also covers the whole path of opening a pull request: ticking the issue's acceptance
+  criteria, and where a public repository has no gate session, the draft, watch, fix, tick,
+  ready sequence and the author's merge. Activate whenever drafting, rewriting, or critiquing a
+  GitHub pull-request title or body in a UAMS-Web repository, when opening a pull request,
+  ticking acceptance criteria or a test plan, or merging.
 ---
 <!--
   Synced from UAMS-Web/uams-claude-skills: shared/.claude/skills/writing-pull-requests/SKILL.md
@@ -158,14 +161,55 @@ green checks panel.
   - a run that needs a loaded WordPress install or the importer's host application;
   - any repository with no remote CI workflow, including a private one.
 
-  The pre-merge validation of a ready pull request is unchanged: the gate still runs it
-  (UAMS-Web/uams-claude-skills#366).
+  Where a gate session validates and merges, the pre-merge validation of a ready pull request is
+  unchanged: the gate still runs it (UAMS-Web/uams-claude-skills#366). Where none does, the
+  author finishes the path: see **Opening a pull request end to end** below.
 - **When a merge order is required, state it in the body: in the PR that must merge second.**
   File-disjoint PRs need no ordering, but when PRs must merge in sequence: a shared-surface
   branch before a dependent one, a submodule companion before its pointer bump, or a cross-repo
   pair: say so in `## Companion PRs`, naming each PR and the one-line reason it must come
   first. Put it on the *dependent* PR, where whoever is about to merge will read it, rather than
   only on the one that goes first. See **Companion PRs and merge order** below.
+
+## Opening a pull request end to end
+
+Three rules cover the whole path, each with its own condition. The first holds in every
+repository. The second and third hold only where the repository is public **and** no gate
+session validates and merges for it; the last bullet says how to tell, by reading.
+
+- **Tick the issue's acceptance criteria when the pull request opens (every repository).** Read
+  each acceptance-criteria item on the issue the pull request addresses, evaluate it against the
+  change, and tick the items the change satisfies. Leave an item unticked when the change does
+  not satisfy it, and give a one-line reason on the issue: unmet, deferred to a numbered
+  follow-up, or superseded. A pull request that only part-finishes the issue ticks only what it
+  finishes, and references the issue without a closing keyword (see **Referencing related GitHub
+  issues** below). An issue body is shared state: read it immediately before editing and change
+  only the boxes you are ticking.
+- **Draft, watch, fix, tick, ready (a public repository with no gate session).** Open the pull
+  request as a draft. Watch its checks until every one on the head has completed: read them from
+  the REST check-runs of the head commit (`gh api repos/{o}/{r}/commits/<sha>/check-runs`), and
+  count a skipped check as not passing. On a failure, fix it, push to the same branch, and watch
+  again. When the checks pass, evaluate each item of the pull request's own `## Test plan`, take
+  the steps that satisfy it, and tick an item only under the honesty rule in the **`## Test plan`
+  checklist** section below (a check that was run, with its result named). An item that cannot be
+  satisfied yet stays unticked with the reason beside it. Then flip the pull request to ready
+  (`gh pr ready <n>`) and read `draft` back from the API to confirm.
+- **Merge (a public repository with no gate session).** When a ready pull request has every
+  check on its head green and every test plan item satisfied and ticked, the author merges it,
+  after working the re-verification in the [`pre-merge-check`](../rule-pre-merge-check/SKILL.md)
+  rule against the head being merged (the head SHA must be the one the checks ran on). Merge
+  through REST with a method the repository allows, passing the head:
+  `gh api -X PUT repos/{o}/{r}/pulls/{n}/merge -f sha=<head> -f merge_method=squash`. Where a
+  gate session exists, the author stops at ready, as the lifecycle above says. Merging stays
+  subject to the repository's branch rules and to the reserved-acts rule in the author's own
+  standing instructions: this skill states a condition and does not widen anyone's grant, so an
+  author whose instructions reserve merging stops at ready.
+- **Which case applies is read, not assumed.** Public: `gh api repos/{o}/{r} --jq .private`
+  prints `false`. No gate session: the repository's own `AGENTS.md` or `CONTRIBUTING.md` (and
+  its `local-ci` setup) names no dedicated local-CI session that runs the gate and merges. A
+  repository whose documents name one has a gate session, whatever its visibility. When the
+  documents are silent or disagree, treat the repository as having a gate session and stop at
+  ready, then ask.
 
 ## Spell-check new words before opening
 
