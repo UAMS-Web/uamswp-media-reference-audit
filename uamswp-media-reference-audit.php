@@ -7,8 +7,8 @@
  * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
- * Author:            Brent Passmore
- * Author URI:        https://www.uams.edu/
+ * Author:            UAMS Web Services
+ * Author URI:        https://communications.uams.edu/web/
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       uams-mra

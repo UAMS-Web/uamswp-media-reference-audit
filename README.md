@@ -257,3 +257,12 @@ they matter. The alternative, leaving the meta behind, would strand rows nobody
 on a shell-less host could ever clean up.
 
 Your media files are not touched.
+
+## Credits
+
+Developed and maintained by UAMS Web Services.
+
+Developers:
+
+- Josh Daugherty
+- Brent Passmore
