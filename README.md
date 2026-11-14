@@ -56,7 +56,7 @@ the `uams_mra_skipped_meta_keys` filter.
 
 URL matching normalizes away every generated size, so `hero-1024x768.jpg`, `hero-scaled.jpg`, and `hero-e1712345678901.jpg` all resolve back to attachment `hero.jpg`. Filenames containing their own dots (`State-Plan-2.11.25-Final.pdf`) match whole.
 
-A size suffix may carry a short crop marker after it — `hero-768x432-cc.jpg` —
+A size suffix may carry a short crop marker after it (`hero-768x432-cc.jpg`),
 which is how themes that build their own derivatives name them. Those collapse
 too. The marker is letters only and at most four, so a real filename ending in
 `-1920x1080-v2` keeps its name. Extend the list with the
@@ -68,8 +68,8 @@ symptom is a file you can see on the page reporting as unreferenced.
 Everything above reads the database. Some of the most common ways a file reaches
 a visitor never touch it:
 
-- a page template that lists its own attachments — `get_children()`,
-  `get_attached_media()`, a "documents on this page" loop
+- a page template that lists its own attachments (`get_children()`,
+  `get_attached_media()`, a "documents on this page" loop)
 - a shortcode or a block that builds its markup at render time
 - a URL hardcoded in a theme file or a stylesheet
 
@@ -91,7 +91,7 @@ screen and exported as `page_check`:
 | `found` | The page renders this file from this site's uploads | Recorded as a strong reference. The file is in use |
 | `offsite` | The page renders a file of the same name from **another host** | Stays in Verify, and the report names the host |
 | `absent` | The page was fetched and renders no file by this name | Leaves the Verify tier for `ask` or `clear`, by file type |
-| `error` | The request failed — timeout, redirect, non-200 | Stays in Verify. Nothing was learned |
+| `error` | The request failed: timeout, redirect, non-200 | Stays in Verify. Nothing was learned |
 | `skipped` | No public page to fetch, or past the per-scan page ceiling | Stays in Verify. Nothing was learned |
 
 Precedence runs `found` → `offsite` → `absent`, so a file served from both this
@@ -126,7 +126,7 @@ Two details worth knowing:
   `uams_mra_render_cache_bust` filter if a WAF objects.
 
 `absent` means *that page, at that moment*. A page whose output varies by date
-or by visitor — an events list that hides past entries, anything behind a login —
+or by visitor (an events list that hides past entries, anything behind a login),
 can render a file today and not tomorrow. The badge links to the URL that was
 read and carries the timestamp, so the check is yours to repeat.
 
@@ -349,7 +349,7 @@ instead of a broken button; deletion still works, but take your own backup.
 
 Read this before you delete anything.
 
-1. **Hardcoded URLs on pages nothing is attached to.** The database passes read tables, not PHP or template files. The render step covers this wherever the file is attached to a published page, since it reads the finished HTML — but a file hardcoded in `header.php` and attached to nothing has no page to fetch and still shows as unreferenced. Grep your theme before a bulk delete.
+1. **Hardcoded URLs on pages nothing is attached to.** The database passes read tables, not PHP or template files. The render step covers this wherever the file is attached to a published page, since it reads the finished HTML, but a file hardcoded in `header.php` and attached to nothing has no page to fetch and still shows as unreferenced. Grep your theme before a bulk delete.
 2. **Media rendered from an external system.** Content pulled in through an API, a feed, a headless front end, or an iframe from another application.
 3. **Files someone linked to from outside your site.** A PDF linked from an email campaign, a print piece, or a partner site has no in-database reference.
 4. **Object-cached or offloaded media.** If a plugin rewrites upload URLs to a path this plugin does not know, add that path under Scan settings > Extra upload paths.
@@ -404,8 +404,14 @@ To deploy to a UAMS host, zip the plugin directory and upload it through
 ```bash
 cd ..
 zip -r uamswp-media-reference-audit.zip uamswp-media-reference-audit \
-  -x '*.git*' -x '*.DS_Store'
+  -x '*.git*' -x '*.DS_Store' \
+  -x 'uamswp-media-reference-audit/vendor/*' -x 'uamswp-media-reference-audit/tests/*' \
+  -x 'uamswp-media-reference-audit/.phpstan/*' -x 'uamswp-media-reference-audit/composer.*' \
+  -x 'uamswp-media-reference-audit/rector*.php' -x 'uamswp-media-reference-audit/phpstan.neon.dist' \
+  -x 'uamswp-media-reference-audit/pint.json'
 ```
+
+The extra exclusions keep the development tooling below out of the upload.
 
 On multisite, activate per site rather than network-wide unless every site needs
 it. Tables are created per site, either on activation or on the first admin
@@ -413,7 +419,34 @@ request after that.
 
 Then go to **Media > Media Audit** and run a scan.
 
-Requires WordPress 6.0 and PHP 7.4.
+Requires WordPress 6.0 and PHP 8.2.
+
+## Development
+
+The plugin has no runtime dependencies. `composer.json` holds development tools
+only: Rector, PHPStan with the WordPress extension and stubs, and Pint, set up
+from the shared `code-quality` skill in UAMS-Web/uams-claude-skills. They run on
+your PHP (Pint needs 8.3 or later); `rector.php` and `phpstan.neon.dist` are
+pinned to the plugin's floor, PHP 8.2, so neither suggests syntax 8.2 cannot
+parse.
+
+```bash
+composer install
+
+composer test:pint       # formatting check; `composer pint` fixes
+composer test:refactor   # Rector's gating profile, dry run; `composer refactor` applies
+composer stan            # PHPStan, at the level in phpstan.neon.dist
+```
+
+`composer refactor:sweep` runs Rector's sweep profile, which adds the rules held
+back from the gate; review its diff rather than applying it wholesale.
+
+The commit that first formatted the code with Pint is listed in
+`.git-blame-ignore-revs`. Tell `git blame` to skip it, once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 ## Performance notes
 
@@ -433,3 +466,28 @@ they matter. The alternative, leaving the meta behind, would strand rows nobody
 on a shell-less host could ever clean up.
 
 Your media files are not touched.
+
+## Credits
+
+Developed and maintained by UAMS Web Services.
+
+Developers:
+
+- Josh Daugherty
+- Brent Passmore
+
+## Tests
+
+```bash
+composer install
+composer test:unit
+```
+
+The Unit suite runs on Pest 5 with no WordPress and no database: WordPress functions are mocked with Brain Monkey. The Integration suite runs on PHPUnit 9.6 from its own Composer setup, because WordPress' test suite supports PHPUnit 9 only:
+
+```bash
+composer setup:integration
+composer test:integration
+```
+
+It needs a WordPress core tree and a test database that nothing else uses; `tests/Integration/wp-tests-config.php` lists the `WP_TESTS_*` environment variables. `composer test` runs both suites, each in its own process.
