@@ -8,6 +8,8 @@
 
 declare(strict_types=1);
 
+use function Brain\Monkey\Filters\expectApplied;
+
 it('puts an attached file in the verify tier whatever its type', function (string $mime): void {
     expect(UAMS_MRA_Triage::tier(['is_attached' => 1, 'mime' => $mime]))->toBe('verify');
 })->with([
@@ -34,7 +36,7 @@ it('treats a row with no mime type as low risk', function (): void {
 });
 
 it('lets a filter add a type to the ask tier', function (): void {
-    Brain\Monkey\Filters\expectApplied('uams_mra_distributable_mimes')
+    expectApplied('uams_mra_distributable_mimes')
         ->once()
         ->andReturn(['image/png']);
 

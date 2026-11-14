@@ -110,11 +110,16 @@ return RectorConfig::configure()
     // modifications.
     ->withPaths([
         __DIR__.'/includes',
+        __DIR__.'/tests',
     ])
     // The PHP files at the repository root: the plugin header file and
     // uninstall.php.
     ->withRootFiles()
     ->withSkip([
+        // The Integration suite's own Composer setup: its vendor/ sits inside
+        // tests/, and Rector would otherwise rewrite PHPUnit 9 and its
+        // dependencies.
+        __DIR__.'/tests/Integration/vendor',
         ...$neverRules,
         ...($isSweepProfile ? [] : $sweepOnlyRules),
     ])
