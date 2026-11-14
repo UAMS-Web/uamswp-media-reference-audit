@@ -201,14 +201,18 @@ class UAMS_MRA_Store
 
         $columns = [];
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         foreach ((array) $wpdb->get_results("SHOW INDEX FROM {$offsite} WHERE Key_name = 'uniq_hit'") as $row) {
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $columns[] = $row->Column_name;
         }
 
         if ($columns !== [] && ! in_array('source_pk', $columns, true)) {
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $wpdb->query("ALTER TABLE {$offsite} DROP INDEX uniq_hit");
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         }
     }
 
@@ -281,6 +285,7 @@ class UAMS_MRA_Store
     {
         global $wpdb;
 
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $wpdb->get_results(
             $wpdb->prepare(
@@ -289,6 +294,7 @@ class UAMS_MRA_Store
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
     }
 
     /**
@@ -373,8 +379,10 @@ class UAMS_MRA_Store
         $t = self::results_table();
 
         $out = [];
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         foreach ($wpdb->get_results("SELECT render_state, COUNT(*) AS n FROM {$t} WHERE render_state <> '' GROUP BY render_state") as $row) {
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $out[$row->render_state] = (int) $row->n;
         }
 
@@ -443,8 +451,10 @@ class UAMS_MRA_Store
 
         $t = self::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return (bool) $wpdb->get_var("SELECT 1 FROM {$t} WHERE source_pk = 0 LIMIT 1");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -458,6 +468,7 @@ class UAMS_MRA_Store
         $i = self::index_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $row = $wpdb->get_row(
             "SELECT
 				COUNT(*) AS hits,
@@ -466,11 +477,14 @@ class UAMS_MRA_Store
 			FROM {$t}",
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $with_local = (int) $wpdb->get_var(
             "SELECT COUNT(DISTINCT o.url_hash) FROM {$t} o
 			 INNER JOIN {$i} x ON x.base_norm = o.base_norm"
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         // phpcs:enable
 
         $out = is_array($row) ? array_map(intval(...), $row) : [
@@ -493,12 +507,14 @@ class UAMS_MRA_Store
         global $wpdb;
         $t = self::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $wpdb->get_results(
             "SELECT host, COUNT(*) AS hits, COUNT(DISTINCT url_hash) AS files
 			 FROM {$t} GROUP BY host ORDER BY hits DESC",
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -555,12 +571,16 @@ class UAMS_MRA_Store
         $t = self::offsite_table();
 
         if ($host === '') {
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             return (int) $wpdb->get_var("SELECT COUNT(DISTINCT url_hash) FROM {$t}");
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         }
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT url_hash) FROM {$t} WHERE host = %s", $host));
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -575,6 +595,7 @@ class UAMS_MRA_Store
         global $wpdb;
         $t = self::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $wpdb->get_results(
             $wpdb->prepare(
@@ -585,6 +606,7 @@ class UAMS_MRA_Store
             ),
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -605,6 +627,7 @@ class UAMS_MRA_Store
         $t = self::results_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $row = $wpdb->get_row(
             "SELECT
 				COUNT(*) AS total,
@@ -618,6 +641,7 @@ class UAMS_MRA_Store
 			FROM {$t}",
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         // phpcs:enable
 
         self::$summary_cache = is_array($row) ? array_map(intval(...), $row) : [];

@@ -207,6 +207,7 @@ class UAMS_MRA_Admin
 
         check_admin_referer('bulk-media_items');
 
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- every element is cast to a non-negative integer by `absint()`.
         $ids = isset($_POST['ids']) ? array_map(absint(...), (array) wp_unslash($_POST['ids'])) : [];
         $ids = array_filter($ids);
 
@@ -268,8 +269,10 @@ class UAMS_MRA_Admin
                 continue;
             }
 
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $row = $wpdb->get_row($wpdb->prepare("SELECT ref_count, bytes FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             if ($row && (int) $row['ref_count'] > 0 && ! $force) {
                 $skipped++;
@@ -611,8 +614,8 @@ class UAMS_MRA_Admin
 
         if ($handle) {
             while (! feof($handle)) {
-                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-                echo fread($handle, 1024 * 1024); // phpcs:ignore WordPress.WP.AlternativeFunctions
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.AlternativeFunctions -- the bytes are a zip archive streamed to the browser, which escaping would corrupt.
+                echo fread($handle, 1024 * 1024);
                 flush();
             }
             fclose($handle); // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -783,7 +786,7 @@ class UAMS_MRA_Admin
 							<td>
 								<strong><a href="<?php echo esc_url((string) get_edit_post_link($id)); ?>"><?php echo esc_html($row['title'] !== '' ? $row['title'] : __('(no title)', 'uams-mra')); ?></a></strong>
 								<div class="uams-mra-file"><?php echo esc_html($row['file']); ?></div>
-								<div class="uams-mra-meta">ID <?php echo $id; ?> &middot; <?php echo esc_html($row['mime']); ?></div>
+								<div class="uams-mra-meta">ID <?php echo esc_html((string) $id); ?> &middot; <?php echo esc_html($row['mime']); ?></div>
 							</td>
 							<td>
 								<span class="uams-mra-tier uams-mra-tier-<?php echo esc_attr($tier); ?>"><?php echo esc_html($tiers[$tier]['label']); ?></span>
@@ -1013,11 +1016,13 @@ class UAMS_MRA_Admin
         $offset = 0;
 
         do {
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $rows = $wpdb->get_results(
                 $wpdb->prepare("SELECT * FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT 500 OFFSET %d", $offset),
                 ARRAY_A
             );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             update_meta_cache('post', wp_list_pluck($rows, 'attachment_id'));
 
@@ -1526,8 +1531,10 @@ class UAMS_MRA_Admin
 
         $summary = UAMS_MRA_Store::offsite_summary();
         $hosts = UAMS_MRA_Store::offsite_hosts();
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- these two read-only view filters change what a screen shows, never stored data, and the screen is behind the capability check above.
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
         $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
         $per_page = 100;
 
         $valid_hosts = wp_list_pluck($hosts, 'host');

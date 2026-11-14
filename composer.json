@@ -8,17 +8,20 @@
     },
     "require-dev": {
         "brain/monkey": "^2.7",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
         "laravel/pint": "^1.13",
         "pestphp/pest": "^5.3",
         "php-stubs/wordpress-stubs": "^6.9",
         "php-stubs/wp-cli-stubs": "^2.12",
         "phpstan/phpstan": "^2.1",
         "rector/rector": "^2.5",
-        "szepeviktor/phpstan-wordpress": "^2.0"
+        "szepeviktor/phpstan-wordpress": "^2.0",
+        "wp-coding-standards/wpcs": "^3.4"
     },
     "config": {
         "allow-plugins": {
-            "pestphp/pest-plugin": true
+            "pestphp/pest-plugin": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
         },
         "platform": {
             "php": "8.4.27"
@@ -43,6 +46,7 @@
         ],
         "test:unit": "pest",
         "test:integration": "@php tests/Integration/vendor/bin/phpunit --configuration tests/Integration/phpunit.xml",
+        "test:phpcs": "phpcs",
         "lint:floor": "@php scripts/lint-floor.php"
     },
     "scripts-descriptions": {
