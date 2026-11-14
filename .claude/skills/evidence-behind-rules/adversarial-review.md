@@ -41,8 +41,6 @@ Two things reach other people: **a change that ships, and a claim that is publis
 
    Mutation-verify with the tooling too (Pest's native mutation testing automates this across the changed surface: `vendor/bin/pest --mutate --class="<Namespace>\\…\\<ChangedClass>"` flags any *surviving mutant* (a mutation no test kills = a false-green gap). It needs a coverage driver (PCOV) fast, coverage-only (or Xdebug); a per-machine install that does **not** travel via git). See *Tooling that raises the floor* below.
 
-   The full chain, run locally, is the [`local-ci`](../local-ci/SKILL.md) skill.
-
 7. **Record the verdict.** A closed design fork → on the issue and per the [`design-decision-forks`](../../rules/design-decision-forks.md) rule. A new open question or unspecified detail the review surfaced → a follow-up GitHub issue per the [`writing-issues`](../writing-issues/SKILL.md) skill (named, not silent). Otherwise a docblock / PR-body note.
 
 ## Review questions

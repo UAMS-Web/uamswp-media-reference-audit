@@ -34,8 +34,6 @@ A **change that ships** and a **claim that is published** (a figure, count, veri
 
    Mutation-verify with `--mutate` too; see *Mutation testing*.
 
-   The full chain, locally: [`local-ci`](../local-ci/SKILL.md).
-
 7. **Record the verdict.** A closed fork: on the issue per [`design-decision-forks`](../rule-design-decision-forks/SKILL.md). A new open question or unspecified detail: a follow-up issue per [`writing-issues`](../writing-issues/SKILL.md). Otherwise a docblock or PR-body note.
 
 ## Review questions

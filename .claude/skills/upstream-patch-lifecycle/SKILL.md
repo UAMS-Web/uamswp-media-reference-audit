@@ -6,19 +6,22 @@ description: >-
   GitHub chain that tracks it. Covers the two registration forms (`extra.patches` in
   `composer.json` for an application; a root-only `patches.json` for a package another repository
   installs, so dev patches never leak into the consumer), the mirrored-patch case where the chain
-  lives in another repository, the `afk` mode of each ticket and the cross-repo REST recipe for
-  making an *upstream* issue a blocker on our removal ticket, the removal procedure in its
+  lives in another repository, the shared patch package that replaces copies once two
+  repositories carry the same patch (the `vcs` entry it is read through,
+  `require` in an application and `require-dev` plus a root `patches.json` in a package,
+  migration, `patches.lock.json`), the `afk` mode of each ticket, the removal procedure in its
   load-bearing dependency order (the patch comes out BEFORE the package moves, or
   `composer install` fails for everyone), when `patches.lock.json` alone is enough and when
-  `composer.lock` must be relocked too, the tags-not-Releases release check, and the paid-for
+  `composer.lock` must be relocked too, and the paid-for
   traps (a reused `vendor/` needing the package reinstalled before re-patching, a stale `vendor/`
   faking `outdated` and `audit`, CRLF/LF vendor line endings, `internalClass` PHPStan pins for
-  `@internal` vendor classes). Activate when carrying a NEW vendor patch, filing or wiring the
-  ticket chain for one, checking whether an upstream fix has shipped, retiring a patch, or editing
-  `patches/`, `extra.patches`, `patches.json`, `patches.lock.json`, or an upstream watch row. Also
-  covers the upstream-REQUEST variant, where no local patch exists: activate when an `upstream`
-  ticket's last open criterion waits on a maintainer's answer to a feature request, a
-  documentation request, or a pull request.
+  `@internal` vendor classes). Activate when registering a vendor patch in a consumer, filing the
+  ticket chain for one, removing a retired patch, or editing `patches/`, `extra.patches`,
+  `patches.json` or `patches.lock.json`. Writing and documenting a patch and the upstream-facing
+  and package-side half (filing the bug and the pull request upstream, the shared package itself,
+  its versioning and retirement, the release check and the upstream watcher, and the
+  upstream-request variant) are the `patch-package` skill in the `uams-web/patches-*`
+  repositories.
 ---
 <!--
   Synced from UAMS-Web/uams-claude-skills: shared/.claude/skills/upstream-patch-lifecycle/SKILL.md
@@ -55,7 +58,8 @@ is needed to use it). Which one a repository uses is not a style choice:
 - **An application, or a plugin nobody installs as a Composer dependency, registers in
   `extra.patches`.** Everything is in one manifest, and `composer validate` guards the lock.
 - **A package that another repository installs registers in a root-only `patches.json`, never in
-  `extra.patches`.** Composer copies the whole `extra` block verbatim into a consumer's
+  `extra.patches`** (the one exception is a shared patch package, whose `extra.patches` is its
+  purpose: see *Shared patches* below). Composer copies the whole `extra` block verbatim into a consumer's
   `composer.lock`, and the plugin's `Dependencies` resolver reads `extra.patches` out of that lock
   data for **every** package in `packages`, so an inline declaration would leak the package's
   *dev* patches into its consumer and apply them against the consumer's vendor tree. Reading a
@@ -80,30 +84,14 @@ waiting on what.
 | 3 | Open the upstream PR that closes that upstream issue | `afk` (a human approves the post) | 2 |
 | 4 | Update the package and remove our patch | `afk` | 3 |
 
-Tickets 2 and 3 are `afk`, like 1 and 4. An agent does all the preparation: checking the
-upstream tracker for an existing report, drafting the issue or pull-request body, and preparing
-and testing the branch. The one step it does not take alone is the post itself, because the post
-appears on a third-party public tracker under a maintainer's own identity: the agent asks a human
-to approve it, and posts only after that approval. That approval is a step inside the ticket, not a
-reason to label the whole ticket `hitl`, which would leave the preparation waiting for a person
-too (`UAMS-Web/uams-statamic-archive#2772`). There is no decision to make either, so the
-[`design-decision-forks`](../../rules/design-decision-forks.md) rule does not apply to them.
+Tickets 2 and 3 are `afk`, each with a human approving the post, and how they run (the claim
+verification and its timing, the two transitions, the cross-repo `blocked_by` recipe, and where to
+file) has moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry
+(UAMS-Web/uams-claude-skills#702).
 Tickets 1 and 4 are ordinary in-repo builds. Ticket 4's package update often arrives as a
 Dependabot pull request: then the patch retires on that pull request's branch, per the
 [`update-dependencies-ticket`](../update-dependencies-ticket/SKILL.md) skill, and that pull
 request closes ticket 4.
-
-**Tickets 2 and 3 verify the draft before the approval is requested.** The
-[`verify-claims-before-a-third-party-post`](../../rules/verify-claims-before-a-third-party-post.md)
-rule owns the requirement: every claim in the draft is checked three ways, each by an
-independent method, and the claims and the checks are recorded on the filing ticket. This chain
-owns only the timing. The checks run **after the local patch from ticket 1 is merged and
-installed**, so they exercise the shipped fix rather than a working copy, and **after the last
-edit to the draft**. A draft written before the patch existed is re-verified at that point, not
-trusted. Two things the rule's claim list names are specific to a patch chain and are easy to
-leave stale in a draft written early: the revision of the upstream package the reproduction was
-run against, and any "no existing report" statement, which is re-searched at that point because
-the upstream tracker has moved since the draft was written.
 
 **Why the patch comes first, not the report.** Filing after the patch means the report ships a
 **tested fix** rather than a suggestion, which is more useful to the maintainer and more likely
@@ -112,56 +100,15 @@ offered, and the release followed 84 seconds after the merge.
 
 ### The two transitions that carry the subtlety
 
-Both are easy to miss, and missing either leaves the chain silently broken.
-
-- **Filing the upstream issue satisfies and closes ticket 2, *and* that upstream issue must
-  also be added as a blocker on ticket 4.** Closing ticket 2 otherwise disconnects the thing we
-  are waiting on from the work that waits on it, and ticket 4 sits looking unblocked while
-  nothing upstream has happened.
-- **Opening the upstream PR satisfies and closes ticket 3.** Ticket 4 then stays blocked until
-  the fix is both **merged** and **tagged**, which are separate events. A merged PR on a branch
-  we cannot install retires nothing.
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
 
 ### The cross-repo `blocked_by` recipe
 
-`blocked_by` resolves against a **public repo we do not own**: verified 2026-08-04 in
-`uams-statamic` by adding [`pestphp/pest#1790`](https://github.com/pestphp/pest/issues/1790) as a
-blocker on its #1898, where it is still readable. The endpoint takes the issue's **numeric database
-`id`**, not its issue number:
-
-```bash
-# 1. Resolve the upstream issue's DB id. For pestphp/pest#1790 this is 5014035150: NOT 1790.
-id=$(gh api repos/pestphp/pest/issues/1790 --jq '.id')
-
-# 2. Add it as a blocker on OUR removal ticket.
-gh api -X POST repos/<owner>/<repo>/issues/<removal-ticket>/dependencies/blocked_by -F issue_id=$id
-
-# 3. Read it back: always confirm, the POST is easy to aim at the wrong issue.
-gh api repos/<owner>/<repo>/issues/<removal-ticket>/dependencies/blocked_by \
-  --jq '.[] | "\(.repository.full_name)#\(.number)"'
-```
-
-Passing the issue *number* where the id belongs either 404s or, worse, silently links whatever
-unrelated issue happens to carry that database id. The endpoint's REST-only status and the
-budget it protects are the [`github-api-budget`](../../rules/github-api-budget.md) rule.
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
 
 ### Where to file when the upstream tracker is not where you think
 
-Check `has_issues` before drafting anything, and check **only** that field.
-`pestphp/pest-plugin-mutate` has issues **disabled**, so UAMS-Web/uams-statamic-archive#1729 had to be
-retargeted to Pest core mid-flight. Its `open_issues_count` is actively misleading, with issues
-off, GitHub still counts pull requests there, so the repo reads as a live tracker with a handful
-of open reports (7 when #1729 checked it, 4 on a later check, never once an issue):
-
-```bash
-gh api repos/pestphp/pest-plugin-mutate --jq '{has_issues, open_issues_count}'
-# {"has_issues": false, "open_issues_count": 4}   <- every one of those is a PR
-```
-
-When a plugin's issues are off, the **parent repo is the intake**: that is where its bugs are
-filed in practice. Match the parent's issue form (Pest core uses `bug_report.yml`, requiring
-What Happened / How to Reproduce / Pest Version / PHP Version / Operating System) and shape the
-draft to it before filing. The PR still goes to the plugin repo; only the issue moves.
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
 
 ### Mirrored patches: don't duplicate the chain
 
@@ -169,13 +116,181 @@ Repositories that share a test harness get bitten by the *same* upstream bug. Wh
 is a mirror of one another repository already carries, **the chain lives where it was first
 filed**: filing a parallel four-ticket chain duplicates work and splits the upstream
 conversation. This repo then needs only **ticket 4**, its removal ticket, blocked by the
-originating repo's chain (or directly by the upstream issue, via the cross-repo edge above).
+originating repo's chain (or directly by the upstream issue, via the cross-repo edge in the `patch-package` skill).
 
 The cost is drift, and it is real: a mirrored patch outliving its original is a silent debt
 nobody is tracking. So the standing rule: **when the originating repository retires its copy,
 check the mirror in the same week.** A mirror that was re-targeted to a different version of the
 package (a hunk rewritten for the pinned release) cannot be checked with a byte compare; check
 its removal criterion instead.
+
+### Shared patches: one package per patched upstream package
+
+Once a second repository needs the same patch, the copies stop being mirrors and become drift.
+On 2026-11-05 thirteen repositories carried seven `pest-plugin-mutate` patches, and two of the
+seven existed in three and four different versions (`UAMS-Web/uams-claude-skills#548`). The
+remedy decided there is **one shared package per patched upstream package**, for example
+`uams-web/patches-pest-plugin-mutate`, which every consumer requires in place of its own copies.
+A patch is then changed once and released once, and it retires everywhere in one release.
+
+**A patch only one repository needs stays in that repository's own registration.** The package
+holds what two or more consumers share. Creating the package repository and tagging and
+releasing it are the operator's acts.
+
+**A package is read from its GitHub repository through a `vcs` entry, not from Packagist**
+(decided 2026-11-11, `UAMS-Web/uams-claude-skills#696`). The `vcs` driver resolves a package's
+versions from the repository's tags, so a release is a pushed tag and nothing is registered
+anywhere. The packages are public repositories, so the driver reads them without credentials. A
+private package repository would need GitHub authentication on every machine and CI runner that
+installs it, and this skill does not describe one.
+
+#### The package
+
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
+
+#### Versioning
+
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
+
+#### How a consumer requires it: the repository's shape decides, as for its own patches
+
+The same split as *Where a patch is registered*, for the same reason (decided on
+`UAMS-Web/uams-claude-skills#548`, option B, and measured there):
+
+- **An application requires the package in `require`.** The plugin applies the package's own
+  `extra.patches`, and only from `packages` in `composer.lock`: in `require-dev` the package is
+  installed and silently not applied.
+- **A package that another repository installs requires it in `require-dev`, and lists the
+  package's patch files in its own root `patches.json` by the same `vendor/` path.** Its root
+  `patches.json` applies when it is the root project; downstream, neither the patch package nor
+  the patches are installed, so a dev tool's patches never reach the application's production
+  install. The package's own declaration is skipped in that consumer, because it sits in
+  `packages-dev`, so nothing applies twice.
+
+**Either form needs the `vcs` entry in the consumer's root `composer.json`**, an application's and
+a package's alike, because the package is not on Packagist. Composer reads `repositories` only from
+the root project, so an entry in a dependency's `composer.json` is ignored, and a package
+consumer's own consumers do not inherit its entry. They need none: the patch package sits in that
+package's `require-dev` and never reaches them. Add the entry with
+`composer config repositories.patches-<package> vcs https://github.com/UAMS-Web/patches-<package>.git`,
+which (Composer 2.11.1) writes:
+
+```json
+{
+    "repositories": [
+        {
+            "name": "patches-pest-plugin-mutate",
+            "type": "vcs",
+            "url": "https://github.com/UAMS-Web/patches-pest-plugin-mutate.git"
+        }
+    ]
+}
+```
+
+Where `repositories` is already present,
+add the entry beside the others.
+
+The cost of the package form is a list kept in step: when a release adds or retires a patch, a
+package consumer edits its `patches.json` entries in the change that adopts the release, keeping
+the package's order and description keys. The patch files themselves stay in one place.
+
+#### Moving a consumer to the package
+
+1. **Take out the copies the package now ships**: their entries in `extra.patches` or
+   `patches.json`, and their files under `patches/`. A patch only this repository carries stays.
+2. **Add the `vcs` entry before the require** (*How a consumer requires it*), or Composer looks for
+   the package on Packagist:
+   `composer config repositories.patches-pest-plugin-mutate vcs https://github.com/UAMS-Web/patches-pest-plugin-mutate.git`.
+3. **Require the package with plugins off**, so the first resolution cannot run before the files
+   exist: `composer require --no-plugins uams-web/patches-pest-plugin-mutate:^1.0` in an
+   application, with `--dev` added in a package.
+4. **In a package, add the package's patches to the root `patches.json`**, by
+   `vendor/uams-web/patches-<package>/patches/<basename>.patch`, in the package's order, with its
+   description keys.
+5. **`composer patches-relock`, then `composer patches-repatch`**, and `composer update --lock`
+   where `composer.json` changed (*The relock* below).
+6. **Place a patch this repository keeps on the same upstream package, and prove it applies
+   there.** In a package, list it after the shared entries in `patches.json`, and it applies after
+   them: prove it with `git apply` of the set in order, then this one, on the pinned upstream tag,
+   and re-cut it against the set if it does not apply. In an application, the plugin collects the
+   root `extra.patches` before a dependency's (resolver order in 2.0.0, source read), so a kept
+   patch applies *before* the shared set: cut it against the bare pinned tag, and prove the set
+   still applies after it, or move it into the package. One real install has run a kept patch
+   *ahead* of the shared set in a package (the run below): it applied cleanly first and the set
+   applied after it. The after order in a package and the application order are not measured in a
+   real install (`UAMS-Web/uams-claude-skills#548`, Findings).
+7. **Confirm each patch applied** (its description appears in the `composer install -v` output;
+   without `-v` the install prints only `Patching <package>`, and with a warm patch cache one
+   `Found cached patch` line per patch) and
+   run the gate that proves the patched tool works (*Proving it worked*). Commit `composer.json`,
+   `composer.lock`, `patches.json` where it changed, and `patches.lock.json` together.
+
+**Steps 2, 3 and 5 were run in this order on one real package consumer**, 2026-11-11 on macOS 27.3,
+PHP 8.4.27, Composer 2.11.1, `cweagans/composer-patches` 2.0.0, against
+`uams-web/patches-pest-plugin-mutate` v1.0.0. The consumer was a scratch clone of
+`UAMS-Web/aether-wordpress-importer-cleanup` at `436ca68`, with the package taken out of
+`require-dev` by hand to stand in for one not yet moved. Steps 1 and 4 were already in place
+there: its `patches.json` listed the seven shared patches by `vendor/` path, after its own one
+patch (`pest-class-constant-coverage.patch`), which therefore applied first:
+
+| Step | Result |
+| --- | --- |
+| `composer config repositories.patches-pest-plugin-mutate vcs <url>` | exit 0, the entry above |
+| `composer require --dev --no-plugins -vvv uams-web/patches-pest-plugin-mutate:^1.0` | exit 0; `Locking uams-web/patches-pest-plugin-mutate (v1.0.0) from vcs repo`, and `Reading composer.json of uams-web/patches-pest-plugin-mutate` printed 2 times |
+| `composer patches-relock`, `composer patches-repatch` | exit 0 each; `patches.lock.json` lists 8 patches, each `patches-file:patches.json` |
+| `vendor/` moved aside, `composer install` | exit 0, all 8 patches applied from a warm patch cache |
+| `vendor/` moved aside again, `composer install -v` | exit 0, the 8 descriptions printed in `patches.json`'s order |
+
+The `Reading composer.json of uams-web/patches-<package>` line is what tells the `vcs` driver from
+Packagist, and only while Composer resolves at `-vvv` (a `require`, an `update`, or an install
+with no `composer.lock`). A `composer install` from a lock prints it 0 times either way: both
+installs in the table did. The control for a resolution is recorded on
+`UAMS-Web/aether-wordpress-importer-cleanup#71`, which adds the same entry: `composer install -vvv`
+with `composer.lock` removed prints the line 2 times on its branch, and 0 times from `main`, which
+has no entry and resolves from Packagist.
+The application form, and a cold patch cache through the `vcs` entry, are not yet measured. Where
+`require` misbehaves, the fallback is the measurement's original bootstrap, scoped to the package
+(`composer update uams-web/patches-<package> --no-plugins`).
+
+#### `patches.lock.json` in a consumer
+
+The consumer's `patches.lock.json` records each shared patch with its resolved `url` and its
+`sha256`, and a `provenance` of `dependency:<upstream package>` in an application or
+`patches-file:patches.json` in a package. It **must be committed**: the first resolution runs
+before the package is installed, so with no committed `patches.lock.json` a plain
+`composer update` aborts with `The "vendor/..." file could not be downloaded`, which is why the
+migration steps above require with plugins off and then relock and repatch. Once both lock files
+are committed, a `composer install` from a deleted `vendor/` patches cleanly, with a warm or a cold
+patch cache.
+
+**A committed `patches.lock.json` is read, never re-resolved**, so adopting a new package release
+is not an ordinary dependency update. In 2.0.0 (source read) the plugin loads the patch list from
+the lock whenever the lock exists (`loadLockedPatches()` in `src/Plugin/Patches.php`), never checks
+it for freshness, and fetches each patch against its locked `sha256`. After a release that changes
+a patch, a machine with the old patch cached applies the old text and one without it fails on a
+hash mismatch; after a release that retires a patch, the lock still names it against the moved
+upstream package. So each adoption repeats the bootstrap: in a package, edit `patches.json` to
+match the release first; then
+`composer update uams-web/patches-<package> --with-dependencies --no-plugins`,
+`composer patches-relock`, `composer patches-repatch`, and a `composer install` from a deleted
+`vendor/` to show it applies cold. **A Dependabot pull request for the package needs those steps
+on its branch before it merges.** The end-to-end behavior is not yet measured.
+
+#### Retirement
+
+The package side moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
+
+**In each consumer the order of *Removing a patch* below still applies**: the retired entry
+leaves `patches.json` (in a package) and `patches.lock.json` is relocked in the same change that
+moves the package and the upstream package, by the adoption steps under *`patches.lock.json` in a
+consumer*. When the last patch retires, each consumer removes the package in one change, requiring
+the upstream package directly only if it did before (`pest-plugin-mutate` arrives through
+`pestphp/pest`). Where no other patch remains, the consumer also removes `patches.json`,
+`patches.lock.json` and `cweagans/composer-patches`, as *Removing a patch* says.
+
+**The four-ticket chain lives once, where the package does.** Consumers carry no removal ticket of
+their own for a patch the package ships; a consumer's open item is adopting the release that
+retires it.
 
 ---
 
@@ -195,10 +310,7 @@ its removal criterion instead.
 
 ### Adding a patch
 
-Every patch here is **hand-written**: edit the `.patch` directly. There is no snippet pair and no
-generator command.
-
-Then, in every case:
+Writing a patch and documenting it moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry, since a patch is created in its `patches-*` repository (UAMS-Web/uams-claude-skills#702). A consumer that registers a patch, its own or the shared package's, then follows these steps:
 
 1. Register the path, under `extra.patches.<vendor/package>` in `composer.json`, or under
    `patches.<vendor/package>` in `patches.json`. **The key is the description**, and it must name
@@ -211,14 +323,10 @@ Then, in every case:
    changes it.
 4. `composer validate --no-check-publish`: expect no `# Lock file errors` section. ("No license
    specified" is a pre-existing general warning in some repositories.)
-5. `composer install` and confirm the patch applies: the patch's description appears in the
-   output.
-6. Document it: the `patches/README.md` section where the repository has one (problem, local fix,
-   **the retirement condition**, and a removal checklist naming every file that dies with the
-   patch: the guard test, its PHPStan pins, any generator command and snippet pair); otherwise the
-   description key, the `_comment` array in `patches.json`, or the decision log.
-7. Name the gate that proves the patched tool works (see *Proving it worked*.
-8. `vendor/bin/pint --dirty`.
+5. `composer install -v` and confirm the patch applies: the patch's description appears in the
+   output (without `-v` it does not).
+6. Name the gate that proves the patched tool works (see *Proving it worked*.
+7. `vendor/bin/pint --dirty`.
 
 ### The relock, and when it is two lockfiles
 
@@ -245,64 +353,7 @@ same applies to any other `composer.json` key feeding the hash: `name`, `require
 
 ### Checking whether the fix shipped
 
-**Do not consult the Releases feed.** `pest-plugin-mutate` publishes **tags, not GitHub
-Releases**: its newest Release is `v2.0.0-beta.5` from 2024-08-05, while `v5.0.1` shipped
-2026-08-04. Watching Releases waits forever. The tag is the release, and Packagist serves it.
-
-Three checks, in order:
-
-```bash
-# 1. Is there a tag past what we have? (Packagist is the authority on installability.)
-curl -sS https://repo.packagist.org/p2/pestphp/pest-plugin-mutate.json \
-  | jq -r '[.packages["pestphp/pest-plugin-mutate"][].version] | .[0:5][]'
-
-# 2. Does that tag actually contain the fix? `identical` means the tag is at the branch tip.
-gh api repos/pestphp/pest-plugin-mutate/compare/v5.0.1...5.x --jq '.status'
-
-# 3. What do we have locked?
-jq -r '[.packages[], ."packages-dev"[]] | map(select(.name == "pestphp/pest-plugin-mutate")) | .[0].version' composer.lock
-```
-
-Without `jq`, `php -r` reads the same JSON:
-
-```bash
-php -r '$l=json_decode(file_get_contents("composer.lock"),true);
-  foreach(array_merge($l["packages"],$l["packages-dev"]) as $p){
-    if($p["name"]==="pestphp/pest-plugin-mutate"){echo $p["version"],"\n";}}'
-```
-
-A merge is not a release, and a release on the wrong major line is not a release *for us*.
-Upstream PRs `pestphp/pest#1742` and `#1757` implemented a parallel-merge fix `uams-statamic`
-once carried as a patch, but both were based on `4.x`, so neither could reach the 5.x line that
-repository runs even if merged. The patch stayed until `pestphp/pest` `v5.2.0` shipped an
-equivalent fix on 5.x (`UAMS-Web/uams-statamic-archive#2414`).
-
-**No upstream watcher runs here until the repository adopts one.** The skill ships one in
-[`templates/`](templates/), and the sync never writes a target's `.github/`, so adoption is a
-copy, done once:
-
-| Copy this template | To |
-| --- | --- |
-| `templates/watch-upstream.yml` | `.github/workflows/watch-upstream.yml` |
-| `templates/load-upstream-watches.mjs` | `scripts/load-upstream-watches.mjs` |
-| `templates/check-upstream-release.mjs` | `scripts/check-upstream-release.mjs` |
-| `templates/upstream-watches-README.md` | `.github/upstream-watches/README.md` |
-
-Add a row file per upstream signal to `.github/upstream-watches/` when the chain reaches ticket 2
-or 3 (the README gives the format). The sentinel is **per-signal**, so one tracker can carry both
-an issue row and a PR row and each notifies once. A row naming `composer` also polls Packagist for
-a release past the pin in `composer.lock`, which is the condition that retires the patch; a `pr`
-row with `released: true` also comments once when the newest stable tag on the pull request's
-base-branch line contains the merge commit. Closing the tracking issue turns its watch off. Each
-row is its own file, so two pull requests that add rows never conflict. A directory holding only
-the README is valid and the run does nothing, while a missing directory or a malformed row fails
-the run, so a wrong path never reads as nothing to watch. To tag a person on a notification, set
-the repository variable `UPSTREAM_WATCH_NOTIFY` (for example `@example-user`).
-
-Dependabot stays the second hook: it opens a pull request when the patched package has a new
-release, and a bump of the patched package is exactly what obsoletes a patch. The
-[`update-dependencies-ticket`](../update-dependencies-ticket/SKILL.md) skill re-confirms the patch
-stack on every Dependabot pull request that changes `composer.lock`, for every patched package; check it there.
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702): the release check, and the upstream watcher with its templates. A repository that adopted the watcher keeps its own copy, since the sync never writes a target's `.github/` or `scripts/`.
 
 ### Removing a patch: the order is load-bearing
 
@@ -453,7 +504,7 @@ The mutation run needs a coverage driver.
 
 ### API budget
 
-Every issue operation in the chain has a REST equivalent, and the dependency endpoints above are
+Every issue operation in the chain has a REST equivalent, and the dependency endpoints (the cross-repo recipe in the `patch-package` skill) are
 REST-only anyway. Use them per the [`github-api-budget`](../../rules/github-api-budget.md) rule:
 `gh issue create`, `gh issue edit`, `gh issue close`, and all of `gh project *` are GraphQL, and
 the project board has no REST surface at all, so a GraphQL call spent creating a chain ticket
@@ -463,57 +514,7 @@ is one the board may not have later.
 
 ## The upstream-request variant: nothing to retire
 
-Not every `upstream` ticket carries a patch. A feature request, a documentation request, or a
-pull request offered without a local patch behind it has no removal ticket and no release to wait
-for. What such a ticket usually has left, once the item is posted, is one criterion that only a
-maintainer can satisfy: "if upstream answers X, do Y". Left in place, that criterion holds the
-ticket open indefinitely for an answer it cannot produce. Six were open in `uams-statamic` on
-2026-09-30 on that ground alone.
-
-**The post still carries the claim verification.** A request with no patch behind it goes to
-the same third-party tracker under a maintainer's identity, and its claims cost the same when
-they are wrong. The
-[`verify-claims-before-a-third-party-post`](../../rules/verify-claims-before-a-third-party-post.md)
-rule applies in full. There is no local patch to wait for, so the checks run immediately before
-the approval is requested, against the current upstream release named in the draft; a draft
-written earlier is re-verified at that point, and the claims and checks are recorded on the
-filing ticket first.
-
-**The rule (decided 2026-09-30, `UAMS-Web/uams-statamic-archive#2723`):**
-
-1. **The filing ticket closes once the item is posted.** Its own work, drafting and filing
-   the upstream item and recording the link, is done at that point.
-2. **"Act on the answer" moves to a follow-up ticket.** File it per
-   [`writing-issues`](../writing-issues/SKILL.md), with a native cross-repo `blocked_by` edge
-   on the upstream item (the recipe is under *The cross-repo `blocked_by` recipe* above), and
-   read the edge back. On the filing ticket, **strike** the moved criterion rather than
-   ticking it, and close with a one-line comment naming the follow-up.
-
-   **A pull request cannot be the blocker.** The endpoint refuses one with `Validation failed:
-   Target issue may only be an issue` (HTTP 422). When the upstream item is a pull request,
-   put the edge on the issue it fixes, so the merge that answers the follow-up also closes
-   its blocker. Any watch still tracks the pull request, because that is where the answer
-   arrives.
-3. **Where the repository has an upstream watcher, its row tracks the follow-up, never the
-   filing ticket.** A row tracking the filing ticket would go dead the moment step 1 closes it,
-   which is the same reason the patch chain's rows track the removal ticket.
-
-**Order, when the filing ticket is already open and the item already posted:** file the
-follow-up and its edge, add any watch, and only then close the filing ticket. Closed first,
-nothing would be watching the upstream item in the gap.
-
-**When a follow-up already exists** (a parent feature the request was filed for, already
-blocked by the upstream item), it *is* the follow-up: point any watch at it and close the
-filing ticket.
-
-**Rejected alternatives, so they are not re-proposed:**
-
-- **Split without a watch.** The follow-up's edge records the dependency, but nothing surfaces
-  the maintainer's answer when it arrives; the follow-up is found only by someone who goes
-  looking.
-- **One umbrella tracker for every pending upstream item.** It collapses independent answers
-  onto one ticket, so no answer gets an owner or a close, and every watch row would point at a
-  ticket that can never close.
+Moved to the `patch-package` skill, which the `uams-web/patches-*` repositories carry (UAMS-Web/uams-claude-skills#702).
 
 ---
 
@@ -521,6 +522,10 @@ filing ticket.
 
 This skill owns the **lifecycle** and the **ticket shape**, and nothing else.
 
+- **The upstream-facing and package-side work** (writing and documenting a patch, tickets 2 and 3,
+  the shared package, its versioning and retirement, the release check and the upstream watcher,
+  and the upstream-request variant) is the
+  `patch-package` skill in the `uams-web/patches-*` repositories (UAMS-Web/uams-claude-skills#702).
 - **Per-patch detail**: what each patch does, why it exists, its retirement condition, and its
   own removal checklist, stays with the patch: `patches/README.md` where the repository has
   one, otherwise the registration's description key, `patches.json`'s `_comment`, or the decision
@@ -531,7 +536,7 @@ This skill owns the **lifecycle** and the **ticket shape**, and nothing else.
   [`writing-pull-requests`](../writing-pull-requests/SKILL.md) skills.
 - **What is verified before an upstream post, and how** stays in the
   [`verify-claims-before-a-third-party-post`](../../rules/verify-claims-before-a-third-party-post.md)
-  rule; this skill keeps only when the checks run in its chain.
+  rule; the `patch-package` skill keeps only when the checks run in the chain.
 - **Which API surface to spend** stays in the
   [`github-api-budget`](../../rules/github-api-budget.md) rule.
 - **The pre-ship review and the mutation/negative-control discipline** stay in the

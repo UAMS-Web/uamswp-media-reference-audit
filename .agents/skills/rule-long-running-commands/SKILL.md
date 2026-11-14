@@ -155,6 +155,4 @@ A server id you read in the success line proves the post landed. **A read-back n
 
 This file owns **bounding, attributing and killing local processes**. Slots are [`worktrees`](../rule-worktrees/SKILL.md)'s; tool mechanics are in the tools' descriptions; reading a status is [`reading-exit-status`](../rule-reading-exit-status/SKILL.md)'s; choosing what to call is [`github-api-budget`](../rule-github-api-budget/SKILL.md)'s.
 
-The `local-ci` skill owns the runner's flags and concurrency.
-
 Evidence, measurements and history: [`long-running-commands`](../evidence-behind-rules/long-running-commands.md).

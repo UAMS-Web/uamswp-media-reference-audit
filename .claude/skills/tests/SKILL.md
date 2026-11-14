@@ -403,39 +403,7 @@ The GitHub Actions form of the suite job is the `pest` job in the `code-quality`
 
 **In a public repository whose `ci.yml` runs the suite, run nothing locally before opening the pull request**: open it as a draft, and its remote run is the pre-PR check. Flip it to ready once every remote check on its head is green, and fix a red one by pushing to the same branch. Run a test locally while writing it, and keep a local run of the suite for the cases remote CI cannot cover: a change whose criteria name Windows or another platform it does not run, the full mutation run a coverage ticket records, and a run that needs a loaded WordPress install or the importer's host application. The [`writing-pull-requests`](../writing-pull-requests/SKILL.md) skill's *Draft state and merge order* owns this, and the pre-merge validation of a ready pull request is unchanged. The rest of this section applies where the suite has no remote run: a private repository, or a public one with no `ci.yml`.
 
-Where remote CI does not run the suite, run `composer test` (or the suite scripts) on the branch before asking for review. When this repository already has the shared local CI runner, also run it ([`local-ci`](../local-ci/SKILL.md)) so the reviewer sees the runner's verdict for the commit under review; if the runner is not in the tree yet, adopt it per that skill, or keep using the Composer scripts until then. The test job in `local-ci.json` for a Laravel application, a Statamic site or a library:
-
-```json
-{
-    "name": "pest",
-    "run": "vendor/bin/pest",
-    "paths": ["**/*.php", "!vendor/**", "phpunit.xml*", "composer.lock"]
-}
-```
-
-A WordPress plugin or theme runs its two suites as two jobs, each in its own process from its own Composer setup, so a failure names its layer, and adds the [floor lint job](#the-floor-lint-job). `php` at the top of `local-ci.json` is `8.4`, the development PHP:
-
-```json
-{
-    "name": "pest-unit",
-    "run": "vendor/bin/pest",
-    "paths": ["**/*.php", "!vendor/**", "!tests/Integration/**", "phpunit.xml", "composer.lock"]
-},
-{
-    "name": "phpunit-integration",
-    "run": "php tests/Integration/vendor/bin/phpunit --configuration tests/Integration/phpunit.xml",
-    "paths": ["**/*.php", "!vendor/**", "tests/Integration/phpunit.xml", "tests/Integration/composer.lock"]
-},
-{
-    "name": "lint-floor",
-    "run": "php -l",
-    "php": "8.2",
-    "each": ["**/*.php", "!vendor/**", "!tests/**"],
-    "always": true
-}
-```
-
-The Integration job needs the test database and reads the same `WP_TESTS_*` variables from the environment the runner is started in. It runs PHPUnit through `php` so the runner's resolved PHP runs it, the same PHP as the Unit job. A repository whose Composer `test` script selects testsuites or processes differently runs that command instead (the `run` of each job is the command the repository's own scripts run). A repository on PHPUnit uses `vendor/bin/phpunit`.
+This repository is public, so Actions minutes are not billed and the suite can run in Actions on every pull request: a workflow that runs `composer install` and the repository's `composer test` script. A WordPress Integration suite there needs a MySQL service container and the `WP_TESTS_*` variables set in the job. Once that workflow exists, its run on the draft is the pre-PR check, as above; until it does, run the suite locally before opening the pull request.
 
 ## Forks of vendor plugins
 
