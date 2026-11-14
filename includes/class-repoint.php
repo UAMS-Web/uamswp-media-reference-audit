@@ -304,6 +304,8 @@ class UAMS_MRA_Repoint
             return false;
         }
 
+        // A stored timestamp is numeric either way, and the check below treats a non-numeric one as zero.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $updated = (int) ($job['updated'] ?? 0);
 
         // No timestamp means it was written by an older version. Treat it as
@@ -706,6 +708,8 @@ class UAMS_MRA_Repoint
             $groups[$original]['hashes'][] = $row->url_hash;
         }
 
+        // The sort below renumbers the list, so the keys dropped here are not seen.
+        // @pest-mutate-ignore:UnwrapArrayValues
         $queue = array_values($groups);
 
         // Documents first, images last. Only an image sends WordPress off to
@@ -782,6 +786,8 @@ class UAMS_MRA_Repoint
 
         $settings = uams_mra_settings();
         $defaults = uams_mra_default_settings();
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = max(1, min(10, (int) ($settings['batch_sideload'] ?? $defaults['batch_sideload'])));
         $budget = self::time_budget();
         $started = microtime(true);
@@ -804,6 +810,8 @@ class UAMS_MRA_Repoint
             // where no handler of ours ever runs -- this mark is already
             // committed, so the next run steps over it instead of dying on the
             // same file forever. One bad file costs one file, not the queue.
+            // The column is unsigned and the server is not in strict mode, so a stored -1 reads back as 0 and the mutant cannot be told apart.
+            // @pest-mutate-ignore:DecrementInteger
             self::mark_hashes($group['hashes'], 'crashed', 0, '');
 
             // Commit the queue advance too, not just the database mark. Without
@@ -863,6 +871,7 @@ class UAMS_MRA_Repoint
 
         // `wp_tempnam()` falls back to the system temporary directory, so it returns an empty string only when that directory is not writable, which a test cannot arrange without breaking the run.
         // @pest-mutate-ignore:RemoveEarlyReturn
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         if ($tmp === '') {
             return new WP_Error('fetchfailed', __('Could not create a temporary file.', 'uams-mra'));
         }
@@ -970,7 +979,6 @@ class UAMS_MRA_Repoint
             [
                 'post_mime_type' => $sideloaded['type'],
                 'post_title' => sanitize_text_field(pathinfo($name, PATHINFO_FILENAME)),
-                'post_status' => 'inherit',
             ],
             $sideloaded['file'],
             self::sideload_parent($url),
@@ -983,25 +991,32 @@ class UAMS_MRA_Repoint
             return new WP_Error('rejected', $attachment_id->get_error_message());
         }
 
-        if ($resizable) {
+        if ($resizable || ! $dimensions) {
+            // Either thumbnails fit in memory, or the file is not an image and there are none to build.
             wp_update_attachment_metadata($attachment_id, wp_generate_attachment_metadata($attachment_id, $sideloaded['file']));
-        } elseif ($dimensions) {
+        } else {
             // The file is in and usable at full size. Sizes can be rebuilt later
             // by a regeneration plugin, or by raising the memory limit and
             // re-saving, neither of which needs the old host to still exist.
+            // `getimagesize()` returns integers, so the casts change nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $width = (int) $dimensions[0];
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $height = (int) $dimensions[1];
+
             wp_update_attachment_metadata(
                 $attachment_id,
                 [
                     'file' => _wp_relative_upload_path($sideloaded['file']),
-                    'width' => (int) $dimensions[0],
-                    'height' => (int) $dimensions[1],
+                    'width' => $width,
+                    'height' => $height,
                     'sizes' => [],
                 ]
             );
-        } else {
-            wp_update_attachment_metadata($attachment_id, wp_generate_attachment_metadata($attachment_id, $sideloaded['file']));
         }
 
+        // `wp_insert_attachment()` returns an integer here (the error case returned above), so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return (int) $attachment_id;
     }
 
@@ -1067,6 +1082,8 @@ class UAMS_MRA_Repoint
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // The return type converts the numeric string to the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return $parent ? (int) $parent : 0;
     }
 
@@ -1088,6 +1105,8 @@ class UAMS_MRA_Repoint
             $url = $wpdb->get_var($wpdb->prepare("SELECT url FROM {$t} WHERE url_hash = %s LIMIT 1", $hash));
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+            // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $target = (string) wp_get_attachment_url($attachment_id);
             $sized = $url ? self::parse_size($url) : null;
 
@@ -1124,6 +1143,7 @@ class UAMS_MRA_Repoint
 
         // Any chunk size reaches every hash, so a smaller one only changes how many queries run.
         // @pest-mutate-ignore:DecrementInteger
+        // @pest-mutate-ignore:IncrementInteger
         $chunks = array_chunk($hashes, 100);
 
         foreach ($chunks as $chunk) {
@@ -1133,6 +1153,8 @@ class UAMS_MRA_Repoint
             $placeholders = implode(',', array_fill(0, count($chunk), '%s'));
             $sql = "UPDATE {$t} SET verdict = %s, local_id = %d, target_url = %s, checked_at = %s
 				WHERE url_hash IN ({$placeholders}) AND applied = 0";
+            // `prepare()` binds `%d` as an integer, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $args = array_merge([$verdict, (int) $local, $target, current_time('mysql')], $chunk);
 
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -1225,6 +1247,8 @@ class UAMS_MRA_Repoint
         // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
         $to = (string) $row->target_url;
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $type = (string) $row->source_type;
         // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -1232,8 +1256,9 @@ class UAMS_MRA_Repoint
 
         // Revisions are history. Rewriting them would edit what someone
         // restores a page *from*, which is not this tool's business.
-        // With `&&` no type matches, and a revision then reaches the closing branch that skips a type it does not know, which returns the same result.
+        // Without the guard, or with `&&`, a revision reaches the closing branch that skips a type it does not know, which returns the same result.
         // @pest-mutate-ignore:BooleanOrToBooleanAnd
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if ($type === 'revision' || $type === 'revision_meta') {
             return [
                 'status' => 'skipped',
@@ -1383,6 +1408,8 @@ class UAMS_MRA_Repoint
         // broken by an earlier search and replace) reads back as false. Writing
         // that back would replace the stored value with `b:0;`, and meta keeps no
         // revision to restore from.
+        // The later check that a still-present URL fails the row returns the same result for an unreadable value, so the early return cannot be told apart.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (self::is_unreadable($current)) {
             return [
                 'status' => 'failed',

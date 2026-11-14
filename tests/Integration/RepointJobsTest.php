@@ -315,6 +315,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('user', $result['context']);
     }
 
+    public function test_a_fatal_with_no_context_given_is_recorded_with_an_empty_one(): void
+    {
+        $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal(); trigger_error('stop', E_USER_ERROR);");
+
+        $this->assertSame('', $result['context']);
+    }
+
     public function test_watching_for_a_fatal_forgets_the_one_recorded_before(): void
     {
         update_option(UAMS_MRA_Repoint::FATAL_OPTION, ['message' => 'old']);
@@ -1331,7 +1338,6 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = $get === 'error' ? new WP_Error('http_request_failed', 'no route') : ($get[1] === 'over' ? [200, str_repeat('a', 1048577)] : $get);
         $this->sideloadJob([$group]);
 
-        $tmp_before = glob(sys_get_temp_dir().'/*.tmp') ?: [];
         $job = UAMS_MRA_Repoint::step();
 
         global $wpdb;
@@ -1343,7 +1349,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame(1, $job['failed']);
         $this->assertSame(0, $job['applied']);
         $this->assertSame(1, $job['done']);
-        $this->assertSame([], array_values(array_diff(glob(sys_get_temp_dir().'/*.tmp') ?: [], $tmp_before)));
+        // The download's own temporary file is the one named in the request, so other processes using the directory cannot disturb the check.
+        foreach ($this->requests as [$method, , $args]) {
+            if ($method === 'GET') {
+                $this->assertFileDoesNotExist((string) $args['filename']);
+            }
+        }
+
         $this->assertSame(0, (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_title = '".pathinfo($name, PATHINFO_FILENAME)."'"));
     }
 
@@ -1679,6 +1691,9 @@ final class RepointJobsTest extends IntegrationTestCase
     public function test_a_pulled_file_that_is_not_an_image_has_its_metadata_generated(): void
     {
         $url = 'https://old.example.edu/u/meta.pdf';
+        // Nothing else may generate the metadata, so only the call under test can.
+        remove_all_actions('add_attachment');
+        remove_all_actions('edit_attachment');
         $group = $this->group($url, ['source_type' => 'option']);
         $this->http['HEAD'][$url] = [200, null];
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
@@ -1700,6 +1715,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
         $this->sideloadJob([$group]);
 
+        $asked = 0;
+        add_filter('image_memory_limit', static function ($limit) use (&$asked) {
+            $asked++;
+
+            return $limit;
+        });
+
         $before = ini_get('memory_limit');
         ini_set('memory_limit', '100M');
 
@@ -1711,6 +1733,7 @@ final class RepointJobsTest extends IntegrationTestCase
         }
 
         $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($url))['local_id']);
+        $this->assertGreaterThan(0, $asked);
         $this->assertNotSame('100M', $after);
     }
 
