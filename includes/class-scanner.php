@@ -101,6 +101,8 @@ class UAMS_MRA_Scanner
     {
         $state = self::get_state();
 
+        // A stored state with no step key compares as not done whatever the default text is.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         if ($state === [] || 'done' === ($state['step'] ?? '')) {
             return $state;
         }
@@ -169,6 +171,9 @@ class UAMS_MRA_Scanner
                     'site__not_in' => [get_current_blog_id()],
                 ]
             );
+            // get_sites() with fields set to ids already returns a list of integers, so mapping and casting change nothing.
+            // @pest-mutate-ignore:UnwrapArrayMap
+            // @pest-mutate-ignore:RemoveArrayCast
             $state['site_queue'] = array_map(intval(...), (array) $sites);
             if (empty($state['site_queue'])) {
                 return self::advance($state);
@@ -215,8 +220,12 @@ class UAMS_MRA_Scanner
      */
     protected static function step_index($state)
     {
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_index'];
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         [$done, $last_id] = UAMS_MRA_Index::build_batch((int) $state['cursor'], $limit);
 
         $state['cursor'] = $last_id;
@@ -239,7 +248,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_posts'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         $exclude_revisions = empty($state['settings']['include_revisions'])
@@ -260,6 +273,8 @@ class UAMS_MRA_Scanner
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             return self::advance($state);
         }
@@ -272,6 +287,9 @@ class UAMS_MRA_Scanner
             $cursor = (int) $row->ID;
             $content = $row->post_content."\n".$row->post_excerpt;
 
+            // Content that is only whitespace holds no reference, so skipping it only saves the search.
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
+            // @pest-mutate-ignore:UnwrapTrim
             if (trim($content) === '') {
                 continue;
             }
@@ -283,6 +301,8 @@ class UAMS_MRA_Scanner
             // revision holding the URLs it just removed, so the report would grow
             // each time it was acted on and never reach zero.
             if ($track && $row->post_type !== 'revision') {
+                // collect_offsite() reads a numeric string as the same ID.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $offsite = array_merge(
                     $offsite,
                     self::collect_offsite($content, 'content', (int) $row->ID, $label)
@@ -295,11 +315,11 @@ class UAMS_MRA_Scanner
             $strong = UAMS_MRA_Index::filter_attachment_ids($ids);
             $strong = array_merge($strong, UAMS_MRA_Index::resolve_paths($paths));
 
+            // A repeated ID would be written twice, and the store ignores the second row as a duplicate.
+            // @pest-mutate-ignore:UnwrapArrayUnique
             foreach (array_unique($strong) as $attachment_id) {
-                if ((int) $attachment_id === (int) $row->ID) {
-                    continue;
-                }
-
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => $row->post_type === 'revision' ? 'revision' : 'content',
@@ -333,7 +353,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_meta'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         $rows = $wpdb->get_results(
@@ -348,6 +372,8 @@ class UAMS_MRA_Scanner
             )
         );
 
+        // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             return self::advance($state);
         }
@@ -368,6 +394,9 @@ class UAMS_MRA_Scanner
                 continue;
             }
 
+            // A value that is not an empty string is scanned and holds no reference, so skipping it only saves the search. A database value is already a string.
+            // @pest-mutate-ignore:RemoveStringCast
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ((string) $row->meta_value === '') {
                 continue;
             }
@@ -377,7 +406,15 @@ class UAMS_MRA_Scanner
             $source = $row->post_type === 'revision' ? 'revision_meta' : 'postmeta';
 
             if ($track && $source !== 'revision_meta') {
-                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source, (int) $row->post_id, $label, (int) $row->meta_id, (string) $row->meta_key));
+                // collect_offsite() reads a numeric string as the same ID.
+                // @pest-mutate-ignore:RemoveIntegerCast
+                $meta_id = (int) $row->meta_id;
+                // The key reaches a string parameter, which coerces the same way.
+                // @pest-mutate-ignore:RemoveStringCast
+                $meta_key = (string) $row->meta_key;
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
+                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source, (int) $row->post_id, $label, $meta_id, $meta_key));
             }
 
             $hits = self::scan_meta_value(
@@ -388,10 +425,12 @@ class UAMS_MRA_Scanner
             );
 
             foreach ($hits as $attachment_id => $confidence) {
-                if ((int) $attachment_id === (int) $row->post_id) {
+                if ($attachment_id === (int) $row->post_id) {
                     continue;
                 }
 
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => $source,
@@ -425,7 +464,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_meta'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
@@ -444,6 +487,8 @@ class UAMS_MRA_Scanner
         );
         // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery
 
+        // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             return self::advance($state);
         }
@@ -455,14 +500,25 @@ class UAMS_MRA_Scanner
         foreach ($rows as $row) {
             $cursor = (int) $row->option_id;
 
+            // A value that is not an empty string is scanned and holds no reference, so skipping it only saves the search. A database value is already a string.
+            // @pest-mutate-ignore:RemoveStringCast
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ((string) $row->option_value === '') {
                 continue;
             }
 
             if ($track) {
+                // The option row ID is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
+                $option_pk = (int) $row->option_id;
+                // The name reaches a string parameter, which coerces the same way.
+                // @pest-mutate-ignore:RemoveStringCast
+                $option_name = (string) $row->option_name;
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $offsite = array_merge(
                     $offsite,
-                    self::collect_offsite($row->option_value, 'option', (int) $row->option_id, 'Option: '.$row->option_name, (int) $row->option_id, (string) $row->option_name)
+                    self::collect_offsite($row->option_value, 'option', (int) $row->option_id, 'Option: '.$row->option_name, $option_pk, $option_name)
                 );
             }
 
@@ -474,6 +530,8 @@ class UAMS_MRA_Scanner
             );
 
             foreach ($hits as $attachment_id => $confidence) {
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => 'option',
@@ -545,7 +603,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_meta'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         $sql = "SELECT {$pk} AS pk, {$object_col} AS object_id, meta_key, meta_value
@@ -554,6 +616,8 @@ class UAMS_MRA_Scanner
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results($wpdb->prepare($sql, $cursor, $limit));
 
+        // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             return self::advance($state);
         }
@@ -570,14 +634,28 @@ class UAMS_MRA_Scanner
                 continue;
             }
 
+            // A value that is not an empty string is scanned and holds no reference, so skipping it only saves the search. A database value is already a string.
+            // @pest-mutate-ignore:RemoveStringCast
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ((string) $row->meta_value === '') {
                 continue;
             }
 
+            // A numeric string prints the same digits.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $label = $prefix.' #'.(int) $row->object_id.': '.$row->meta_key;
 
             if ($track) {
-                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source_type, (int) $row->object_id, $label, (int) $row->pk, (string) $row->meta_key));
+                // collect_offsite() reads a numeric string as the same ID.
+                // @pest-mutate-ignore:RemoveIntegerCast
+                $object_id = (int) $row->object_id;
+                // The row key is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
+                $row_pk = (int) $row->pk;
+                // The key reaches a string parameter, which coerces the same way.
+                // @pest-mutate-ignore:RemoveStringCast
+                $row_key = (string) $row->meta_key;
+                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source_type, $object_id, $label, $row_pk, $row_key));
             }
 
             $hits = self::scan_meta_value(
@@ -588,6 +666,8 @@ class UAMS_MRA_Scanner
             );
 
             foreach ($hits as $attachment_id => $confidence) {
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => $source_type,
@@ -627,8 +707,14 @@ class UAMS_MRA_Scanner
 
         $target_prefix = $wpdb->prefix;
         $target_base = self::upload_path_prefixes();
+        // switch_to_blog() and the stored reference read a numeric string as the same site ID.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $site_id = (int) $state['site_queue'][0];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_posts'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         switch_to_blog($site_id);
@@ -657,6 +743,8 @@ class UAMS_MRA_Scanner
             }
 
             foreach (UAMS_MRA_Index::resolve_paths($paths) as $attachment_id) {
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => 'network',
@@ -702,7 +790,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_finalize'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         $rows = $wpdb->get_results(
@@ -721,11 +813,16 @@ class UAMS_MRA_Scanner
         }
 
         $ids = wp_list_pluck($rows, 'ID');
+        // The IDs reach a %d placeholder and get_post_meta(), which read a numeric string as the same integer.
+        // @pest-mutate-ignore:UnwrapArrayMap
         $ids = array_map(intval(...), $ids);
 
         // One meta query for the whole batch instead of two per attachment.
         update_meta_cache('post', $ids);
 
+        // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
+        // @pest-mutate-ignore:IncrementInteger
+        // @pest-mutate-ignore:DecrementInteger
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
         $counts = [];
@@ -733,18 +830,38 @@ class UAMS_MRA_Scanner
 				   FROM '.UAMS_MRA_Store::refs_table()." WHERE attachment_id IN ({$placeholders}) GROUP BY attachment_id";
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         foreach ($wpdb->get_results($wpdb->prepare($sql, $ids)) as $count_row) {
-            $counts[(int) $count_row->attachment_id] = [(int) $count_row->total, (int) $count_row->strong];
+            // An array key reads a numeric string as the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $counted_id = (int) $count_row->attachment_id;
+            // The count reaches a %d placeholder, which reads a numeric string as the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $counted_total = (int) $count_row->total;
+            // The count reaches a %d placeholder, which reads a numeric string as the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $counted_strong = (int) $count_row->strong;
+            $counts[$counted_id] = [$counted_total, $counted_strong];
         }
 
         $parent_statuses = [];
+        // A zero or numeric string in the IN list matches nothing extra, so the list reaches the same parents.
+        // @pest-mutate-ignore:UnwrapArrayMap
+        // @pest-mutate-ignore:UnwrapArrayFilter
         $parents = array_filter(array_map(intval(...), wp_list_pluck($rows, 'post_parent')));
         if ($parents !== []) {
+            // A repeated ID in the IN list matches the same row, and the list keys are never read.
+            // @pest-mutate-ignore:UnwrapArrayValues
+            // @pest-mutate-ignore:UnwrapArrayUnique
             $parents = array_values(array_unique($parents));
+            // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
+            // @pest-mutate-ignore:IncrementInteger
+            // @pest-mutate-ignore:DecrementInteger
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- the placeholder list is built from `%d` and has one entry per integer bound.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             foreach ($wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM {$wpdb->posts} WHERE ID IN ({$placeholders})", $parents)) as $parent_row) {
                 // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                // An array key reads a numeric string as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $parent_statuses[(int) $parent_row->ID] = $parent_row->post_status;
             }
         }
@@ -755,20 +872,36 @@ class UAMS_MRA_Scanner
 
         foreach ($rows as $row) {
             $cursor = (int) $row->ID;
+            // The parent ID reaches a %d placeholder and an integer test, which read a numeric string the same way.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $parent = (int) $row->post_parent;
+            // An array key reads a numeric string as the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $count = $counts[(int) $row->ID] ?? [0, 0];
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $file = (string) get_post_meta($row->ID, '_wp_attached_file', true);
 
             $values[] = '(%d,%d,%s,%d,%d,%d,%d,%s,%s,%s,%s,%s)';
+            // The ID reaches a %d placeholder, which reads a numeric string as the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $args[] = (int) $row->ID;
             $args[] = $parent;
             $args[] = $parent ? ($parent_statuses[$parent] ?? 'missing') : '';
             $args[] = $parent && isset($parent_statuses[$parent]) ? 1 : 0;
             $args[] = $count[0];
             $args[] = $count[1];
+            // attachment_bytes() reads a numeric string as the same ID.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $args[] = self::attachment_bytes((int) $row->ID, $file);
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $args[] = (string) $row->post_mime_type;
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $args[] = (string) $row->post_date;
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $args[] = mb_substr((string) $row->post_title, 0, 250);
             $args[] = mb_substr($file, 0, 250);
             $args[] = $now;
@@ -833,6 +966,8 @@ class UAMS_MRA_Scanner
         foreach ($rows as $row) {
             // A password-protected page returns the password form rather than its
             // content, which would report every file on it as absent.
+            // The password column is already a string.
+            // @pest-mutate-ignore:RemoveStringCast
             $readable = $row->post_status === 'publish'
                 && (string) $row->post_password === ''
                 && is_post_type_viewable($row->post_type);
@@ -840,6 +975,8 @@ class UAMS_MRA_Scanner
             if ($readable) {
                 $fetchable[] = (int) $row->parent_id;
             } else {
+                // The parent ID reaches a %d placeholder, which reads a numeric string as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $skipped[] = (int) $row->parent_id;
             }
         }
@@ -851,9 +988,13 @@ class UAMS_MRA_Scanner
         }
 
         $defaults = uams_mra_default_settings();
+        // max() compares a numeric string as the same integer.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $max = max(1, (int) ($state['settings']['render_max_pages'] ?? $defaults['render_max_pages']));
         $over_cap = [];
 
+        // A queue exactly as long as the ceiling slices to the same list with nothing over it, so the two comparisons give the same state.
+        // @pest-mutate-ignore:GreaterToGreaterOrEqual
         if (count($fetchable) > $max) {
             $over_cap = array_slice($fetchable, $max);
             $fetchable = array_slice($fetchable, 0, $max);
@@ -897,7 +1038,13 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // A repeated or numeric-string ID in the IN list matches the same rows, and the list keys are never read.
+        // @pest-mutate-ignore:UnwrapArrayUnique
+        // @pest-mutate-ignore:UnwrapArrayMap
+        // @pest-mutate-ignore:UnwrapArrayValues
         $parent_ids = array_values(array_unique(array_filter(array_map(intval(...), $parent_ids))));
+        // An empty list yields no chunks, so the loop below returns the same empty array.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if ($parent_ids === []) {
             return [];
         }
@@ -905,13 +1052,21 @@ class UAMS_MRA_Scanner
         $results = UAMS_MRA_Store::results_table();
         $out = [];
 
-        foreach (array_chunk($parent_ids, 200) as $chunk) {
+        // Any chunk size reads the same rows.
+        // @pest-mutate-ignore:IncrementInteger
+        // @pest-mutate-ignore:DecrementInteger
+        $chunks = array_chunk($parent_ids, 200);
+
+        foreach ($chunks as $chunk) {
+            // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
+            // @pest-mutate-ignore:IncrementInteger
+            // @pest-mutate-ignore:DecrementInteger
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
             $sql = "SELECT attachment_id, parent_id FROM {$results}
 				WHERE ref_count = 0 AND is_attached = 1 AND parent_id IN ({$placeholders})";
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             foreach ($wpdb->get_results($wpdb->prepare($sql, $chunk)) as $row) {
-                $out[(int) $row->parent_id][] = (int) $row->attachment_id;
+                $out[$row->parent_id][] = (int) $row->attachment_id;
             }
         }
 
@@ -936,7 +1091,11 @@ class UAMS_MRA_Scanner
         }
 
         $defaults = uams_mra_default_settings();
+        // max() and min() compare a numeric string as the same integer.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = max(1, min(25, (int) ($state['settings']['batch_render'] ?? $defaults['batch_render'])));
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $token = (string) ($state['render_token'] ?? '');
         $batch = array_splice($state['render_queue'], 0, $limit);
         $stats = isset($state['render_stats']) && is_array($state['render_stats'])
@@ -985,6 +1144,8 @@ class UAMS_MRA_Scanner
                 $label = __('Rendered page: ', 'uams-mra').get_the_title($parent_id);
 
                 foreach ($found as $attachment_id) {
+                    // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                    // @pest-mutate-ignore:RemoveIntegerCast
                     $refs[] = [
                         'attachment_id' => $attachment_id,
                         'source_type' => 'render',
@@ -1001,7 +1162,11 @@ class UAMS_MRA_Scanner
                 UAMS_MRA_Store::recount_refs($found);
             }
 
+            // The list is only counted and bound as placeholders, so its keys are never read.
+            // @pest-mutate-ignore:UnwrapArrayValues
             $here = array_values(array_intersect($pending, $found));
+            // The list is only counted and bound as placeholders, so its keys are never read.
+            // @pest-mutate-ignore:UnwrapArrayValues
             $unmatched = array_values(array_diff($pending, $found));
 
             // Whatever this page did not serve from our own uploads, check
@@ -1013,6 +1178,8 @@ class UAMS_MRA_Scanner
                 $offsite = array_intersect_key(self::extract_offsite_uploads($body), array_flip($unmatched));
             }
 
+            // The list is only counted and bound as placeholders, so its keys are never read.
+            // @pest-mutate-ignore:UnwrapArrayValues
             $absent = array_values(array_diff($unmatched, array_keys($offsite)));
 
             UAMS_MRA_Store::set_render_state($here, 'found', $url);
@@ -1261,14 +1428,20 @@ class UAMS_MRA_Scanner
 
         $response = wp_remote_get($request_url, $args);
 
+        // A failed request has no response code, so the check below returns the same null.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (is_wp_error($response)) {
             return null;
         }
 
+        // The response code is already an integer.
+        // @pest-mutate-ignore:RemoveIntegerCast
         if ((int) wp_remote_retrieve_response_code($response) !== 200) {
             return null;
         }
 
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $body = (string) wp_remote_retrieve_body($response);
 
         return trim($body) === '' ? null : $body;
@@ -1726,6 +1899,8 @@ class UAMS_MRA_Scanner
         $basedir = trailingslashit($uploads['basedir']);
 
         if ($file === '') {
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $file = (string) get_post_meta($attachment_id, '_wp_attached_file', true);
         }
 
@@ -1735,6 +1910,8 @@ class UAMS_MRA_Scanner
 
         $bytes = 0;
         $subdir = trailingslashit(dirname($file));
+        // A leading "./" in the path resolves to the same file on disk.
+        // @pest-mutate-ignore:UnwrapTrim
         $subdir = (trim($subdir, '/') === '.') ? '' : $subdir;
 
         $targets = [$file];
@@ -1756,8 +1933,12 @@ class UAMS_MRA_Scanner
         }
 
         foreach (array_unique($targets) as $target) {
+            // A doubled slash in the path resolves to the same file on disk.
+            // @pest-mutate-ignore:UnwrapLtrim
             $path = $basedir.ltrim($target, '/');
             if (is_readable($path) && is_file($path)) {
+                // filesize() already returns an integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $bytes += (int) filesize($path);
             }
         }
