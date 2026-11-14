@@ -50,7 +50,7 @@ jobs:
   # The shared chain. Its checks report as `checks / <job name> (<operating system>)`.
   checks:
     # Pinned to a release tag, never a branch. To take a newer chain, move the pin to the next tag.
-    uses: UAMS-Web/uams-ci-workflows/.github/workflows/ci.yml@v0.11.1
+    uses: UAMS-Web/uams-ci-workflows/.github/workflows/ci.yml@v0.13.0
     with:
       mutate: false
       # With `mutate` off the chain skips `mutate-ignore`, and the `legs` check at this pin does
@@ -70,7 +70,7 @@ jobs:
   legs:
     needs: [checks]
     if: always()
-    uses: UAMS-Web/uams-ci-workflows/.github/workflows/runner-legs.yml@v0.11.1
+    uses: UAMS-Web/uams-ci-workflows/.github/workflows/runner-legs.yml@v0.13.0
     permissions:
       contents: read
       actions: read
