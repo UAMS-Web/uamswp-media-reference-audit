@@ -54,7 +54,205 @@ Meta keys that describe the attachment itself (`_wp_attached_file` and friends)
 never count as a reference, in any of the four meta passes. Extend that list with
 the `uams_mra_skipped_meta_keys` filter.
 
-URL matching normalizes away every generated size, so `hero-1024x768.jpg`, `hero-scaled.jpg`, and `hero-e1712345678901.jpg` all resolve back to attachment `hero.jpg`.
+URL matching normalizes away every generated size, so `hero-1024x768.jpg`, `hero-scaled.jpg`, and `hero-e1712345678901.jpg` all resolve back to attachment `hero.jpg`. Filenames containing their own dots (`State-Plan-2.11.25-Final.pdf`) match whole.
+
+A size suffix may carry a short crop marker after it (`hero-768x432-cc.jpg`),
+which is how themes that build their own derivatives name them. Those collapse
+too. The marker is letters only and at most four, so a real filename ending in
+`-1920x1080-v2` keeps its name. Extend the list with the
+`uams_mra_derivative_patterns` filter if a theme uses a shape this misses; the
+symptom is a file you can see on the page reporting as unreferenced.
+
+## Reading the page itself
+
+Everything above reads the database. Some of the most common ways a file reaches
+a visitor never touch it:
+
+- a page template that lists its own attachments (`get_children()`,
+  `get_attached_media()`, a "documents on this page" loop)
+- a shortcode or a block that builds its markup at render time
+- a URL hardcoded in a theme file or a stylesheet
+
+A file used that way has no row anywhere naming it, so every database pass will
+report it as unreferenced no matter how thorough the pass is. This is the reason
+the **Verify** tier exists, and on its own the tier is a dead end: it hands you a
+list of pages to open by hand.
+
+The render step closes it. After `finalize`, the scan takes every file that
+finished with **no reference and a published parent**, fetches that parent's
+permalink over HTTP, and looks for the file in the HTML the page actually
+returns. That is usually a handful of pages rather than the whole site.
+
+Each file comes back in one of five states, shown as a badge on the results
+screen and exported as `page_check`:
+
+| State | Meaning | Effect |
+|---|---|---|
+| `found` | The page renders this file from this site's uploads | Recorded as a strong reference. The file is in use |
+| `offsite` | The page renders a file of the same name from **another host** | Stays in Verify, and the report names the host |
+| `absent` | The page was fetched and renders no file by this name | Leaves the Verify tier for `ask` or `clear`, by file type |
+| `error` | The request failed: timeout, redirect, non-200 | Stays in Verify. Nothing was learned |
+| `skipped` | No public page to fetch, or past the per-scan page ceiling | Stays in Verify. Nothing was learned |
+
+Precedence runs `found` → `offsite` → `absent`, so a file served from both this
+site and somewhere else counts as in use.
+
+### Why `offsite` exists
+
+The database passes match this site's own upload prefix, which is the right rule
+for stored content: a URL pointing at another site's uploads is a reference to
+*that* site's file. A rendered page is a different question. A site part-way
+through a migration keeps serving `Foo.pdf` from its old host while a copy of
+`Foo.pdf` sits in the new library, referenced by nothing. Calling that copy
+unused is how a half-finished migration turns into deleted originals.
+
+So the render step reads uploads URLs on **any** host, and reports a
+same-filename match elsewhere as its own state rather than counting it as a
+reference. Nothing is claimed to be in use here that isn't; the file simply keeps
+its place in Verify with the host recorded, for a person to decide whether the
+two files are the same document.
+
+The three states that are *not* evidence are kept distinct from the one that is,
+on screen and in the export. A failed request must never read as "unused", or a
+site being briefly unreachable would mark live files deletable.
+
+Two details worth knowing:
+
+- Each page is parsed whole, so a file that belongs to a *different* parent but
+  is displayed on the page being read gets cleared too, at no extra cost.
+- Requests carry a per-scan cache-busting token. A stale cached page that still
+  shows a since-removed file only keeps a file alive, but a stale page missing a
+  just-added one would mark a live file absent. Turn it off with the
+  `uams_mra_render_cache_bust` filter if a WAF objects.
+
+`absent` means *that page, at that moment*. A page whose output varies by date
+or by visitor (an events list that hides past entries, anything behind a login),
+can render a file today and not tomorrow. The badge links to the URL that was
+read and carries the timestamp, so the check is yours to repeat.
+
+Filters: `uams_mra_render_request_args` (whole `wp_remote_get` argument array),
+`uams_mra_render_sslverify`, `uams_mra_render_cache_bust`. Switch the step off
+entirely under **Scan settings > Read the page itself**, where the per-batch and
+per-scan page limits also live.
+
+## Offsite media
+
+**Media > Offsite Media** answers the other half of the question. The audit finds
+files this site hosts that nothing points at; this finds media the site
+*displays but does not host* -- uploads URLs stored in content, custom fields, or
+options that point at another site.
+
+It fills in during the normal scan, reading the same content the reference
+passes already read, so it costs nothing extra. Switch it off under
+**Scan settings > Offsite media**.
+
+Each row is one distinct offsite file:
+
+| Column | Meaning |
+|---|---|
+| File | Filename, linked to the URL that is stored |
+| Host | Where it is served from |
+| Local copy by name | Whether this library already holds a file of that name. Same name is not proof of same document |
+| Stored in | Every post, meta key, or option holding that URL |
+
+This is the report a half-finished migration shows up in. A site moved from one
+host to another keeps serving files from the host it moved off, and the copies
+sitting in the new library are referenced by nothing -- so the audit reports them
+as unused while the pages quietly depend on the old host staying up.
+
+Two limits worth knowing:
+
+- **A URL here is in the database, so it could be rewritten.** A URL a theme
+  prints at render time never appears in this report; the page check on the
+  audit screen is the only thing that can see those.
+- **The report changes nothing.** Nothing is fetched, rewritten, or deleted.
+
+### Repointing
+
+Where a file of the same name is already in this library, the stored URL can be
+rewritten to point at it. Nothing is downloaded and no attachment is created,
+so this half of a migration adds no duplicates. It runs in two passes from the
+Offsite Media screen.
+
+**Compare** reads only. Each offsite file is fetched with a HEAD request and its
+size checked against the local copy, giving one of:
+
+| Verdict | Meaning | Eligible |
+|---|---|---|
+| `identical` | Same file name and the same size | Yes |
+| `resized` | The library has this image, but not at the same byte size | Opt-in |
+| `differs` | Same filename, different file | No |
+| `ambiguous` | More than one local attachment shares the filename | No |
+| `nolocal` | Nothing local has this filename -- it needs pulling over | No |
+| `unreachable` | The other host did not return the file | No |
+
+**Repoint** rewrites the rows the comparison cleared. Each value is re-read
+first, so a page edited since the scan is left alone rather than written from a
+stale plan.
+
+What it writes, and what that costs:
+
+- **Posts and pages** go through `wp_update_post()`, so the previous content is
+  kept as a revision and the change can be undone from the editor.
+- **Custom fields and options** are written directly. There is no revision.
+  Take a database backup first.
+- **Revisions are never rewritten.** They are the history a page gets restored
+  *from*, which is not this tool's business to edit. They are also left out of
+  the offsite report itself: every repoint saves a revision holding the URLs it
+  has just removed, so counting them would make the report grow each time it was
+  acted on and never reach zero.
+
+Serialized values are unpicked before replacing and re-serialized afterwards.
+Replacing inside the serialized string would leave the byte-length prefixes
+describing the old URL, which is how a careless search and replace corrupts a
+database. Every stored form of the URL is matched -- either scheme, no scheme,
+and the slash-escaped form block attributes use -- and all of them are rewritten
+to the URL WordPress gives for the local attachment, so an old `http://` link
+does not stay `http://` on a site served over https.
+
+### Pulling files over
+
+For everything the comparison marked `nolocal`, **Pull missing files into this
+library** downloads the file and adds it as an attachment. It rewrites nothing;
+you repoint afterwards, through the same path as everything else.
+
+Three things it does that a naive importer would get wrong:
+
+- **It fetches the original, not the thumbnail.** A page asking for
+  `hero-768x432-cc.jpg` gets `hero.jpg` downloaded and lets WordPress regenerate
+  the sizes. Importing the derivative would put a 768px image in the library as
+  though it were the upload.
+- **It groups by original.** One photo shown at three sizes is three stored URLs
+  and one download, not three attachments of the same picture.
+- **It repoints each URL at the right size.** After the original lands, a URL
+  that asked for a thumbnail is pointed at the regenerated size matching those
+  dimensions, so pages keep their layout.
+
+Files go through `media_handle_sideload()`, the same upload checks as the media
+screen, so a file type this site does not permit is refused rather than written
+anywhere. A new attachment is hung off the first published post whose *content*
+shows it -- what the library would have recorded had someone uploaded it from
+that page -- and left unattached when only a custom field or option refers to
+it, since inventing a parent would be a claim nothing supports.
+
+Resizing an image decompresses the whole thing into memory, which bears no
+relation to its file size -- a 2 MB JPEG can be 90 MB of pixels -- and PHP
+running out part-way through is a fatal error no `try`/`catch` can see. So the
+cost is worked out from the image's dimensions before any editor is opened, and
+weighed against the memory actually still free. When it will not fit, the file is
+still brought in and used at full size; only the generated sizes are skipped.
+Those can be rebuilt later with a regeneration plugin or a raised memory limit,
+neither of which needs the old host to still exist.
+
+Size ceiling and batch size live under **Scan settings > Read the page itself**.
+The limit is checked on the HEAD response and again on what actually arrived, so
+a host that answers without a `content-length` cannot slip past it.
+
+If an "offsite" host turns out to be serving *this site's own files* under an old
+path -- common after a site is renamed, where `example.com/old-slug/wp-content/uploads/sites/46/`
+and `example.com/new-slug/wp-content/uploads/sites/46/` are the same files -- add
+the old prefix under **Scan settings > Extra upload paths**. Those URLs then count
+as real references instead, which is what they are.
 
 ## Triage
 
@@ -64,9 +262,13 @@ scan and a *decision* from you.
 
 | Tier | What lands there | Why |
 |---|---|---|
-| Verify | Attached to a post | The parent page may display it in a way a database scan cannot see |
-| Ask team | Unattached documents, video, audio | Handed out by email, print, and QR code, where no reference ever reaches the database |
-| Low risk | Unattached images | An image nothing embeds is genuinely unused — the case the scan is reliable for |
+| Verify | Attached to a post, and its page has not been read | The parent page may display it in a way a database scan cannot see |
+| Ask team | Documents, video, audio that are unattached or `absent` | Handed out by email, print, and QR code, where no reference ever reaches the database |
+| Low risk | Images that are unattached or `absent` | Nothing embeds it, and where it had a page, that page was opened and does not show it |
+
+A file only leaves **Verify** on evidence: either it never had a parent, or its
+parent page was fetched and does not render it. A page that could not be read
+leaves the file exactly where it was.
 
 Tiers are derived on every render and stored nowhere, so they stay correct after
 a rescan. The tier counts cover whichever filter is selected, not the whole
@@ -85,11 +287,18 @@ rather than the checkboxes — so the triage is the work queue, not a document y
 transcribe from. The reference guard still applies: a file with recorded
 references is skipped unless you tick the override box.
 
-The CSV export carries `tier`, `decision`, and `note` for every row. That is
+The CSV export carries `page_check`, `page_check_note`, `page_checked_url`,
+`page_checked_at`, `tier`, `decision`, and `note` for every row. That is
 also the backup: uninstalling the plugin deletes the marks, since orphaned post
 meta would be unreachable on a host with no database access.
 
 ## Filters on the results screen
+
+The screen opens on the first filter that has something in it -- orphaned, then
+unreferenced, then unattached, then referenced-by-ID-only -- and falls back to
+**All media** when none of them do. The tier counts are scoped to the filter, so
+a fixed landing view that happened to be empty would show a blank table under
+three zeroed cards and read as a broken scan. A `view` in the URL always wins.
 
 | Filter | Meaning |
 |---|---|
@@ -140,7 +349,7 @@ instead of a broken button; deletion still works, but take your own backup.
 
 Read this before you delete anything.
 
-1. **Hardcoded URLs in theme or plugin files.** The scan reads the database, not PHP or template files. An image referenced in `header.php` or a plugin's CSS will show as unreferenced. Grep your theme before a bulk delete.
+1. **Hardcoded URLs on pages nothing is attached to.** The database passes read tables, not PHP or template files. The render step covers this wherever the file is attached to a published page, since it reads the finished HTML, but a file hardcoded in `header.php` and attached to nothing has no page to fetch and still shows as unreferenced. Grep your theme before a bulk delete.
 2. **Media rendered from an external system.** Content pulled in through an API, a feed, a headless front end, or an iframe from another application.
 3. **Files someone linked to from outside your site.** A PDF linked from an email campaign, a print piece, or a partner site has no in-database reference.
 4. **Object-cached or offloaded media.** If a plugin rewrites upload URLs to a path this plugin does not know, add that path under Scan settings > Extra upload paths.
@@ -243,11 +452,11 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 The scan runs in batches over AJAX and can be closed and restarted. On a large library or a slow host, lower the batch sizes under Scan settings. The postmeta pass is usually the slowest step because it reads every row in `wp_postmeta`.
 
-Three tables are created per site: `{prefix}uams_mra_index`, `{prefix}uams_mra_refs`, and `{prefix}uams_mra_results`. All three are truncated at the start of each scan.
+Four tables are created per site: `{prefix}uams_mra_index`, `{prefix}uams_mra_refs`, `{prefix}uams_mra_results`, and `{prefix}uams_mra_offsite`. All four are truncated at the start of each scan.
 
 ## Uninstall
 
-Deleting the plugin from **Plugins** runs `uninstall.php`, which drops all three
+Deleting the plugin from **Plugins** runs `uninstall.php`, which drops all four
 tables, removes the plugin's options, and deletes the triage meta from every
 attachment. On multisite it walks every site, since the tables are per site.
 

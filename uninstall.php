@@ -3,7 +3,7 @@
 /**
  * Uninstall cleanup.
  *
- * Drops the three working tables and the three options the plugin creates, and
+ * Drops the four working tables and the four options the plugin creates, and
  * removes the triage meta from every attachment. The tables and options are
  * derived from a scan and rebuild themselves; the triage marks do NOT -- they
  * are human judgement, and this deletes them.
@@ -21,8 +21,8 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 
 global $wpdb;
 
-$uams_mra_tables = ['uams_mra_index', 'uams_mra_refs', 'uams_mra_results'];
-$uams_mra_options = ['uams_mra_settings', 'uams_mra_scan_state', 'uams_mra_db_version'];
+$uams_mra_tables = ['uams_mra_index', 'uams_mra_refs', 'uams_mra_results', 'uams_mra_offsite'];
+$uams_mra_options = ['uams_mra_settings', 'uams_mra_scan_state', 'uams_mra_db_version', 'uams_mra_repoint_state', 'uams_mra_repoint_fatal'];
 $uams_mra_meta = ['_uams_mra_disposition', '_uams_mra_note'];
 
 /**

@@ -437,3 +437,30 @@
 	border-color: #d63638;
 	color: #fff;
 }
+
+/* Repoint panel on the offsite report. */
+.uams-mra-repoint {
+	margin: 24px 0;
+	padding: 16px 20px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #2271b1;
+}
+
+.uams-mra-repoint h2 {
+	margin-top: 0;
+}
+
+.uams-mra-verdicts {
+	max-width: 900px;
+	margin: 12px 0;
+}
+
+.uams-mra-verdicts td {
+	vertical-align: top;
+}
+
+.uams-mra-repoint-status {
+	margin-left: 10px;
+	color: #50575e;
+}

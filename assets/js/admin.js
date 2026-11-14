@@ -24,7 +24,7 @@
 
 	// Steps are uneven in length, so the bar reports position in the pipeline
 	// rather than a false percentage of rows.
-	var pipeline = [ 'index', 'posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'network', 'finalize', 'done' ];
+	var pipeline = [ 'index', 'posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'network', 'finalize', 'render', 'done' ];
 
 	function paint( data ) {
 		var position = pipeline.indexOf( data.step );
@@ -35,15 +35,24 @@
 		}
 
 		if ( text ) {
-			text.textContent = data.done
-				? data.message
-				: data.message + ' \u00b7 ' + Number( data.processed ).toLocaleString() + ' rows read';
+			// The render step counts pages fetched, not rows read, and says so
+			// through data.detail rather than being mislabelled here.
+			var detail = data.detail
+				? data.detail
+				: Number( data.processed ).toLocaleString() + ' rows read';
+
+			text.textContent = data.done ? data.message : data.message + ' \u00b7 ' + detail;
 		}
 	}
 
-	function fail() {
+	function fail( response ) {
 		if ( text ) {
-			text.textContent = UAMSMRA.i18n.failed;
+			// The server refuses to scan while a repoint is running and says so;
+			// showing the generic message would hide a reason worth reading.
+			text.textContent =
+				response && response.data && response.data.message
+					? response.data.message
+					: UAMSMRA.i18n.failed;
 		}
 		if ( button ) {
 			button.disabled = false;
@@ -53,7 +62,7 @@
 	function loop() {
 		post( 'uams_mra_scan_step' ).then( function ( response ) {
 			if ( ! response || ! response.success ) {
-				fail();
+				fail( response );
 				return;
 			}
 
@@ -81,7 +90,7 @@
 
 			post( 'uams_mra_scan_start' ).then( function ( response ) {
 				if ( ! response || ! response.success ) {
-					fail();
+					fail( response );
 					return;
 				}
 				paint( response.data );
@@ -306,6 +315,193 @@
 				event.preventDefault();
 			}
 		} );
+	}
+
+	/* -----------------------------------------------------------------
+	 * Repoint: compare offsite files with this library, then rewrite.
+	 * -------------------------------------------------------------- */
+
+	var repoint = document.getElementById( 'uams-mra-repoint' );
+
+	if ( repoint ) {
+		var planBtn = document.getElementById( 'uams-mra-repoint-plan' );
+		var applyBtn = document.getElementById( 'uams-mra-repoint-apply' );
+		var resizedBox = document.getElementById( 'uams-mra-repoint-resized' );
+		var status = document.getElementById( 'uams-mra-repoint-status' );
+
+		var repointPost = function ( action, extra ) {
+			var body = new FormData();
+			body.append( 'action', action );
+			body.append( 'nonce', UAMSMRA.repointNonce );
+
+			if ( extra ) {
+				Object.keys( extra ).forEach( function ( key ) {
+					body.append( key, extra[ key ] );
+				} );
+			}
+
+			return fetch( UAMSMRA.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				body: body
+			} ).then( function ( response ) {
+				return response.json();
+			} );
+		};
+
+		var busy = function ( on ) {
+			[ planBtn, applyBtn, document.getElementById( 'uams-mra-repoint-sideload' ) ].forEach(
+				function ( el ) {
+					if ( el ) {
+						el.disabled = on;
+					}
+				}
+			);
+		};
+
+		var say = function ( message ) {
+			if ( status ) {
+				status.textContent = message;
+			}
+		};
+
+		var paintJob = function ( data ) {
+			phase = data.phase || '';
+
+			if ( ! data.total ) {
+				say( data.message || '' );
+				return;
+			}
+
+			say(
+				data.message + ' \u00b7 ' +
+				Number( data.progress ).toLocaleString() + ' of ' +
+				Number( data.total ).toLocaleString()
+			);
+		};
+
+		// A crash retires the file that caused it, so resuming always moves
+		// forward. Bounded anyway: a loop that cannot advance must still stop.
+		var MAX_RESUMES = 60;
+		var resumes = 0;
+		var phase = '';
+
+		var failWith = function ( response ) {
+			busy( false );
+			say(
+				response && response.data && response.data.message
+					? response.data.message
+					: UAMSMRA.i18n.repointFailed
+			);
+		};
+
+		var runLoop = function () {
+			repointPost( 'uams_mra_repoint_step' ).then( function ( response ) {
+				if ( ! response || ! response.success ) {
+					failWith( response );
+					return;
+				}
+
+				paintJob( response.data );
+
+				if ( ! response.data.done ) {
+					runLoop();
+					return;
+				}
+
+				// The counts on this screen are rendered server side, so the
+				// finished numbers only appear on a reload.
+				window.location.reload();
+			} ).catch( function () {
+				// No JSON came back at all, so PHP died mid-request. The file it
+				// died on has already been marked and stepped over, so starting
+				// the job again carries on past it rather than repeating it.
+				if ( phase === 'sideload' && resumes < MAX_RESUMES ) {
+					resumes++;
+					say( UAMSMRA.i18n.repointResuming.replace( '%d', resumes ) );
+					repointPost( 'uams_mra_repoint_sideload' ).then( function ( response ) {
+						if ( ! response || ! response.success ) {
+							failWith( response );
+							return;
+						}
+						paintJob( response.data );
+						runLoop();
+					} ).catch( function () {
+						busy( false );
+						say( UAMSMRA.i18n.repointFatal );
+					} );
+					return;
+				}
+
+				busy( false );
+				say( UAMSMRA.i18n.repointFatal );
+			} );
+		};
+
+		if ( planBtn ) {
+			planBtn.addEventListener( 'click', function () {
+				busy( true );
+				repointPost( 'uams_mra_repoint_plan' ).then( function ( response ) {
+					if ( ! response || ! response.success ) {
+						failWith( response );
+						return;
+					}
+					paintJob( response.data );
+					runLoop();
+				} ).catch( function () {
+					busy( false );
+					say( UAMSMRA.i18n.repointFatal );
+				} );
+			} );
+		}
+
+		var sideloadBtn = document.getElementById( 'uams-mra-repoint-sideload' );
+
+		if ( sideloadBtn ) {
+			sideloadBtn.addEventListener( 'click', function () {
+				if ( ! window.confirm( UAMSMRA.i18n.confirmSideload ) ) {
+					return;
+				}
+
+				busy( true );
+				sideloadBtn.disabled = true;
+
+				repointPost( 'uams_mra_repoint_sideload' ).then( function ( response ) {
+					if ( ! response || ! response.success ) {
+						failWith( response );
+						return;
+					}
+					paintJob( response.data );
+					runLoop();
+				} ).catch( function () {
+					busy( false );
+					say( UAMSMRA.i18n.repointFatal );
+				} );
+			} );
+		}
+
+		if ( applyBtn ) {
+			applyBtn.addEventListener( 'click', function () {
+				if ( ! window.confirm( UAMSMRA.i18n.confirmRepoint ) ) {
+					return;
+				}
+
+				busy( true );
+				repointPost( 'uams_mra_repoint_apply', {
+					resized: resizedBox && resizedBox.checked ? '1' : ''
+				} ).then( function ( response ) {
+					if ( ! response || ! response.success ) {
+						failWith( response );
+						return;
+					}
+					paintJob( response.data );
+					runLoop();
+				} ).catch( function () {
+					busy( false );
+					say( UAMSMRA.i18n.repointFatal );
+				} );
+			} );
+		}
 	}
 
 }() );

@@ -27,6 +27,7 @@ class UAMS_MRA_Scanner
         'commentmeta',
         'network',
         'finalize',
+        'render',
     ];
 
     /**
@@ -54,9 +55,19 @@ class UAMS_MRA_Scanner
      *
      * @return array State.
      */
-    public static function start(): array
+    public static function start(): WP_Error|array
     {
         global $wpdb;
+
+        // A scan empties the offsite table. Doing that under a running repoint
+        // or download leaves that job writing verdicts into rows the scan has
+        // just replaced, and the plan it was working from is gone.
+        if (UAMS_MRA_Repoint::is_running()) {
+            return new WP_Error(
+                'uams_mra_busy',
+                __('A repoint or download is still running on the Offsite Media screen. Let it finish, then scan.', 'uams-mra')
+            );
+        }
 
         UAMS_MRA_Store::reset();
 
@@ -70,6 +81,7 @@ class UAMS_MRA_Scanner
             'started' => time(),
             'finished' => 0,
             'site_queue' => [],
+            'render_queue' => [],
             'settings' => uams_mra_settings(),
             'counts' => [],
             'message' => __('Building the file index', 'uams-mra'),
@@ -135,10 +147,18 @@ class UAMS_MRA_Scanner
             'usermeta' => empty($settings['include_usermeta']),
             'commentmeta' => empty($settings['include_comments']),
             'network' => empty($settings['include_network']) || ! is_multisite(),
+            'render' => empty($settings['include_render']),
         ];
 
         if (! empty($skip[$state['step']])) {
             return self::advance($state);
+        }
+
+        if ($state['step'] === 'render') {
+            $state = self::build_render_queue($state);
+            if (empty($state['render_queue'])) {
+                return self::advance($state);
+            }
         }
 
         if ($state['step'] === 'network') {
@@ -176,6 +196,7 @@ class UAMS_MRA_Scanner
             'commentmeta' => __('Reading comment fields', 'uams-mra'),
             'network' => __('Checking other sites in the network', 'uams-mra'),
             'finalize' => __('Measuring files and writing results', 'uams-mra'),
+            'render' => __('Opening parent pages to see what they actually display', 'uams-mra'),
             'done' => __('Scan complete', 'uams-mra'),
         ];
 
@@ -242,6 +263,8 @@ class UAMS_MRA_Scanner
         }
 
         $refs = [];
+        $offsite = [];
+        $track = ! empty($state['settings']['include_offsite']);
 
         foreach ($rows as $row) {
             $cursor = (int) $row->ID;
@@ -252,6 +275,17 @@ class UAMS_MRA_Scanner
             }
 
             $label = self::post_label($row);
+
+            // Revisions are deliberately never rewritten, so recording their URLs
+            // would list work that can never be done -- and every repoint saves a
+            // revision holding the URLs it just removed, so the report would grow
+            // each time it was acted on and never reach zero.
+            if ($track && $row->post_type !== 'revision') {
+                $offsite = array_merge(
+                    $offsite,
+                    self::collect_offsite($content, 'content', (int) $row->ID, $label)
+                );
+            }
 
             $ids = self::extract_ids_from_content($content);
             $paths = self::extract_paths($content);
@@ -275,6 +309,7 @@ class UAMS_MRA_Scanner
         }
 
         UAMS_MRA_Store::add_refs($refs);
+        UAMS_MRA_Store::add_offsite($offsite);
 
         $state['cursor'] = $cursor;
         $state['processed'] += count($rows);
@@ -317,6 +352,8 @@ class UAMS_MRA_Scanner
 
         $skip_keys = self::skipped_meta_keys();
         $refs = [];
+        $offsite = [];
+        $track = ! empty($state['settings']['include_offsite']);
 
         foreach ($rows as $row) {
             $cursor = (int) $row->meta_id;
@@ -336,6 +373,10 @@ class UAMS_MRA_Scanner
             $label = self::post_label($row);
             $label = $row->meta_key.' on '.$label;
             $source = $row->post_type === 'revision' ? 'revision_meta' : 'postmeta';
+
+            if ($track && $source !== 'revision_meta') {
+                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source, (int) $row->post_id, $label, (int) $row->meta_id, (string) $row->meta_key));
+            }
 
             $hits = self::scan_meta_value(
                 $row->meta_key,
@@ -360,6 +401,7 @@ class UAMS_MRA_Scanner
         }
 
         UAMS_MRA_Store::add_refs($refs);
+        UAMS_MRA_Store::add_offsite($offsite);
 
         $state['cursor'] = $cursor;
         $state['processed'] += count($rows);
@@ -403,12 +445,21 @@ class UAMS_MRA_Scanner
         }
 
         $refs = [];
+        $offsite = [];
+        $track = ! empty($state['settings']['include_offsite']);
 
         foreach ($rows as $row) {
             $cursor = (int) $row->option_id;
 
             if ((string) $row->option_value === '') {
                 continue;
+            }
+
+            if ($track) {
+                $offsite = array_merge(
+                    $offsite,
+                    self::collect_offsite($row->option_value, 'option', (int) $row->option_id, 'Option: '.$row->option_name, (int) $row->option_id, (string) $row->option_name)
+                );
             }
 
             $hits = self::scan_meta_value(
@@ -430,6 +481,7 @@ class UAMS_MRA_Scanner
         }
 
         UAMS_MRA_Store::add_refs($refs);
+        UAMS_MRA_Store::add_offsite($offsite);
 
         $state['cursor'] = $cursor;
         $state['processed'] += count($rows);
@@ -504,6 +556,8 @@ class UAMS_MRA_Scanner
 
         $skip_keys = self::skipped_meta_keys();
         $refs = [];
+        $offsite = [];
+        $track = ! empty($state['settings']['include_offsite']);
 
         foreach ($rows as $row) {
             $cursor = (int) $row->pk;
@@ -514,6 +568,12 @@ class UAMS_MRA_Scanner
 
             if ((string) $row->meta_value === '') {
                 continue;
+            }
+
+            $label = $prefix.' #'.(int) $row->object_id.': '.$row->meta_key;
+
+            if ($track) {
+                $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source_type, (int) $row->object_id, $label, (int) $row->pk, (string) $row->meta_key));
             }
 
             $hits = self::scan_meta_value(
@@ -528,13 +588,14 @@ class UAMS_MRA_Scanner
                     'attachment_id' => $attachment_id,
                     'source_type' => $source_type,
                     'source_id' => (int) $row->object_id,
-                    'source_label' => $prefix.' #'.(int) $row->object_id.': '.$row->meta_key,
+                    'source_label' => $label,
                     'confidence' => $confidence,
                 ];
             }
         }
 
         UAMS_MRA_Store::add_refs($refs);
+        UAMS_MRA_Store::add_offsite($offsite);
 
         $state['cursor'] = $cursor;
         $state['processed'] += count($rows);
@@ -725,6 +786,473 @@ class UAMS_MRA_Scanner
     }
 
     /* ---------------------------------------------------------------------
+     * Render verification
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Decide which parent pages are worth fetching.
+     *
+     * Only files that survived the whole database scan with no reference and a
+     * live parent are in play, so the queue is the handful of pages that could
+     * still explain them -- not every page on the site.
+     *
+     * A parent that cannot be fetched anonymously is settled here rather than
+     * queued: its files are marked "skipped" so the report says the check never
+     * ran, instead of leaving a blank that reads like a clean result.
+     *
+     * @param  array  $state  State.
+     * @return array
+     */
+    protected static function build_render_queue($state)
+    {
+        global $wpdb;
+
+        $results = UAMS_MRA_Store::results_table();
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $rows = $wpdb->get_results(
+            "SELECT r.parent_id, p.post_type, p.post_status, p.post_password, COUNT(*) AS pending
+			 FROM {$results} r
+			 INNER JOIN {$wpdb->posts} p ON p.ID = r.parent_id
+			 WHERE r.ref_count = 0 AND r.is_attached = 1 AND r.parent_id > 0
+			 GROUP BY r.parent_id, p.post_type, p.post_status, p.post_password
+			 ORDER BY pending DESC, r.parent_id ASC"
+        );
+
+        $fetchable = [];
+        $skipped = [];
+
+        foreach ($rows as $row) {
+            // A password-protected page returns the password form rather than its
+            // content, which would report every file on it as absent.
+            $readable = $row->post_status === 'publish'
+                && (string) $row->post_password === ''
+                && is_post_type_viewable($row->post_type);
+
+            if ($readable) {
+                $fetchable[] = (int) $row->parent_id;
+            } else {
+                $skipped[] = (int) $row->parent_id;
+            }
+        }
+
+        if ($skipped !== []) {
+            foreach (self::pending_attachment_ids($skipped) as $ids) {
+                UAMS_MRA_Store::set_render_state($ids, 'skipped');
+            }
+        }
+
+        $defaults = uams_mra_default_settings();
+        $max = max(1, (int) ($state['settings']['render_max_pages'] ?? $defaults['render_max_pages']));
+        $over_cap = [];
+
+        if (count($fetchable) > $max) {
+            $over_cap = array_slice($fetchable, $max);
+            $fetchable = array_slice($fetchable, 0, $max);
+
+            // Never let a ceiling read as a clean result. Files behind a page we
+            // chose not to fetch are marked skipped exactly like the ones we
+            // could not fetch, and the count is carried into the progress state.
+            foreach (self::pending_attachment_ids($over_cap) as $ids) {
+                UAMS_MRA_Store::set_render_state($ids, 'skipped');
+            }
+        }
+
+        $state['render_queue'] = $fetchable;
+        $state['render_total'] = count($fetchable);
+        $state['render_skipped'] = count($skipped) + count($over_cap);
+        $state['render_capped'] = count($over_cap);
+        $state['render_stats'] = [
+            'pages' => 0,
+            'found' => 0,
+            'absent' => 0,
+            'error' => 0,
+            'offsite' => 0,
+        ];
+
+        // One token for the whole scan, appended to every request so a page cache
+        // cannot hand back a copy from before the content changed. A stale page
+        // that still shows a since-removed file only keeps a file alive, but a
+        // stale page missing a just-added file would mark a live file absent.
+        $state['render_token'] = wp_generate_password(8, false, false);
+
+        return $state;
+    }
+
+    /**
+     * Files still unexplained, grouped by the parent they hang off.
+     *
+     * @param  array  $parent_ids  Parent post IDs.
+     * @return array parent_id => array of attachment IDs.
+     */
+    protected static function pending_attachment_ids(array $parent_ids): array
+    {
+        global $wpdb;
+
+        $parent_ids = array_values(array_unique(array_filter(array_map(intval(...), $parent_ids))));
+        if ($parent_ids === []) {
+            return [];
+        }
+
+        $results = UAMS_MRA_Store::results_table();
+        $out = [];
+
+        foreach (array_chunk($parent_ids, 200) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
+            $sql = "SELECT attachment_id, parent_id FROM {$results}
+				WHERE ref_count = 0 AND is_attached = 1 AND parent_id IN ({$placeholders})";
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            foreach ($wpdb->get_results($wpdb->prepare($sql, $chunk)) as $row) {
+                $out[(int) $row->parent_id][] = (int) $row->attachment_id;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Fetch a batch of parent pages and read what they actually render.
+     *
+     * This is the only step that leaves the database. A page template that lists
+     * its own attachments, a shortcode, a block that builds its markup at render
+     * time, a URL hardcoded in a theme file -- none of them put anything in a
+     * table for the earlier steps to find, and all of them show up here.
+     *
+     * @param  array  $state  State.
+     * @return array
+     */
+    protected static function step_render($state)
+    {
+        if (empty($state['render_queue'])) {
+            return self::advance($state);
+        }
+
+        $defaults = uams_mra_default_settings();
+        $limit = max(1, min(25, (int) ($state['settings']['batch_render'] ?? $defaults['batch_render'])));
+        $token = (string) ($state['render_token'] ?? '');
+        $batch = array_splice($state['render_queue'], 0, $limit);
+        $stats = isset($state['render_stats']) && is_array($state['render_stats'])
+            ? $state['render_stats']
+            : [
+                'pages' => 0,
+                'found' => 0,
+                'absent' => 0,
+                'error' => 0,
+                'offsite' => 0,
+            ];
+
+        foreach ($batch as $parent_id) {
+            // Re-read per page rather than once per batch. An earlier page in
+            // this same batch may have cleared a file that hangs off a later
+            // parent, and a stale list would then mark that live file absent.
+            $pending = self::pending_attachment_ids([$parent_id]);
+            $pending = $pending[$parent_id] ?? [];
+
+            if (empty($pending)) {
+                continue;
+            }
+
+            $url = get_permalink($parent_id);
+
+            if (! $url) {
+                UAMS_MRA_Store::set_render_state($pending, 'skipped');
+
+                continue;
+            }
+
+            $body = self::fetch_rendered($url, $token);
+            $stats['pages']++;
+
+            if ($body === null) {
+                UAMS_MRA_Store::set_render_state($pending, 'error', $url);
+                $stats['error'] += count($pending);
+
+                continue;
+            }
+
+            $found = UAMS_MRA_Index::resolve_paths(self::extract_paths($body));
+
+            if ($found !== []) {
+                $refs = [];
+                $label = __('Rendered page: ', 'uams-mra').get_the_title($parent_id);
+
+                foreach ($found as $attachment_id) {
+                    $refs[] = [
+                        'attachment_id' => $attachment_id,
+                        'source_type' => 'render',
+                        'source_id' => (int) $parent_id,
+                        'source_label' => $label,
+                        'confidence' => 2,
+                    ];
+                }
+
+                UAMS_MRA_Store::add_refs($refs);
+
+                // The page was parsed whole, so a file that belongs to some other
+                // parent but is displayed here gets cleared too, for free.
+                UAMS_MRA_Store::recount_refs($found);
+            }
+
+            $here = array_values(array_intersect($pending, $found));
+            $unmatched = array_values(array_diff($pending, $found));
+
+            // Whatever this page did not serve from our own uploads, check
+            // against every other host it pulls uploads from. Precedence runs
+            // found, then offsite, then absent: the strongest evidence wins.
+            $offsite = [];
+
+            if ($unmatched !== []) {
+                $offsite = array_intersect_key(self::extract_offsite_uploads($body), array_flip($unmatched));
+            }
+
+            $absent = array_values(array_diff($unmatched, array_keys($offsite)));
+
+            UAMS_MRA_Store::set_render_state($here, 'found', $url);
+            UAMS_MRA_Store::set_render_state($absent, 'absent', $url);
+
+            foreach (self::group_by_host($offsite) as $host => $ids) {
+                UAMS_MRA_Store::set_render_state(
+                    $ids,
+                    'offsite',
+                    $url,
+                    /* translators: %s: hostname serving a file of the same name. */
+                    sprintf(__('Served from %s', 'uams-mra'), $host)
+                );
+            }
+
+            $stats['found'] += count($here);
+            $stats['absent'] += count($absent);
+            $stats['offsite'] += count($offsite);
+        }
+
+        $state['render_stats'] = $stats;
+        $state['processed'] += count($batch);
+
+        if (empty($state['render_queue'])) {
+            return self::advance($state);
+        }
+
+        return $state;
+    }
+
+    /**
+     * Flip an id => host map into host => ids.
+     *
+     * @param  array  $offsite  attachment_id => host.
+     * @return array host => array of attachment IDs.
+     */
+    protected static function group_by_host(array $offsite): array
+    {
+        $out = [];
+
+        foreach ($offsite as $id => $host) {
+            $out[$host][] = (int) $id;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Uploads URLs on a page that belong to some *other* host or site.
+     *
+     * The database passes look for this site's own upload prefix, which is the
+     * right rule for stored content: a URL pointing at another site's uploads is
+     * a reference to that site's file, not ours. A rendered page is a different
+     * question. When a page serves Foo.pdf from an old host and our library also
+     * holds Foo.pdf, our copy is not what the visitor loads -- but it is very
+     * obviously not abandoned either, and calling it unused would be how a
+     * half-finished migration turns into deleted originals.
+     *
+     * So these are reported separately rather than counted as references. The
+     * file keeps its place in the Verify tier and the report names the host, for
+     * a person to decide whether the two files are the same document.
+     *
+     * @param  string  $body  Rendered HTML.
+     * @return array attachment_id => host serving it.
+     */
+    protected static function extract_offsite_uploads($body): array
+    {
+        $map = [];
+
+        foreach (self::extract_foreign_upload_urls($body) as $found) {
+            $map[$found['base_norm']] ??= $found['host'];
+        }
+
+        if ($map === []) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach (UAMS_MRA_Index::resolve_map(array_keys($map)) as $base_norm => $ids) {
+            foreach ($ids as $id) {
+                $out[$id] = $map[$base_norm];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Every uploads URL in a string that points somewhere other than this site.
+     *
+     * Shared by the render check, which asks whether a page serves a file of the
+     * same name from elsewhere, and the offsite report, which asks where in the
+     * database those URLs are stored so they can be migrated.
+     *
+     * @param  string  $content  Content to read.
+     * @return array List of array{url, host, path, base_norm}, deduplicated by URL.
+     */
+    public static function extract_foreign_upload_urls($content): array
+    {
+        $content = str_replace(['\\/', '&#047;', '&#x2F;'], '/', (string) $content);
+
+        if (stripos($content, 'wp-content/uploads/') === false) {
+            return [];
+        }
+
+        $pattern = '#(?:https?:)?//([^/"\'<>\s]+)/[^"\'<>\s)]*?wp-content/uploads/([^\s"\'<>\\\\()\[\]{},;]+\.[a-zA-Z0-9]{2,5})#i';
+
+        if (! preg_match_all($pattern, $content, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        $ours = self::upload_path_prefixes();
+        $hosts = self::own_hosts();
+        $base = self::own_uploads_path();
+        $out = [];
+
+        foreach ($matches as $match) {
+            $full = $match[0];
+            $host = strtolower($match[1]);
+            $path = $match[2];
+
+            // Anything under this site's own uploads, or under a prefix the
+            // settings already claim as ours, is handled by extract_paths().
+            //
+            // The site's own uploads path is the same on most WordPress installs
+            // (wp-content/uploads), so on its own it says nothing about whose file
+            // a URL names: another host serving the same layout is the offsite
+            // case this report exists for. It counts as ours only on this site's
+            // host. A prefix named in the settings is claimed on any host, since
+            // that is how a CDN or an offload bucket is declared.
+            $is_ours = false;
+            foreach ($ours as $prefix) {
+                if ($prefix === '' || stripos($full, $prefix.'/') === false) {
+                    continue;
+                }
+
+                if ($prefix === $base && ! in_array($host, $hosts, true)) {
+                    continue;
+                }
+
+                $is_ours = true;
+                break;
+            }
+
+            if ($is_ours || isset($out[$full])) {
+                continue;
+            }
+
+            [, $base_norm] = UAMS_MRA_Index::normalize($path);
+
+            if ($base_norm === '') {
+                continue;
+            }
+
+            $out[$full] = [
+                'url' => str_starts_with($full, '//') ? 'https:'.$full : $full,
+                'host' => $host,
+                'path' => $path,
+                'base_norm' => $base_norm,
+            ];
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * Offsite rows for one piece of stored content.
+     *
+     * @param  string  $content  Content to read.
+     * @param  string  $source_type  Where it came from.
+     * @param  int  $source_id  Row ID in that source.
+     * @param  string  $label  Readable source name.
+     * @return array Rows for UAMS_MRA_Store::add_offsite().
+     */
+    protected static function collect_offsite($content, $source_type, $source_id, $label, $source_pk = 0, $source_key = ''): array
+    {
+        $rows = [];
+
+        foreach (self::extract_foreign_upload_urls($content) as $found) {
+            $rows[] = [
+                'url' => $found['url'],
+                'host' => $found['host'],
+                'base_norm' => $found['base_norm'],
+                'source_type' => $source_type,
+                'source_id' => $source_id,
+                // The row to write back to, and the key inside it. source_id
+                // names the object a person would recognise; these two name the
+                // exact row, which is what a rewrite has to target.
+                'source_pk' => $source_pk ?: $source_id,
+                'source_key' => $source_key,
+                'source_label' => $label,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Fetch one page and hand back its HTML, or null if it could not be read.
+     *
+     * Null means unknown, never empty. A timeout, a redirect to a login screen, a
+     * 500 -- any of those must leave the file in the tier that asks a person to
+     * look, because treating a failed request as "not on the page" would delete
+     * live files whenever the site was briefly unreachable.
+     *
+     * @param  string  $url  Permalink.
+     * @param  string  $token  Per scan cache-busting token.
+     */
+    protected static function fetch_rendered($url, $token): ?string
+    {
+        $request_url = $url;
+
+        if ($token && apply_filters('uams_mra_render_cache_bust', true, $url)) {
+            $request_url = add_query_arg('uams-mra-check', $token, $url);
+        }
+
+        $args = apply_filters(
+            'uams_mra_render_request_args',
+            [
+                'timeout' => 15,
+                'redirection' => 3,
+                'sslverify' => apply_filters('uams_mra_render_sslverify', true),
+                'user-agent' => 'UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')',
+                'headers' => [
+                    'Cache-Control' => 'no-cache',
+                    'Pragma' => 'no-cache',
+                ],
+            ],
+            $url
+        );
+
+        $response = wp_remote_get($request_url, $args);
+
+        if (is_wp_error($response)) {
+            return null;
+        }
+
+        if ((int) wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
+        }
+
+        $body = (string) wp_remote_retrieve_body($response);
+
+        return trim($body) === '' ? null : $body;
+    }
+
+    /* ---------------------------------------------------------------------
      * Extraction helpers
      * ------------------------------------------------------------------ */
 
@@ -829,6 +1357,37 @@ class UAMS_MRA_Scanner
     }
 
     /**
+     * Path of this site's uploads folder, without slashes at either end.
+     */
+    protected static function own_uploads_path(): string
+    {
+        $uploads = wp_get_upload_dir();
+
+        return trim((string) wp_parse_url((string) $uploads['baseurl'], PHP_URL_PATH), '/');
+    }
+
+    /**
+     * Hosts that count as this site: where uploads are served, and the site itself.
+     *
+     * @return array<int, string>
+     */
+    protected static function own_hosts(): array
+    {
+        $uploads = wp_get_upload_dir();
+        $hosts = [];
+
+        foreach ([(string) $uploads['baseurl'], home_url(), site_url()] as $url) {
+            $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+
+            if ($host !== '') {
+                $hosts[] = $host;
+            }
+        }
+
+        return array_values(array_unique($hosts));
+    }
+
+    /**
      * Upload path prefixes used to spot media URLs.
      */
     public static function upload_path_prefixes(): array
@@ -876,7 +1435,11 @@ class UAMS_MRA_Scanner
                 continue;
             }
 
-            $pattern = '#'.preg_quote($prefix, '#').'/([^\s"\'<>\\\\()\[\]{},;]+?\.[a-zA-Z0-9]{2,5})#i';
+            // Greedy on purpose. Non-greedy stops at the first dot-extension, so
+            // Plan-2.11.25-Final.pdf would resolve to "Plan-2.11" and the linked
+            // file would report as unreferenced. normalize() drops any query
+            // string the greedy match runs into.
+            $pattern = '#'.preg_quote($prefix, '#').'/([^\s"\'<>\\\\()\[\]{},;]+\.[a-zA-Z0-9]{2,5})#i';
 
             if (preg_match_all($pattern, $content, $matches)) {
                 foreach ($matches[1] as $path) {
