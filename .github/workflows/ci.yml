@@ -52,6 +52,12 @@ jobs:
     uses: UAMS-Web/uams-ci-workflows/.github/workflows/ci.yml@v0.11.1
     with:
       mutate: false
+      # With `mutate` off the chain skips `mutate-ignore`, and the `legs` check at this pin does
+      # not read that skip as intended, so it fails. Keeping the annotation audit on, over the
+      # plugin source, passes it and audits annotations ahead of UAMS-Web/uamswp-media-reference-audit#31.
+      # Remove both lines once a chain release carries UAMS-Web/uams-ci-workflows#53.
+      mutate-ignore: true
+      mutate-ignore-paths: includes
       floor-lint: true
       floor-lint-php: '8.2'
       download-archive: true
