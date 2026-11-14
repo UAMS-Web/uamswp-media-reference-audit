@@ -1095,6 +1095,17 @@ class UAMS_MRA_Repoint
         }
 
         if ($type === 'content') {
+            // wp_update_post() runs the content filters for whoever is signed in. A
+            // user without unfiltered_html (a subsite administrator on multisite)
+            // would have iframes, scripts and block markup stripped from every page
+            // this rewrites, which is a change nobody asked for. Refuse the row.
+            if (! current_user_can('unfiltered_html')) {
+                return [
+                    'status' => 'failed',
+                    'applied' => 3,
+                ];
+            }
+
             $post = get_post($pk);
 
             if (! $post) {

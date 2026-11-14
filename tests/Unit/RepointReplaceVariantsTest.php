@@ -177,6 +177,7 @@ it('passes slashed text to wp_update_post so block JSON keeps its backslashes', 
     $stored = '<!-- wp:image {"url":"https:\\/\\/old.example.edu\\/sites\\/x\\/wp-content\\/uploads\\/2020\\/01\\/report.pdf"} -->';
     $captured = null;
 
+    when('current_user_can')->justReturn(true);
     when('get_post')->justReturn((object) ['post_content' => $stored, 'post_excerpt' => '']);
     when('wp_slash')->alias(static fn ($value) => is_string($value) ? addslashes($value) : $value);
     when('is_wp_error')->justReturn(false);

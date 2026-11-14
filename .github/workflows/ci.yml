@@ -11,16 +11,19 @@ name: CI
 # - `mutate`: mutation testing is a separate ticket (UAMS-Web/uamswp-media-reference-audit#31).
 # - `phpcs`: the WordPress security sniffs report existing findings in `includes/`, which need
 #   their own review before the job can pass. It is a follow-up ticket.
-# - The WordPress integration matrix: `tests/Integration` holds no test yet. When it does, add
-#   a plain `integration` job beside the call and list it in the `needs:` of `CI`.
+#
+# `integration` stays here as a plain job beside the call, because its MySQL service and the
+# WordPress download are not part of the chain. It runs the Integration suite on a real WordPress
+# in single and multisite modes, on the WordPress release that `wp-phpunit` in
+# `tests/Integration/composer.json` is pinned to.
 #
 # `legs` calls the shared `runner-legs.yml`, which checks that the call's run put every job on
 # the runners its classification names. Its pin must name the same commit as the `checks` pin,
 # so the two move together.
 #
 # The last job, `CI`, is the one check a ruleset requires from this workflow (with the two
-# pull-request-body checks, `Attribution footer` and `Closing keywords`). It `needs:` the call
-# and `legs`, runs `if: always()`, and fails unless every needed job reports `success`: a
+# pull-request-body checks, `Attribution footer` and `Closing keywords`). It `needs:` the call,
+# `legs` and `integration`, runs `if: always()`, and fails unless every needed job reports `success`: a
 # `skipped` or `cancelled` job fails it. Adding a plain job here means adding it to the
 # `needs:` list of `CI`; the `aggregate-needs` job in the chain fails the pull request when
 # one is missing. Do not rename `CI`, and do not rename `checks` without changing `needs:`.
@@ -74,10 +77,49 @@ jobs:
       actions: read
       checks: read
 
+  integration:
+    name: Integration (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [single, multisite]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: uamswp_mra_tests
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      WP_TESTS_ABSPATH: /tmp/wordpress
+      WP_TESTS_DB_HOST: 127.0.0.1
+      WP_MULTISITE: ${{ matrix.mode == 'multisite' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          integration: 'true'
+      # The WordPress core copy the suite boots, matching wp-phpunit in tests/Integration/composer.json.
+      - name: Download WordPress
+        env:
+          WP_VERSION: '7.1.4'
+        run: |
+          mkdir -p "$WP_TESTS_ABSPATH"
+          curl -fsSL "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" | tar -xz -C "$WP_TESTS_ABSPATH" --strip-components=1
+      - run: composer test:integration
+
   # The one check a ruleset requires from this workflow.
   ci:
     name: CI
-    needs: [checks, legs]
+    needs: [checks, legs, integration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

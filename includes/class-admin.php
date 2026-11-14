@@ -1476,7 +1476,18 @@ class UAMS_MRA_Admin
         $resized = ! empty($_POST['resized']); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in repoint_guard().
 
         $this->repoint_respond(
-            static fn (): array => UAMS_MRA_Repoint::start_apply($resized)
+            static function () use ($resized): array {
+                // Saving a page as anyone else runs it through the content filters,
+                // which can change what is on it. See UAMS_MRA_Repoint::rewrite_row().
+                if (! current_user_can('unfiltered_html')) {
+                    wp_send_json_error(
+                        ['message' => __('Rewriting pages needs the unfiltered_html capability, because saving a page as anyone else runs it through the content filter and can change what it holds. Ask a user who has it (on multisite, a network administrator).', 'uams-mra')],
+                        403
+                    );
+                }
+
+                return UAMS_MRA_Repoint::start_apply($resized);
+            }
         );
     }
 
