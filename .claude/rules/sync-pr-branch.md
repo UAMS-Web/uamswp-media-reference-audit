@@ -46,4 +46,3 @@ Before a branch is validated (the gating run) and before its PR is opened, bring
 
 This file is the standing statement of the pre-gate branch sync. It fixes a stale *branch*, which is a different failure from the diff *base* the gate chooses; the branch → PR → merge flow itself lives in [`AGENTS.md`](../../AGENTS.md) and the [`writing-pull-requests`](../skills/writing-pull-requests/SKILL.md) skill; the gating commands live in the repository's own `composer.json` and `package.json`. It pairs with the [`worktrees`](worktrees.md) rule: a worktree changes *where* you branch, this rule keeps that branch *current*. Don't restate any of them.
 
-It composes with the remote-tracking diff base in [`local-ci`](../skills/local-ci/SKILL.md), which fixes the diff *base*, not a stale *branch*.

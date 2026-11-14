@@ -120,8 +120,6 @@ Work these in order. The early steps are cheap and can invalidate the expensive 
 
 4. **Run the repository's gate on the state that will land.** Step 2 brought the branch current, so the head commit is that state unless `main` moved again in between; check before the run. **Read the summary rather than the exit code** (a pipe replaces `$?` with the last command's status) and **name the commit the runner printed.**
 
-   The [`local-ci`](../local-ci/SKILL.md) skill owns running the jobs, the exit-code trap and posting the verdict comment (`--comment`); a repository that keeps its own runner names that runner there. This rule does not restate any of it.
-
 5. **Check the acceptance criteria against the diff, one at a time.** Not against the pull-request body's claims about the diff, and item by item against the issue. A criterion that will not be met is named and explained rather than left silently unchecked, per [`closing-a-ticket`](../../rules/closing-a-ticket.md); an item that cannot be verified here is reported as **deferred, never ticked**. A criterion that is already true without any work in the diff is a criterion to rewrite, not to tick.
 
 6. **Ask the forge what this merge will actually close, and do not stop at the field that answers.** A squash merge closes issues from **two** surfaces: the pull-request body, and the commit message GitHub composes when `commit_message` is omitted. Read the pull request's `closingIssuesReferences` and compare it against the set the author intends:
@@ -170,8 +168,6 @@ Work these in order. The early steps are cheap and can invalidate the expensive 
 
 11. **Say what you found, on the pull request.** The answer is "ready" or "not yet, here is what turned up", never a bare yes. That finding is itself a published claim gating a decision, so [`adversarial-review`](../../rules/adversarial-review.md)'s trigger covers it: most sharply where it reports something checked and clean. **Comment it on the pull request before any merge decision, green or red.** A verdict that exists only in a terminal or a chat window is not a record: the pull request is where the next reader looks, and scrollback is not an artifact.
 
-    The verdict convention (its wording, the jobs it names, the head SHA it records) is the [`local-ci`](../local-ci/SKILL.md) skill's and is not restated here.
-
 ## A finding in the description alone
 
 When the only finding is in the pull request's description and the gate holds the evidence for the correction (its own measurement, as on `uams-statamic-archive#3078`, where the description stated a count the gate re-measured), the gate **rewrites that passage, says in the verdict what it changed and why, and merges**. Holding the pull request for a sentence the gate can fix costs the author a day and holds up the queue, and the correction is the gate's to make because the evidence is the gate's own. The verdict names the passage before and after, the measurement behind the new text, and the command that produced it, so the author can disagree after the fact.
@@ -192,13 +188,9 @@ On a red (a failing chain, or a finding a review caught on a green one) the gate
 
 4. **Apply the `handed-back` label** in the same turn as the comment. The comment carries the finding; the label carries the fact that one is outstanding. Both writes are REST (`POST` adds to the labels already there), so an exhausted GraphQL quota cannot strand a pull request in the wrong state: the argument that decided against the draft flip, pointing the other way.
 
-The [`local-ci`](../local-ci/SKILL.md) skill ships the one-step form: `post-verdict.mjs <n> verdict.md --hand-back` posts the comment and applies the label in a single command, one command rather than two calls, because the second call was the one that got missed.
-
 **Why a label and not a draft flip.** `ready -> draft` is the author's own signal (it says the author pulled the work back) so a gate emitting it impersonates the author it is reporting to, in the one field a reader uses to tell "the gate found something" from "the author withdrew this". And the flag is GraphQL-only: `PATCH .../pulls/{n}` ignores `draft` (step 1), so the flip would spend the quota [`github-api-budget`](../../rules/github-api-budget.md) exists to protect, on a signal that is already wrong on the first ground. The flip did one thing incidentally (it removed the branch from the merge queue) and the label does that deliberately. **The pull request stays ready.** The author owns that flag; the gate reports on the artifact and does not mutate state it does not own.
 
 **`handed-back` comes off when the pull request RE-ENTERS the queue (a push to the head) or a person edits its description, not when the author says it is ready, and a workflow does the removal, not the gate.** The workflow runs on `pull_request` `synchronize` and on `edited` for a body change by a person, and removes the label when it is present. The gate removed it by hand before that, and a hand removal is the step that gets missed: a pull request keeps the label after its author has pushed and drops out of the queue count while waiting to be gated. That asymmetry is the whole reason the label is better than the flag it replaces: a draft flip cleared when the author flipped back to ready, and flipping to ready *is* how a re-gate is requested, so the old marker went away before the finding was necessarily addressed. It never marked *a finding is outstanding*; it marked *the author has not responded yet*. The label clears on the state change that actually happened.
-
-**The workflow ships as a template** in the [`handed-back-label`](../handed-back-label/SKILL.md) skill, which a repository copies to `.github/workflows/clear-handed-back.yml`, together with a drift check that fails when the copy differs from the template or is missing (UAMS-Web/uams-claude-skills#57).
 
 **It marks a state rather than an event**, which is what makes an adoption pass retroactive: label anything currently handed back, not only hand-backs from that point on. **Check each is genuinely still outstanding before applying it**: the retroactive pass is the one place this marker can lie, and a false "a finding is outstanding" is the same class of defect as the false green everything else here is written against.
 
@@ -230,6 +222,4 @@ Where orchestration is available (Ultracode, or the user asked for a workflow), 
 ## The DRY line
 
 This file owns **the decision to merge**: the order in which its neighbors are applied at the moment of merging, the measurement that explains why the order is the only thing enforcing it, and what the gate does with a red. It does not own the chain, the job list, or the shape of the verdict comment. The *build* gate (TDD, branch, PR, the chain) lives in [`AGENTS.md`](../../../AGENTS.md); bringing a branch current is [`sync-pr-branch`](../../rules/sync-pr-branch.md); the ship-time obligations that outlive a green build (never pushing to `main`, ticking criteria, moving the board card, giving residue a ticket) are [`closing-a-ticket`](../../rules/closing-a-ticket.md); the skeptical pass itself, and its tooling, are [`adversarial-review`](../../rules/adversarial-review.md); where you branch is [`worktrees`](../../rules/worktrees.md); the plumbing sweep is [`coordination-plumbing-stays-out-of-artifacts`](../../rules/coordination-plumbing-stays-out-of-artifacts.md). The composing behavior steps 6 and 7 rest on is measured in [`github-api-budget`](../../rules/github-api-budget.md). Don't restate any of them.
-
-Running the jobs, the exit-code trap, and **recording the verdict on the pull request** live in [`local-ci`](../local-ci/SKILL.md); what happens after a red verdict is this file's, above.
 

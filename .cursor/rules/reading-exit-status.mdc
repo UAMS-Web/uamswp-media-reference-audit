@@ -14,27 +14,6 @@ A command's success is established by **reading what it reported**, not by readi
 
 **Why:** a gate has been reported green on a run where a job FAILED (twice in one session in `uamswp-migration-api`), and the status was real, correct, and about a different command.
 
-## The gate result comes from the summary, never from an exit code
-
-The local CI runner ends with a summary block naming the commit it validated and listing each job with its verdict:
-
-```
-  Commit:   0ca5ae8d9 …
-  <job>     PASS
-  …
-All selected jobs passed.
-```
-
-Read that. Name the commit it printed, which is also what [`pre-merge-check`](pre-merge-check.mdc) asks for. The exit code adds nothing the summary does not say, and it is the part that can be wrong for reasons that have nothing to do with the run.
-
-**Invoke it so there is nothing to misread:** the runner's command, a redirection, and nothing after the redirection. For the shared runner:
-
-```bash
-node .claude/skills/local-ci/local-ci.mjs > ci.log 2>&1
-```
-
-Nothing follows the redirection, so no later element becomes the reported status, and `$?` is never consulted. That block writes `ci.log` by design; it is an invocation rather than a demonstration. The [`local-ci`](../../.claude/skills/local-ci/SKILL.md) skill has the runner's options.
-
 ## Three ways the number stops being the command's
 
 - **A pipeline.** `$?` is the *last* element's status. `false | tail -1` reports success while `false` failed.

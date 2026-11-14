@@ -45,4 +45,3 @@ Before you compare any measurement against a prior number (a suite time, a boot 
 
 This file is the standing statement on **making a measurement comparable**, which includes holding the code constant rather than its label. It composes with [`filing-defects-across-repos`](../rule-filing-defects-across-repos/SKILL.md) (whose step 7 applies the revision-citing half to a report crossing a repository boundary, and points here for the evidence) and with [`long-running-commands`](../rule-long-running-commands/SKILL.md) (which owns *bounding* a run and not trampling a concurrent one; this rule owns whether the number it produces means anything). Per-suite timing facts, such as what the band costs or what the serial tail costs, belong in the issues that measured them, not here.
 
-It also composes with the [`local-ci`](../local-ci/SKILL.md) skill, which owns the gate's own job definition and is itself a parity reference worth reading before benchmarking against CI.

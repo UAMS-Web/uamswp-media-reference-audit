@@ -321,6 +321,4 @@ A poster that prints `Posted to <channel> … - ts <id>` on success gives a cont
 
 This file is the standing statement on **bounding local processes, attributing them, and killing them**. It composes with the [`worktrees`](../../rules/worktrees.md) rule (which owns the *slot lifecycle* and why two sessions can share one checkout: this rule owns attributing a running process to the tree that started it, and not trampling one somebody else owns once isolated). The per-run *tool* mechanics: `run_in_background`, `timeout`, `Monitor`: live in those tools' own descriptions; don't restate them here.
 
-The `local-ci` skill owns the runner's own flags and its concurrency.
-
 The general form of the sweep section is [`an-empty-result-is-not-evidence`](../../rules/an-empty-result-is-not-evidence.md)'s; reading a command's status is [`reading-exit-status`](../../rules/reading-exit-status.md)'s; choosing what to call is [`github-api-budget`](../../rules/github-api-budget.md)'s.

@@ -39,5 +39,3 @@ A British spelling that stands in a first-party file is not automatically wrong,
 
 This file is the standing statement of **which English this repository writes, and what justifies an exception**. The pull-request-time workflow (when to run the spell check, and reconciling each flagged word before opening) stays in [`writing-pull-requests`](../skills/writing-pull-requests/SKILL.md), which points here rather than restating the convention. It composes with [`no-emoji-in-durable-records`](no-emoji-in-durable-records.md) and [`impersonal-voice-in-github-artifacts`](impersonal-voice-in-github-artifacts.md), which constrain the same prose along different axes; how a rule or skill is worded belongs to the writing skills, and the `cspell` mechanics belong to that tool.
 
-Which files the `spell` job actually reads belongs to the [`local-ci`](../skills/local-ci/SKILL.md) skill and to the runner.
-
