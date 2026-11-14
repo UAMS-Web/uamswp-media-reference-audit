@@ -245,11 +245,22 @@ it('reads the dimensions as numbers, so text that is not a number weighs nothing
 
 // replace_variants() and holds_url() given a missing URL
 
-it('treats a missing URL or target as empty text instead of failing', function (): void {
-    // A missing URL is read as empty text and returns text, not a TypeError. What an empty needle then matches is not pinned here.
-    expect(UAMS_MRA_Repoint::replace_variants('plain text', repoint_loose(null), 'https://new.example.edu/a.jpg'))->toBeString()
-        ->and(UAMS_MRA_Repoint::replace_variants('https://old.example.edu/a.jpg', 'https://old.example.edu/a.jpg', repoint_loose(null)))->toBe('')
-        ->and(UAMS_MRA_Repoint::holds_url('plain text', repoint_loose(null)))->toBeFalse();
+it('leaves a value alone when the source URL is empty or only a scheme', function (mixed $from): void {
+    $text = 'plain text with https://elsewhere.example/a.jpg in it';
+
+    expect(UAMS_MRA_Repoint::replace_variants($text, $from, 'https://new.example.edu/a.jpg'))->toBe($text)
+        ->and(UAMS_MRA_Repoint::replace_variants(['k' => $text], $from, 'https://new.example.edu/a.jpg'))->toBe(['k' => $text])
+        ->and(UAMS_MRA_Repoint::replace_variants(serialize(['k' => $text]), $from, 'https://new.example.edu/a.jpg'))->toBe(serialize(['k' => $text]))
+        ->and(UAMS_MRA_Repoint::holds_url($text, $from))->toBeFalse();
+})->with([
+    'an empty string' => [''],
+    'null' => [null],
+    'https scheme only' => ['https:'],
+    'http scheme only' => ['HTTP:'],
+]);
+
+it('treats a missing target as empty text instead of failing', function (): void {
+    expect(UAMS_MRA_Repoint::replace_variants('https://old.example.edu/a.jpg', 'https://old.example.edu/a.jpg', repoint_loose(null)))->toBe('');
 });
 
 // is_unreadable() and holds_url()
