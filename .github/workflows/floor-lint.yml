@@ -1,0 +1,50 @@
+name: Floor lint
+
+# Parses every shipped PHP file with the plugin's supported floor, PHP 8.2, so a construct the
+# floor cannot parse (a typed class constant, for example, which is PHP 8.3 syntax) fails the
+# pull request that adds it. The ordinary tools run on the development PHP, 8.4, and accept it.
+#
+# The job is the Actions form of the `lint-floor` job in the `tests` skill, which a repository
+# on the shared local CI runner carries in `local-ci.json`. The files parsed are the ones the
+# download holds (`git archive` with the keep-list in `.gitattributes` applied), so `tests/`,
+# `vendor/`, the synced agent folders and the tool configuration are left out: they run only
+# on the development PHP and may use its syntax. The file count is printed before the scan
+# and a count of zero fails, so an empty selection is never read as a clean one. When the
+# repository adopts the shared CI caller, its `floor-lint` input replaces this workflow.
+#
+# Gated on RUN_REMOTE_CI like the rest of CI: with the variable `false` the job is skipped
+# before a runner is dispatched, and a skipped run is not a passing run.
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+# Nothing at the workflow level; the one job states the scopes it needs.
+permissions: {}
+
+jobs:
+  floor-lint:
+    if: vars.RUN_REMOTE_CI != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: none
+
+      - name: Parse every shipped PHP file on PHP 8.2
+        run: |
+          php -v | head -n 1
+          mkdir "$RUNNER_TEMP/download"
+          git archive --worktree-attributes HEAD | tar -x -C "$RUNNER_TEMP/download"
+          find "$RUNNER_TEMP/download" -name '*.php' -print0 > "$RUNNER_TEMP/php-files"
+          count=$(tr -cd '\0' < "$RUNNER_TEMP/php-files" | wc -c)
+          echo "files: $count"
+          test "$count" -gt 0
+          xargs -0 -n 1 php -l < "$RUNNER_TEMP/php-files" > /dev/null
