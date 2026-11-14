@@ -15,7 +15,8 @@
  */
 defined('ABSPATH') || exit;
 
-define('UAMS_MRA_VERSION', '1.11.0');
+// The header's Version is the only place the release number is written.
+define('UAMS_MRA_VERSION', get_file_data(__FILE__, ['Version' => 'Version'])['Version']);
 define('UAMS_MRA_FILE', __FILE__);
 define('UAMS_MRA_DIR', plugin_dir_path(__FILE__));
 define('UAMS_MRA_URL', plugin_dir_url(__FILE__));
