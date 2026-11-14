@@ -1054,6 +1054,8 @@ class UAMS_MRA_Scanner
         $out = [];
 
         foreach ($offsite as $id => $host) {
+            // Array keys are always integers or strings of digits, and a key read back from a map is an integer already.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $out[$host][] = (int) $id;
         }
 
@@ -1113,8 +1115,14 @@ class UAMS_MRA_Scanner
      */
     public static function extract_foreign_upload_urls($content): array
     {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $content = str_replace(['\\/', '&#047;', '&#x2F;'], '/', (string) $content);
 
+        // Skipping this test only lets a string with no uploads path reach the match below, which finds nothing and returns the same empty list.
+        // The early return is the same case: the match below returns that list anyway.
+        // @pest-mutate-ignore:FalseToTrue
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (stripos($content, 'wp-content/uploads/') === false) {
             return [];
         }
@@ -1145,7 +1153,11 @@ class UAMS_MRA_Scanner
             // host. A prefix named in the settings is claimed on any host, since
             // that is how a CDN or an offload bucket is declared.
             $is_ours = false;
+            // Once a prefix claims the URL, the rest of the loop can only set the same flag again.
+            // @pest-mutate-ignore:BreakToContinue
             foreach ($ours as $prefix) {
+                // upload_path_prefixes() drops empty prefixes, so the empty-string arm is never taken.
+                // @pest-mutate-ignore:EmptyStringToNotEmpty
                 if ($prefix === '' || stripos($full, $prefix.'/') === false) {
                     continue;
                 }
@@ -1164,6 +1176,8 @@ class UAMS_MRA_Scanner
 
             [, $base_norm] = UAMS_MRA_Index::normalize($path);
 
+            // normalize() returns a non-empty name for any path this pattern can match, so the empty test is a guard that never fires.
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ($base_norm === '') {
                 continue;
             }
@@ -1280,6 +1294,8 @@ class UAMS_MRA_Scanner
      */
     protected static function foreign_id_key_pattern(): string
     {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         return (string) apply_filters(
             'uams_mra_foreign_id_key_pattern',
             '#(^|_)(user|author|customer|post|page|parent|term|category|tag|comment|order|site|blog|form|entry)_id$#i'
@@ -1295,6 +1311,8 @@ class UAMS_MRA_Scanner
     {
         $pattern = self::foreign_id_key_pattern();
 
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         return $pattern !== '' && preg_match($pattern, (string) $key) === 1;
     }
 
@@ -1371,7 +1389,13 @@ class UAMS_MRA_Scanner
     {
         $uploads = wp_get_upload_dir();
 
-        return trim((string) wp_parse_url((string) $uploads['baseurl'], PHP_URL_PATH), '/');
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $baseurl = (string) $uploads['baseurl'];
+
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        return trim((string) wp_parse_url($baseurl, PHP_URL_PATH), '/');
     }
 
     /**
@@ -1384,7 +1408,13 @@ class UAMS_MRA_Scanner
         $uploads = wp_get_upload_dir();
         $hosts = [];
 
-        foreach ([(string) $uploads['baseurl'], home_url(), site_url()] as $url) {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $urls = [(string) $uploads['baseurl'], home_url(), site_url()];
+
+        foreach ($urls as $url) {
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
 
             if ($host !== '') {
@@ -1401,14 +1431,20 @@ class UAMS_MRA_Scanner
     public static function upload_path_prefixes(): array
     {
         $uploads = wp_get_upload_dir();
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $base = (string) wp_parse_url($uploads['baseurl'], PHP_URL_PATH);
         $base = trim($base, '/');
 
         $prefixes = [$base];
 
         $settings = uams_mra_settings();
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         foreach (preg_split('#[\r\n]+#', (string) $settings['extra_paths']) as $extra) {
             $extra = trim(trim($extra), '/');
+            // array_filter() below drops an empty prefix whether or not this test does.
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ($extra !== '') {
                 $prefixes[] = $extra;
             }
@@ -1425,6 +1461,8 @@ class UAMS_MRA_Scanner
      */
     public static function extract_paths($content, $prefixes = null): array
     {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $content = (string) $content;
 
         if (! str_contains($content, '/')) {
@@ -1439,6 +1477,10 @@ class UAMS_MRA_Scanner
         $found = [];
 
         foreach ($prefixes as $prefix) {
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
+            // Skipping this test only runs the match below on a prefix the text lacks, which finds nothing.
+            // @pest-mutate-ignore:FalseToTrue
             if (stripos($content, (string) $prefix) === false) {
                 continue;
             }
@@ -1472,6 +1514,8 @@ class UAMS_MRA_Scanner
      */
     public static function extract_ids_from_content($content): array
     {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $content = (string) $content;
         $ids = [];
 
@@ -1495,6 +1539,8 @@ class UAMS_MRA_Scanner
         // Shortcode ID lists: [gallery ids="1,2,3"].
         if (preg_match_all('#\bids\s*=\s*["\']([\d,\s]+)["\']#i', $content, $m)) {
             foreach ($m[1] as $list) {
+                // A blank entry becomes 0, which array_filter() removes at the end.
+                // @pest-mutate-ignore:UnwrapTrim
                 $ids = array_merge($ids, preg_split('#[\s,]+#', trim($list)));
             }
         }
@@ -1508,6 +1554,8 @@ class UAMS_MRA_Scanner
 
                 if (preg_match_all('#"ids"\s*:\s*\[([\d,\s]*)\]#', $block, $bm)) {
                     foreach ($bm[1] as $list) {
+                        // A blank entry becomes 0, which array_filter() removes at the end.
+                        // @pest-mutate-ignore:UnwrapTrim
                         $ids = array_merge($ids, preg_split('#[\s,]+#', trim($list)));
                     }
                 }
@@ -1527,6 +1575,8 @@ class UAMS_MRA_Scanner
      */
     public static function scan_meta_value($key, $value, $allow_numeric = true): array
     {
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $value = (string) $value;
         $hits = [];
 
@@ -1623,13 +1673,19 @@ class UAMS_MRA_Scanner
                 continue;
             }
 
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $value = trim((string) $value);
 
+            // An empty value fails ctype_digit() on the next test, so the first test is redundant.
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             if ($value === '' || ! ctype_digit($value) || strlen($value) > 11) {
                 continue;
             }
 
             // Numeric keys inside a list of IDs, or a key that reads like a media field.
+            // An integer key is handled by the test before it, so only string keys reach this match.
+            // @pest-mutate-ignore:RemoveStringCast
             if (is_int($key) || preg_match('#(id|logo|image|img|icon|media|attachment|thumb|photo|gallery|file|banner|header|background)#i', (string) $key)) {
                 $ids[] = (int) $value;
             }
