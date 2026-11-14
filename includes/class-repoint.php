@@ -998,14 +998,18 @@ class UAMS_MRA_Repoint
             // The file is in and usable at full size. Sizes can be rebuilt later
             // by a regeneration plugin, or by raising the memory limit and
             // re-saving, neither of which needs the old host to still exist.
+            // `getimagesize()` returns integers, so the casts change nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $width = (int) $dimensions[0];
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $height = (int) $dimensions[1];
+
             wp_update_attachment_metadata(
                 $attachment_id,
                 [
                     'file' => _wp_relative_upload_path($sideloaded['file']),
-                    // `getimagesize()` returns integers, so the casts change nothing.
-                    // @pest-mutate-ignore:RemoveIntegerCast
-                    'width' => (int) $dimensions[0],
-                    'height' => (int) $dimensions[1],
+                    'width' => $width,
+                    'height' => $height,
                     'sizes' => [],
                 ]
             );
