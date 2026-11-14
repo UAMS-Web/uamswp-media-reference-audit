@@ -1338,7 +1338,6 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = $get === 'error' ? new WP_Error('http_request_failed', 'no route') : ($get[1] === 'over' ? [200, str_repeat('a', 1048577)] : $get);
         $this->sideloadJob([$group]);
 
-        $tmp_before = glob(sys_get_temp_dir().'/*.tmp') ?: [];
         $job = UAMS_MRA_Repoint::step();
 
         global $wpdb;
@@ -1350,7 +1349,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame(1, $job['failed']);
         $this->assertSame(0, $job['applied']);
         $this->assertSame(1, $job['done']);
-        $this->assertSame([], array_values(array_diff(glob(sys_get_temp_dir().'/*.tmp') ?: [], $tmp_before)));
+        // The download's own temporary file is the one named in the request, so other processes using the directory cannot disturb the check.
+        foreach ($this->requests as [$method, , $args]) {
+            if ($method === 'GET') {
+                $this->assertFileDoesNotExist((string) $args['filename']);
+            }
+        }
+
         $this->assertSame(0, (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_title = '".pathinfo($name, PATHINFO_FILENAME)."'"));
     }
 
