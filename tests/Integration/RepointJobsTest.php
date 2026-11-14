@@ -101,7 +101,7 @@ final class RepointJobsTest extends IntegrationTestCase
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>|WP_Error
      */
-    public function answer($pre, array $args, string $url)
+    public function answer($pre, array $args, string $url): WP_Error|array
     {
         $method = (string) ($args['method'] ?? 'GET');
         $this->requests[] = [$method, $url, $args];
