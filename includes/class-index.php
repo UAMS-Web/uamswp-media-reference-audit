@@ -169,7 +169,7 @@ class UAMS_MRA_Index
     {
         global $wpdb;
 
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $ids = array_values(array_unique(array_filter(array_map(intval(...), $ids))));
         if ($ids === []) {
             return [];
         }
