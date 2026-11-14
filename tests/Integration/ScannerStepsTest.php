@@ -161,15 +161,23 @@ final class ScannerStepsTest extends IntegrationTestCase
         return (int) $wpdb->get_var("SELECT MAX({$column}) FROM {$table}");
     }
 
+    /**
+     * assertSame() with untyped parameters, so static analysis does not narrow either side from what it saw earlier.
+     */
+    private function same(mixed $expected, mixed $actual, string $message = ''): void
+    {
+        self::assertSame($expected, $actual, $message);
+    }
+
     // get_state(), set_state(), step_label()
 
     public function test_the_state_is_empty_when_nothing_is_stored_or_the_stored_value_is_not_an_array(): void
     {
-        $this->assertSame([], UAMS_MRA_Scanner::get_state());
+        $this->same([], UAMS_MRA_Scanner::get_state());
 
         update_option(UAMS_MRA_Scanner::STATE_OPTION, 'garbage');
 
-        $this->assertSame([], UAMS_MRA_Scanner::get_state());
+        $this->same([], UAMS_MRA_Scanner::get_state());
     }
 
     public function test_the_state_is_stored_without_autoloading_and_read_back_whole(): void
@@ -178,7 +186,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         UAMS_MRA_Scanner::set_state(['step' => 'posts', 'cursor' => 7]);
 
-        $this->assertSame(['step' => 'posts', 'cursor' => 7], UAMS_MRA_Scanner::get_state());
+        $this->same(['step' => 'posts', 'cursor' => 7], UAMS_MRA_Scanner::get_state());
         $this->assertContains(
             $wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", UAMS_MRA_Scanner::STATE_OPTION)),
             ['no', 'off'],
@@ -195,9 +203,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         }
 
         $this->assertCount(11, array_unique($labels));
-        $this->assertSame('Building the file index', $labels['index']);
-        $this->assertSame('Scan complete', $labels['done']);
-        $this->assertSame('mystery', UAMS_MRA_Scanner::step_label('mystery'));
+        $this->same('Building the file index', $labels['index']);
+        $this->same('Scan complete', $labels['done']);
+        $this->same('mystery', UAMS_MRA_Scanner::step_label('mystery'));
     }
 
     // start()
@@ -212,19 +220,19 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = UAMS_MRA_Scanner::start();
 
         $this->assertIsArray($state);
-        $this->assertSame([], $this->refs());
-        $this->assertSame($state, UAMS_MRA_Scanner::get_state());
-        $this->assertSame('index', $state['step']);
-        $this->assertSame(0, $state['cursor']);
-        $this->assertSame(0, $state['processed']);
-        $this->assertSame(2, $state['attachments']);
+        $this->same([], $this->refs());
+        $this->same($state, UAMS_MRA_Scanner::get_state());
+        $this->same('index', $state['step']);
+        $this->same(0, $state['cursor']);
+        $this->same(0, $state['processed']);
+        $this->same(2, $state['attachments']);
         $this->assertGreaterThanOrEqual($before, $state['started']);
-        $this->assertSame(0, $state['finished']);
-        $this->assertSame([], $state['site_queue']);
-        $this->assertSame([], $state['render_queue']);
-        $this->assertSame(uams_mra_settings(), $state['settings']);
-        $this->assertSame([], $state['counts']);
-        $this->assertSame('Building the file index', $state['message']);
+        $this->same(0, $state['finished']);
+        $this->same([], $state['site_queue']);
+        $this->same([], $state['render_queue']);
+        $this->same(uams_mra_settings(), $state['settings']);
+        $this->same([], $state['counts']);
+        $this->same('Building the file index', $state['message']);
     }
 
     public function test_a_scan_does_not_start_while_a_repoint_is_running(): void
@@ -235,23 +243,23 @@ final class ScannerStepsTest extends IntegrationTestCase
         $result = UAMS_MRA_Scanner::start();
 
         $this->assertWPError($result);
-        $this->assertSame('uams_mra_busy', $result->get_error_code());
+        $this->same('uams_mra_busy', $result->get_error_code());
         $this->assertCount(1, $this->refs());
-        $this->assertSame([], UAMS_MRA_Scanner::get_state());
+        $this->same([], UAMS_MRA_Scanner::get_state());
     }
 
     // step() and advance()
 
     public function test_a_step_with_no_state_or_a_finished_scan_changes_nothing(): void
     {
-        $this->assertSame([], UAMS_MRA_Scanner::step());
+        $this->same([], UAMS_MRA_Scanner::step());
         $this->assertFalse(get_option(UAMS_MRA_Scanner::STATE_OPTION));
 
         $done = $this->state('done', [], ['finished' => 123, 'message' => 'Scan complete']);
         UAMS_MRA_Scanner::set_state($done);
 
-        $this->assertSame($done, UAMS_MRA_Scanner::step());
-        $this->assertSame($done, UAMS_MRA_Scanner::get_state());
+        $this->same($done, UAMS_MRA_Scanner::step());
+        $this->same($done, UAMS_MRA_Scanner::get_state());
     }
 
     public function test_a_step_runs_the_named_step_and_stores_the_result(): void
@@ -260,16 +268,16 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('index'));
 
-        $this->assertSame('posts', $state['step']);
-        $this->assertSame($state, UAMS_MRA_Scanner::get_state());
+        $this->same('posts', $state['step']);
+        $this->same($state, UAMS_MRA_Scanner::get_state());
     }
 
     public function test_a_step_with_no_method_moves_on_and_is_not_stored_by_itself(): void
     {
         $state = $this->scanStep($this->state('index', [], ['step' => 'bogus']));
 
-        $this->assertSame('done', $state['step']);
-        $this->assertSame('Scan complete', $state['message']);
+        $this->same('done', $state['step']);
+        $this->same('Scan complete', $state['message']);
         $this->assertGreaterThan(0, $state['finished']);
     }
 
@@ -286,8 +294,8 @@ final class ScannerStepsTest extends IntegrationTestCase
             $seen[] = $state['step'];
         }
 
-        $this->assertSame(['posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'finalize', 'done'], $seen);
-        $this->assertSame(0, $state['cursor']);
+        $this->same(['posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'finalize', 'done'], $seen);
+        $this->same(0, $state['cursor']);
     }
 
     public function test_the_last_step_ends_the_scan_and_a_new_step_gets_its_label(): void
@@ -296,19 +304,19 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $next = $method->invoke(null, $this->state('posts', [], ['cursor' => 5]));
 
-        $this->assertSame('postmeta', $next['step']);
-        $this->assertSame(0, $next['cursor']);
-        $this->assertSame(UAMS_MRA_Scanner::step_label('postmeta'), $next['message']);
+        $this->same('postmeta', $next['step']);
+        $this->same(0, $next['cursor']);
+        $this->same(UAMS_MRA_Scanner::step_label('postmeta'), $next['message']);
 
         $end = $method->invoke(null, $this->state('render'));
 
-        $this->assertSame('done', $end['step']);
-        $this->assertSame('Scan complete', $end['message']);
+        $this->same('done', $end['step']);
+        $this->same('Scan complete', $end['message']);
         $this->assertGreaterThan(0, $end['finished']);
 
         $unknown = $method->invoke(null, $this->state('nowhere'));
 
-        $this->assertSame('done', $unknown['step']);
+        $this->same('done', $unknown['step']);
     }
 
     public function test_each_optional_step_is_skipped_only_when_its_own_setting_is_off(): void
@@ -316,14 +324,14 @@ final class ScannerStepsTest extends IntegrationTestCase
         $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
         $on = ['include_termmeta' => 1, 'include_usermeta' => 1, 'include_comments' => 1, 'include_network' => 0, 'include_render' => 0];
 
-        $this->assertSame('termmeta', $method->invoke(null, $this->state('options', $on))['step']);
-        $this->assertSame('usermeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0] + $on))['step']);
-        $this->assertSame('commentmeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0] + $on))['step']);
-        $this->assertSame('finalize', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0] + $on))['step']);
-        $this->assertSame('usermeta', $method->invoke(null, $this->state('termmeta', $on))['step']);
-        $this->assertSame('commentmeta', $method->invoke(null, $this->state('usermeta', $on))['step']);
-        $this->assertSame('finalize', $method->invoke(null, $this->state('commentmeta', $on))['step']);
-        $this->assertSame('done', $method->invoke(null, $this->state('finalize', $on))['step']);
+        $this->same('termmeta', $method->invoke(null, $this->state('options', $on))['step']);
+        $this->same('usermeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0] + $on))['step']);
+        $this->same('commentmeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0] + $on))['step']);
+        $this->same('finalize', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0] + $on))['step']);
+        $this->same('usermeta', $method->invoke(null, $this->state('termmeta', $on))['step']);
+        $this->same('commentmeta', $method->invoke(null, $this->state('usermeta', $on))['step']);
+        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', $on))['step']);
+        $this->same('done', $method->invoke(null, $this->state('finalize', $on))['step']);
     }
 
     public function test_the_skipped_steps_still_leave_the_cursor_at_zero_and_the_label_of_the_step_reached(): void
@@ -332,17 +340,17 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $next = $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0, 'include_render' => 0], ['cursor' => 9]));
 
-        $this->assertSame('finalize', $next['step']);
-        $this->assertSame(0, $next['cursor']);
-        $this->assertSame(UAMS_MRA_Scanner::step_label('finalize'), $next['message']);
+        $this->same('finalize', $next['step']);
+        $this->same(0, $next['cursor']);
+        $this->same(UAMS_MRA_Scanner::step_label('finalize'), $next['message']);
     }
 
     public function test_the_render_step_is_skipped_when_it_is_off_or_has_nothing_to_fetch_and_entered_when_it_does(): void
     {
         $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
 
-        $this->assertSame('done', $method->invoke(null, $this->state('finalize', ['include_render' => 0]))['step']);
-        $this->assertSame('done', $method->invoke(null, $this->state('finalize', ['include_render' => 1]))['step']);
+        $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 0]))['step']);
+        $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 1]))['step']);
 
         $parent = self::factory()->post->create(['post_status' => 'publish']);
         $attachment = $this->attachment('2025/11/a.jpg', $parent);
@@ -350,32 +358,32 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $method->invoke(null, $this->state('finalize', ['include_render' => 1], ['cursor' => 4]));
 
-        $this->assertSame('render', $state['step']);
-        $this->assertSame([$parent], $state['render_queue']);
-        $this->assertSame(0, $state['cursor']);
-        $this->assertSame(UAMS_MRA_Scanner::step_label('render'), $state['message']);
+        $this->same('render', $state['step']);
+        $this->same([$parent], $state['render_queue']);
+        $this->same(0, $state['cursor']);
+        $this->same(UAMS_MRA_Scanner::step_label('render'), $state['message']);
     }
 
     public function test_the_network_step_is_skipped_on_a_single_site_or_when_it_is_off(): void
     {
         $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
 
-        $this->assertSame('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 0]))['step']);
+        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 0]))['step']);
 
         if (! is_multisite()) {
-            $this->assertSame('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step']);
+            $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step']);
 
             return;
         }
 
-        $this->assertSame('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step'], 'No other site yet.');
+        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step'], 'No other site yet.');
 
         $this->setExpectedDeprecated('wpmu_new_blog');
         $other = self::factory()->blog->create();
         $state = $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]));
 
-        $this->assertSame('network', $state['step']);
-        $this->assertSame([$other], $state['site_queue']);
+        $this->same('network', $state['step']);
+        $this->same([$other], $state['site_queue']);
     }
 
     // step_index()
@@ -390,18 +398,18 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('index', ['batch_index' => 2], ['cursor' => $a - 1, 'processed' => 5]));
 
-        $this->assertSame('index', $state['step']);
-        $this->assertSame($b, $state['cursor']);
-        $this->assertSame(7, $state['processed']);
-        $this->assertSame(2, (int) $wpdb->get_var('SELECT COUNT(*) FROM '.UAMS_MRA_Store::index_table()));
+        $this->same('index', $state['step']);
+        $this->same($b, $state['cursor']);
+        $this->same(7, $state['processed']);
+        $this->same(2, (int) $wpdb->get_var('SELECT COUNT(*) FROM '.UAMS_MRA_Store::index_table()));
 
         $state = $this->scanStep($state);
 
-        $this->assertSame('posts', $state['step']);
-        $this->assertSame(0, $state['cursor']);
-        $this->assertSame(8, $state['processed']);
-        $this->assertSame(3, (int) $wpdb->get_var('SELECT COUNT(*) FROM '.UAMS_MRA_Store::index_table()));
-        $this->assertSame($c, (int) $wpdb->get_var('SELECT MAX(attachment_id) FROM '.UAMS_MRA_Store::index_table()));
+        $this->same('posts', $state['step']);
+        $this->same(0, $state['cursor']);
+        $this->same(8, $state['processed']);
+        $this->same(3, (int) $wpdb->get_var('SELECT COUNT(*) FROM '.UAMS_MRA_Store::index_table()));
+        $this->same($c, (int) $wpdb->get_var('SELECT MAX(attachment_id) FROM '.UAMS_MRA_Store::index_table()));
     }
 
     public function test_the_index_step_stays_on_a_batch_that_is_exactly_full_and_ends_on_the_next(): void
@@ -410,11 +418,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $full = $this->scanStep($this->state('index', ['batch_index' => 1], ['cursor' => $a - 1]));
 
-        $this->assertSame('index', $full['step']);
+        $this->same('index', $full['step']);
 
         $end = $this->scanStep($full);
 
-        $this->assertSame('posts', $end['step']);
+        $this->same('posts', $end['step']);
     }
 
     // step_posts()
@@ -438,17 +446,17 @@ final class ScannerStepsTest extends IntegrationTestCase
         $ids = array_column($refs, 'attachment_id');
         sort($ids);
 
-        $this->assertSame([$by_class, $by_path], array_map('intval', $ids));
-        $this->assertNotContains($unused, array_map('intval', $ids));
+        $this->same([$by_class, $by_path], array_map(intval(...), $ids));
+        $this->assertNotContains($unused, array_map(intval(...), $ids));
 
         foreach ($refs as $ref) {
-            $this->assertSame('content', $ref['source_type']);
-            $this->assertSame((string) $post, $ref['source_id']);
-            $this->assertSame('post: Alpha (draft)', $ref['source_label']);
-            $this->assertSame('2', $ref['confidence']);
+            $this->same('content', $ref['source_type']);
+            $this->same((string) $post, $ref['source_id']);
+            $this->same('post: Alpha (draft)', $ref['source_label']);
+            $this->same('2', $ref['confidence']);
         }
 
-        $this->assertSame('postmeta', $state['step']);
+        $this->same('postmeta', $state['step']);
     }
 
     public function test_the_posts_step_reads_the_excerpt_and_labels_an_untitled_published_post_without_a_status(): void
@@ -459,7 +467,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('posts', [], ['cursor' => $post - 1]));
 
-        $this->assertSame([['attachment_id' => (string) $attachment, 'source_type' => 'content', 'source_id' => (string) $post, 'source_label' => 'post: (no title)', 'site_id' => '0', 'confidence' => '2']], $this->refs());
+        $this->same([['attachment_id' => (string) $attachment, 'source_type' => 'content', 'source_id' => (string) $post, 'source_label' => 'post: (no title)', 'site_id' => '0', 'confidence' => '2']], $this->refs());
     }
 
     public function test_the_posts_step_scans_every_type_but_attachments_and_a_post_is_not_its_own_reference_source(): void
@@ -472,8 +480,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $refs = $this->refs();
 
         $this->assertCount(1, $refs);
-        $this->assertSame('page: About', $refs[0]['source_label']);
-        $this->assertSame((string) $page, $refs[0]['source_id']);
+        $this->same('page: About', $refs[0]['source_label']);
+        $this->same((string) $page, $refs[0]['source_id']);
     }
 
     public function test_the_posts_step_counts_revisions_only_when_asked_and_labels_their_references(): void
@@ -484,15 +492,15 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('posts', ['include_revisions' => 0], ['cursor' => $post - 1]));
 
-        $this->assertSame([], $this->refs());
+        $this->same([], $this->refs());
 
         $this->scanStep($this->state('posts', ['include_revisions' => 1], ['cursor' => $post - 1]));
         $refs = $this->refs();
 
         $this->assertCount(1, $refs);
-        $this->assertSame('revision', $refs[0]['source_type']);
-        $this->assertSame((string) $revision, $refs[0]['source_id']);
-        $this->assertSame('revision: Rev', $refs[0]['source_label']);
+        $this->same('revision', $refs[0]['source_type']);
+        $this->same((string) $revision, $refs[0]['source_id']);
+        $this->same('revision: Rev', $refs[0]['source_label']);
     }
 
     public function test_the_posts_step_records_offsite_urls_for_posts_but_never_for_revisions_or_when_tracking_is_off(): void
@@ -502,11 +510,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('posts', ['include_revisions' => 1, 'include_offsite' => 0], ['cursor' => $post - 1]));
 
-        $this->assertSame([], $this->offsite());
+        $this->same([], $this->offsite());
 
         $this->scanStep($this->state('posts', ['include_revisions' => 1, 'include_offsite' => 1], ['cursor' => $post - 1]));
 
-        $this->assertSame([[
+        $this->same([[
             'url' => 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg',
             'host' => 'old.example.edu',
             'base_norm' => 'a.jpg',
@@ -527,7 +535,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('posts', [], ['cursor' => $empty - 1, 'processed' => 3]));
 
-        $this->assertSame('postmeta', $state['step']);
+        $this->same('postmeta', $state['step']);
         $this->assertCount(1, $this->refs());
 
         UAMS_MRA_Store::reset();
@@ -535,15 +543,15 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $first = $this->scanStep($this->state('posts', ['batch_posts' => 1], ['cursor' => $empty - 1]));
 
-        $this->assertSame('posts', $first['step']);
-        $this->assertSame($empty, $first['cursor']);
-        $this->assertSame(1, $first['processed']);
-        $this->assertSame([], $this->refs());
+        $this->same('posts', $first['step']);
+        $this->same($empty, $first['cursor']);
+        $this->same(1, $first['processed']);
+        $this->same([], $this->refs());
 
         $second = $this->scanStep($first);
 
-        $this->assertSame($full, $second['cursor']);
-        $this->assertSame(2, $second['processed']);
+        $this->same($full, $second['cursor']);
+        $this->same(2, $second['processed']);
         $this->assertCount(1, $this->refs());
     }
 
@@ -553,9 +561,9 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('posts', [], ['cursor' => $post + 1000, 'processed' => 4]));
 
-        $this->assertSame('postmeta', $state['step']);
-        $this->assertSame(0, $state['cursor']);
-        $this->assertSame(4, $state['processed']);
+        $this->same('postmeta', $state['step']);
+        $this->same(0, $state['cursor']);
+        $this->same(4, $state['processed']);
     }
 
     public function test_the_posts_step_batches_by_its_setting(): void
@@ -566,14 +574,14 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $first = $this->scanStep($this->state('posts', ['batch_posts' => 2], ['cursor' => $a - 1]));
 
-        $this->assertSame('posts', $first['step']);
-        $this->assertSame($b, $first['cursor']);
-        $this->assertSame(2, $first['processed']);
+        $this->same('posts', $first['step']);
+        $this->same($b, $first['cursor']);
+        $this->same(2, $first['processed']);
 
         $second = $this->scanStep($first);
 
-        $this->assertSame('postmeta', $second['step']);
-        $this->assertSame(3, $second['processed']);
+        $this->same('postmeta', $second['step']);
+        $this->same(3, $second['processed']);
         $this->assertGreaterThan($b, $c);
     }
 
@@ -595,11 +603,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         $refs = $this->refs();
         usort($refs, static fn (array $a, array $b): int => (int) $a['attachment_id'] <=> (int) $b['attachment_id']);
 
-        $this->assertSame([
+        $this->same([
             ['attachment_id' => (string) $by_path, 'source_type' => 'postmeta', 'source_id' => (string) $post, 'source_label' => 'hero on post: Alpha (draft)', 'site_id' => '0', 'confidence' => '2'],
             ['attachment_id' => (string) $by_number, 'source_type' => 'postmeta', 'source_id' => (string) $post, 'source_label' => 'logo on post: Alpha (draft)', 'site_id' => '0', 'confidence' => '1'],
         ], $refs);
-        $this->assertSame('options', $state['step']);
+        $this->same('options', $state['step']);
     }
 
     public function test_the_postmeta_step_takes_a_bare_number_only_when_the_setting_allows_it(): void
@@ -613,7 +621,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('postmeta', ['include_numeric_meta' => 0], ['cursor' => $before]));
 
-        $this->assertSame([], $this->refs());
+        $this->same([], $this->refs());
 
         $this->scanStep($this->state('postmeta', ['include_numeric_meta' => 1], ['cursor' => $before]));
 
@@ -634,9 +642,9 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('postmeta', [], ['cursor' => $before]));
 
-        $this->assertSame([], $this->refs());
-        $this->assertSame('options', $state['step']);
-        $this->assertSame(3, $state['processed']);
+        $this->same([], $this->refs());
+        $this->same('options', $state['step']);
+        $this->same(3, $state['processed']);
         $this->assertLessThan($post, $attachment);
     }
 
@@ -655,7 +663,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $refs = $this->refs();
 
         $this->assertCount(1, $refs);
-        $this->assertSame((string) $other, $refs[0]['attachment_id']);
+        $this->same((string) $other, $refs[0]['attachment_id']);
     }
 
     public function test_the_postmeta_step_reads_revision_meta_only_when_asked_and_calls_it_revision_meta(): void
@@ -670,16 +678,16 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('postmeta', ['include_revisions' => 0], ['cursor' => $before]));
 
-        $this->assertSame([], $this->refs());
+        $this->same([], $this->refs());
 
         $this->scanStep($this->state('postmeta', ['include_revisions' => 1], ['cursor' => $before]));
         $refs = $this->refs();
 
         $this->assertCount(1, $refs);
-        $this->assertSame('revision_meta', $refs[0]['source_type']);
-        $this->assertSame((string) $revision, $refs[0]['source_id']);
-        $this->assertSame('hero on revision: Rev', $refs[0]['source_label']);
-        $this->assertSame((string) $attachment, $refs[0]['attachment_id']);
+        $this->same('revision_meta', $refs[0]['source_type']);
+        $this->same((string) $revision, $refs[0]['source_id']);
+        $this->same('hero on revision: Rev', $refs[0]['source_label']);
+        $this->same((string) $attachment, $refs[0]['attachment_id']);
     }
 
     public function test_the_postmeta_step_records_offsite_urls_with_the_row_and_key_to_write_back_to(): void
@@ -696,11 +704,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('postmeta', ['include_offsite' => 0, 'include_revisions' => 1], ['cursor' => $before]));
 
-        $this->assertSame([], $this->offsite());
+        $this->same([], $this->offsite());
 
         $this->scanStep($this->state('postmeta', ['include_offsite' => 1, 'include_revisions' => 1], ['cursor' => $before]));
 
-        $this->assertSame([[
+        $this->same([[
             'url' => $url,
             'host' => 'old.example.edu',
             'base_norm' => 'a.jpg',
@@ -721,24 +729,24 @@ final class ScannerStepsTest extends IntegrationTestCase
         add_post_meta($post, 'a', 'x');
         add_post_meta($post, 'b', 'x');
         add_post_meta($post, 'c', 'x');
-        $ids = array_map('intval', $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->postmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
+        $ids = array_map(intval(...), $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->postmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
         $second = $ids[1];
 
         $first = $this->scanStep($this->state('postmeta', ['batch_meta' => 2], ['cursor' => $before]));
 
-        $this->assertSame('postmeta', $first['step']);
-        $this->assertSame($second, $first['cursor']);
-        $this->assertSame(2, $first['processed']);
+        $this->same('postmeta', $first['step']);
+        $this->same($second, $first['cursor']);
+        $this->same(2, $first['processed']);
 
         $next = $this->scanStep($first);
 
-        $this->assertSame('options', $next['step']);
-        $this->assertSame(3, $next['processed']);
+        $this->same('options', $next['step']);
+        $this->same(3, $next['processed']);
 
         $empty = $this->scanStep($this->state('postmeta', [], ['cursor' => $second + 100, 'processed' => 8]));
 
-        $this->assertSame('options', $empty['step']);
-        $this->assertSame(8, $empty['processed']);
+        $this->same('options', $empty['step']);
+        $this->same(8, $empty['processed']);
     }
 
     // step_options()
@@ -758,15 +766,15 @@ final class ScannerStepsTest extends IntegrationTestCase
         usort($refs, static fn (array $a, array $b): int => (int) $a['attachment_id'] <=> (int) $b['attachment_id']);
 
         $this->assertCount(2, $refs);
-        $this->assertSame((string) $by_path, $refs[0]['attachment_id']);
-        $this->assertSame('option', $refs[0]['source_type']);
-        $this->assertSame('Option: site_logo_x', $refs[0]['source_label']);
-        $this->assertSame('2', $refs[0]['confidence']);
-        $this->assertSame((string) $this->optionId('site_logo_x'), $refs[0]['source_id']);
-        $this->assertSame((string) $by_number, $refs[1]['attachment_id']);
-        $this->assertSame('Option: header_image_x', $refs[1]['source_label']);
-        $this->assertSame('1', $refs[1]['confidence']);
-        $this->assertSame('termmeta', $state['step']);
+        $this->same((string) $by_path, $refs[0]['attachment_id']);
+        $this->same('option', $refs[0]['source_type']);
+        $this->same('Option: site_logo_x', $refs[0]['source_label']);
+        $this->same('2', $refs[0]['confidence']);
+        $this->same((string) $this->optionId('site_logo_x'), $refs[0]['source_id']);
+        $this->same((string) $by_number, $refs[1]['attachment_id']);
+        $this->same('Option: header_image_x', $refs[1]['source_label']);
+        $this->same('1', $refs[1]['confidence']);
+        $this->same('termmeta', $state['step']);
     }
 
     private function optionId(string $name): int
@@ -797,8 +805,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $expected = ['Option: Xtransient_look_x', 'Option: XsiteXtransient_look_x', 'Option: uams_mraXlook_x'];
         sort($expected);
 
-        $this->assertSame($expected, $labels);
-        $this->assertSame(4, $state['processed']);
+        $this->same($expected, $labels);
+        $this->same(4, $state['processed']);
     }
 
     public function test_the_options_step_takes_a_bare_number_only_when_the_setting_allows_it(): void
@@ -811,7 +819,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('options', ['include_numeric_meta' => 0], ['cursor' => $before]));
 
-        $this->assertSame([], $this->refs());
+        $this->same([], $this->refs());
     }
 
     public function test_the_options_step_records_offsite_urls_with_the_option_to_write_back_to(): void
@@ -825,11 +833,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('options', ['include_offsite' => 0], ['cursor' => $before]));
 
-        $this->assertSame([], $this->offsite());
+        $this->same([], $this->offsite());
 
         $this->scanStep($this->state('options', ['include_offsite' => 1], ['cursor' => $before]));
 
-        $this->assertSame([[
+        $this->same([[
             'url' => $url,
             'host' => 'old.example.edu',
             'base_norm' => 'a.jpg',
@@ -852,19 +860,19 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $first = $this->scanStep($this->state('options', ['batch_meta' => 2], ['cursor' => $before]));
 
-        $this->assertSame('options', $first['step']);
-        $this->assertSame($this->optionId('b_x'), $first['cursor']);
-        $this->assertSame(2, $first['processed']);
+        $this->same('options', $first['step']);
+        $this->same($this->optionId('b_x'), $first['cursor']);
+        $this->same(2, $first['processed']);
 
         $next = $this->scanStep($first);
 
-        $this->assertSame('termmeta', $next['step']);
-        $this->assertSame(3, $next['processed']);
+        $this->same('termmeta', $next['step']);
+        $this->same(3, $next['processed']);
 
         $empty = $this->scanStep($this->state('options', [], ['cursor' => $this->maxId($wpdb->options, 'option_id') + 100, 'processed' => 6]));
 
-        $this->assertSame('termmeta', $empty['step']);
-        $this->assertSame(6, $empty['processed']);
+        $this->same('termmeta', $empty['step']);
+        $this->same(6, $empty['processed']);
     }
 
     // step_termmeta(), step_usermeta(), step_commentmeta()
@@ -884,11 +892,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         $refs = $this->refs();
         usort($refs, static fn (array $a, array $b): int => (int) $a['attachment_id'] <=> (int) $b['attachment_id']);
 
-        $this->assertSame([
+        $this->same([
             ['attachment_id' => (string) $by_path, 'source_type' => 'termmeta', 'source_id' => (string) $term, 'source_label' => 'Term #'.$term.': banner', 'site_id' => '0', 'confidence' => '2'],
             ['attachment_id' => (string) $by_number, 'source_type' => 'termmeta', 'source_id' => (string) $term, 'source_label' => 'Term #'.$term.': icon', 'site_id' => '0', 'confidence' => '1'],
         ], $refs);
-        $this->assertSame('usermeta', $state['step']);
+        $this->same('usermeta', $state['step']);
     }
 
     public function test_the_user_meta_step_never_takes_a_bare_number_but_does_take_a_url(): void
@@ -906,10 +914,10 @@ final class ScannerStepsTest extends IntegrationTestCase
         $refs = $this->refs();
 
         $this->assertCount(1, $refs);
-        $this->assertSame((string) $by_path, $refs[0]['attachment_id']);
-        $this->assertSame('usermeta', $refs[0]['source_type']);
-        $this->assertSame('User #'.$user.': banner_x', $refs[0]['source_label']);
-        $this->assertSame('commentmeta', $state['step']);
+        $this->same((string) $by_path, $refs[0]['attachment_id']);
+        $this->same('usermeta', $refs[0]['source_type']);
+        $this->same('User #'.$user.': banner_x', $refs[0]['source_label']);
+        $this->same('commentmeta', $state['step']);
     }
 
     public function test_the_comment_meta_step_records_references_labelled_with_the_comment(): void
@@ -924,8 +932,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->state('commentmeta', ['include_network' => 0], ['cursor' => $before]));
         $refs = $this->refs();
 
-        $this->assertSame([['attachment_id' => (string) $attachment, 'source_type' => 'commentmeta', 'source_id' => (string) $comment, 'source_label' => 'Comment #'.$comment.': photo_x', 'site_id' => '0', 'confidence' => '2']], $refs);
-        $this->assertSame('finalize', $state['step']);
+        $this->same([['attachment_id' => (string) $attachment, 'source_type' => 'commentmeta', 'source_id' => (string) $comment, 'source_label' => 'Comment #'.$comment.': photo_x', 'site_id' => '0', 'confidence' => '2']], $refs);
+        $this->same('finalize', $state['step']);
     }
 
     public function test_the_generic_meta_steps_skip_describing_meta_and_empty_values_and_record_offsite_urls(): void
@@ -943,12 +951,12 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('termmeta', ['include_offsite' => 0], ['cursor' => $before]));
 
-        $this->assertSame([], $this->offsite());
-        $this->assertSame([], $this->refs());
+        $this->same([], $this->offsite());
+        $this->same([], $this->refs());
 
         $state = $this->scanStep($this->state('termmeta', ['include_offsite' => 1], ['cursor' => $before]));
 
-        $this->assertSame([[
+        $this->same([[
             'url' => $url,
             'host' => 'old.example.edu',
             'base_norm' => 'other.jpg',
@@ -958,7 +966,7 @@ final class ScannerStepsTest extends IntegrationTestCase
             'source_key' => 'banner_x',
             'source_label' => 'Term #'.$term.': banner_x',
         ]], $this->offsite());
-        $this->assertSame(3, $state['processed']);
+        $this->same(3, $state['processed']);
     }
 
     public function test_the_generic_meta_steps_batch_by_their_setting_and_advance_on_an_empty_page(): void
@@ -970,23 +978,23 @@ final class ScannerStepsTest extends IntegrationTestCase
         add_term_meta($term, 'a_x', 'v');
         add_term_meta($term, 'b_x', 'v');
         add_term_meta($term, 'c_x', 'v');
-        $ids = array_map('intval', $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->termmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
+        $ids = array_map(intval(...), $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->termmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
 
         $first = $this->scanStep($this->state('termmeta', ['batch_meta' => 2], ['cursor' => $before]));
 
-        $this->assertSame('termmeta', $first['step']);
-        $this->assertSame($ids[1], $first['cursor']);
-        $this->assertSame(2, $first['processed']);
+        $this->same('termmeta', $first['step']);
+        $this->same($ids[1], $first['cursor']);
+        $this->same(2, $first['processed']);
 
         $next = $this->scanStep($first);
 
-        $this->assertSame('usermeta', $next['step']);
-        $this->assertSame(3, $next['processed']);
+        $this->same('usermeta', $next['step']);
+        $this->same(3, $next['processed']);
 
         $empty = $this->scanStep($this->state('termmeta', [], ['cursor' => $ids[2] + 100, 'processed' => 7]));
 
-        $this->assertSame('usermeta', $empty['step']);
-        $this->assertSame(7, $empty['processed']);
+        $this->same('usermeta', $empty['step']);
+        $this->same(7, $empty['processed']);
     }
 
     // step_network()
@@ -1010,7 +1018,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->state('network', [], ['site_queue' => [$blog], 'cursor' => $post - 1]));
 
-        $this->assertSame([[
+        $this->same([[
             'attachment_id' => (string) $attachment,
             'source_type' => 'network',
             'source_id' => (string) $post,
@@ -1018,10 +1026,10 @@ final class ScannerStepsTest extends IntegrationTestCase
             'site_id' => (string) $blog,
             'confidence' => '2',
         ]], $this->refs());
-        $this->assertSame('finalize', $state['step']);
-        $this->assertSame([], $state['site_queue']);
-        $this->assertSame(0, $state['cursor']);
-        $this->assertSame(2, $state['processed']);
+        $this->same('finalize', $state['step']);
+        $this->same([], $state['site_queue']);
+        $this->same(0, $state['cursor']);
+        $this->same(2, $state['processed']);
     }
 
     /**
@@ -1043,31 +1051,31 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $page = $this->scanStep($this->state('network', ['batch_posts' => 2], ['site_queue' => [$first, $second], 'cursor' => $a - 1]));
 
-        $this->assertSame('network', $page['step']);
-        $this->assertSame([$first, $second], $page['site_queue']);
-        $this->assertSame($b, $page['cursor']);
-        $this->assertSame(2, $page['processed']);
+        $this->same('network', $page['step']);
+        $this->same([$first, $second], $page['site_queue']);
+        $this->same($b, $page['cursor']);
+        $this->same(2, $page['processed']);
 
         $last = $this->scanStep($page);
 
-        $this->assertSame('network', $last['step']);
-        $this->assertSame([$second], $last['site_queue']);
-        $this->assertSame(0, $last['cursor']);
-        $this->assertSame(3, $last['processed']);
+        $this->same('network', $last['step']);
+        $this->same([$second], $last['site_queue']);
+        $this->same(0, $last['cursor']);
+        $this->same(3, $last['processed']);
         $this->assertGreaterThan($b, $c);
 
         $done = $this->scanStep($this->state('network', [], ['site_queue' => [$second]]));
 
-        $this->assertSame('finalize', $done['step']);
-        $this->assertSame([], $done['site_queue']);
+        $this->same('finalize', $done['step']);
+        $this->same([], $done['site_queue']);
     }
 
     public function test_the_network_step_with_no_sites_left_moves_on(): void
     {
         $state = $this->scanStep($this->state('network', [], ['site_queue' => [], 'processed' => 3]));
 
-        $this->assertSame('finalize', $state['step']);
-        $this->assertSame(3, $state['processed']);
+        $this->same('finalize', $state['step']);
+        $this->same(3, $state['processed']);
     }
 
     // step_finalize()
@@ -1091,42 +1099,45 @@ final class ScannerStepsTest extends IntegrationTestCase
         $before = time();
         $state = $this->scanStep($this->state('finalize', [], ['cursor' => $a - 1, 'processed' => 2]));
 
-        $this->assertSame('done', $state['step']);
-        $this->assertSame(6, $state['processed']);
+        $this->same('done', $state['step']);
+        $this->same(6, $state['processed']);
 
         $row = $this->result($a);
 
-        $this->assertSame((string) $live, $row['parent_id']);
-        $this->assertSame('publish', $row['parent_status']);
-        $this->assertSame('1', $row['is_attached']);
-        $this->assertSame('3', $row['ref_count']);
-        $this->assertSame('1', $row['ref_count_strict']);
-        $this->assertSame('0', $row['bytes']);
-        $this->assertSame('image/jpeg', $row['mime']);
-        $this->assertSame(get_post($a)->post_date, $row['post_date']);
-        $this->assertSame('Alpha', $row['title']);
-        $this->assertSame('2025/11/a.jpg', $row['file']);
+        $this->same((string) $live, $row['parent_id']);
+        $this->same('publish', $row['parent_status']);
+        $this->same('1', $row['is_attached']);
+        $this->same('3', $row['ref_count']);
+        $this->same('1', $row['ref_count_strict']);
+        $this->same('0', $row['bytes']);
+        $this->same('image/jpeg', $row['mime']);
+        $this->same(get_post($a)->post_date, $row['post_date']);
+        $this->same('Alpha', $row['title']);
+        $this->same('2025/11/a.jpg', $row['file']);
         $this->assertGreaterThanOrEqual($before - 2, strtotime($row['scanned_at'].' UTC'));
 
         $row = $this->result($b);
 
-        $this->assertSame('draft', $row['parent_status']);
-        $this->assertSame('1', $row['is_attached']);
-        $this->assertSame('1', $row['ref_count']);
-        $this->assertSame('0', $row['ref_count_strict']);
+        $this->same('draft', $row['parent_status']);
+        $this->same('1', $row['is_attached']);
+        $this->same('1', $row['ref_count']);
+        $this->same('0', $row['ref_count_strict']);
 
         $row = $this->result($c);
 
-        $this->assertSame('999999', $row['parent_id']);
-        $this->assertSame('missing', $row['parent_status']);
-        $this->assertSame('0', $row['is_attached']);
-        $this->assertSame('0', $row['ref_count']);
+        $this->same('999999', $row['parent_id']);
+        $this->same('missing', $row['parent_status']);
+        $this->same('0', $row['is_attached']);
+        $this->same('0', $row['ref_count']);
+        $this->same('0', $row['ref_count_strict']);
 
         $row = $this->result($d);
 
-        $this->assertSame('0', $row['parent_id']);
-        $this->assertSame('', $row['parent_status']);
-        $this->assertSame('0', $row['is_attached']);
+        $this->same('0', $row['parent_id']);
+        $this->same('', $row['parent_status']);
+        $this->same('0', $row['is_attached']);
+        $this->same('0', $row['ref_count']);
+        $this->same('0', $row['ref_count_strict']);
     }
 
     public function test_the_finalize_step_cuts_a_long_title_and_file_to_250_characters(): void
@@ -1138,8 +1149,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $row = $this->result($attachment);
 
-        $this->assertSame(str_repeat('é', 250), $row['title']);
-        $this->assertSame(250, mb_strlen($row['file']));
+        $this->same(str_repeat('é', 250), $row['title']);
+        $this->same(250, mb_strlen($row['file']));
     }
 
     public function test_the_finalize_step_measures_the_files_on_disk(): void
@@ -1151,7 +1162,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('finalize', [], ['cursor' => $attachment - 1]));
 
-        $this->assertSame('12', $this->result($attachment)['bytes']);
+        $this->same('12', $this->result($attachment)['bytes']);
 
         unlink($dir.'/zz-final.jpg');
     }
@@ -1164,21 +1175,21 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $first = $this->scanStep($this->state('finalize', ['batch_finalize' => 2, 'include_render' => 0], ['cursor' => $a - 1]));
 
-        $this->assertSame('finalize', $first['step']);
-        $this->assertSame($b, $first['cursor']);
-        $this->assertSame(2, $first['processed']);
-        $this->assertSame([], $this->result($c));
+        $this->same('finalize', $first['step']);
+        $this->same($b, $first['cursor']);
+        $this->same(2, $first['processed']);
+        $this->same([], $this->result($c));
 
         $next = $this->scanStep($first);
 
-        $this->assertSame('done', $next['step']);
-        $this->assertSame(3, $next['processed']);
+        $this->same('done', $next['step']);
+        $this->same(3, $next['processed']);
         $this->assertNotSame([], $this->result($c));
 
         $empty = $this->scanStep($this->state('finalize', ['include_render' => 0], ['cursor' => $c + 1000, 'processed' => 5]));
 
-        $this->assertSame('done', $empty['step']);
-        $this->assertSame(5, $empty['processed']);
+        $this->same('done', $empty['step']);
+        $this->same(5, $empty['processed']);
     }
 
     // build_render_queue(), pending_attachment_ids()
@@ -1226,13 +1237,13 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->call('build_render_queue', $this->state('finalize'));
 
-        $this->assertSame([$many, $few, $tie], $state['render_queue']);
-        $this->assertSame(3, $state['render_total']);
-        $this->assertSame(0, $state['render_skipped']);
-        $this->assertSame(0, $state['render_capped']);
-        $this->assertSame(['pages' => 0, 'found' => 0, 'absent' => 0, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->same([$many, $few, $tie], $state['render_queue']);
+        $this->same(3, $state['render_total']);
+        $this->same(0, $state['render_skipped']);
+        $this->same(0, $state['render_capped']);
+        $this->same(['pages' => 0, 'found' => 0, 'absent' => 0, 'error' => 0, 'offsite' => 0], $state['render_stats']);
         $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{8}$/', $state['render_token']);
-        $this->assertSame([], UAMS_MRA_Store::render_counts());
+        $this->same([], UAMS_MRA_Store::render_counts());
         $this->assertCount(3, $many_files);
         $this->assertCount(1, $few_files);
         $this->assertCount(1, $tie_files);
@@ -1249,16 +1260,16 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->call('build_render_queue', $this->state('finalize'));
 
-        $this->assertSame([$open], $state['render_queue']);
-        $this->assertSame(3, $state['render_skipped']);
-        $this->assertSame(0, $state['render_capped']);
-        $this->assertSame(['skipped' => 3], UAMS_MRA_Store::render_counts());
+        $this->same([$open], $state['render_queue']);
+        $this->same(3, $state['render_skipped']);
+        $this->same(0, $state['render_capped']);
+        $this->same(['skipped' => 3], UAMS_MRA_Store::render_counts());
 
         foreach (array_merge($draft_files, $locked_files, $hidden_files) as $id) {
-            $this->assertSame('skipped', $this->result($id)['render_state']);
+            $this->same('skipped', $this->result($id)['render_state']);
         }
 
-        $this->assertSame('', $this->result($open_files[0])['render_state']);
+        $this->same('', $this->result($open_files[0])['render_state']);
         $this->assertGreaterThan($draft, $locked);
         $this->assertGreaterThan($locked, $hidden);
 
@@ -1273,13 +1284,13 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
 
-        $this->assertSame([$first, $second], $state['render_queue']);
-        $this->assertSame(2, $state['render_total']);
-        $this->assertSame(1, $state['render_skipped']);
-        $this->assertSame(1, $state['render_capped']);
-        $this->assertSame('skipped', $this->result($third_files[0])['render_state']);
-        $this->assertSame('', $this->result($second_files[0])['render_state']);
-        $this->assertSame('', $this->result($first_files[0])['render_state']);
+        $this->same([$first, $second], $state['render_queue']);
+        $this->same(2, $state['render_total']);
+        $this->same(1, $state['render_skipped']);
+        $this->same(1, $state['render_capped']);
+        $this->same('skipped', $this->result($third_files[0])['render_state']);
+        $this->same('', $this->result($second_files[0])['render_state']);
+        $this->same('', $this->result($first_files[0])['render_state']);
         $this->assertGreaterThan($first, $third);
     }
 
@@ -1290,8 +1301,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $zero = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 0]));
 
-        $this->assertSame([$first], $zero['render_queue']);
-        $this->assertSame(1, $zero['render_capped']);
+        $this->same([$first], $zero['render_queue']);
+        $this->same(1, $zero['render_capped']);
 
         $state = $this->state('finalize');
         unset($state['settings']['render_max_pages']);
@@ -1307,11 +1318,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         $explained = $this->attachment('2025/11/e.jpg', $one);
         $this->putResult($explained, ['parent_id' => $one, 'is_attached' => 1, 'ref_count' => 2]);
 
-        $this->assertSame([$one => $one_files, $two => $two_files], $this->call('pending_attachment_ids', [(string) $one, $two, 0, $one]));
-        $this->assertSame([$two => $two_files], $this->call('pending_attachment_ids', [$two]));
-        $this->assertSame([], $this->call('pending_attachment_ids', []));
-        $this->assertSame([], $this->call('pending_attachment_ids', [0, '']));
-        $this->assertSame([], $this->call('pending_attachment_ids', [999999]));
+        $this->same([$one => $one_files, $two => $two_files], $this->call('pending_attachment_ids', [(string) $one, $two, 0, $one]));
+        $this->same([$two => $two_files], $this->call('pending_attachment_ids', [$two]));
+        $this->same([], $this->call('pending_attachment_ids', []));
+        $this->same([], $this->call('pending_attachment_ids', [0, '']));
+        $this->same([], $this->call('pending_attachment_ids', [999999]));
     }
 
     public function test_pending_files_are_found_for_more_parents_than_one_query_takes(): void
@@ -1328,8 +1339,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $found = $this->call('pending_attachment_ids', $parents);
 
         $this->assertCount(201, $found);
-        $this->assertSame([900201], $found[800201]);
-        $this->assertSame([900001], $found[800001]);
+        $this->same([900201], $found[800201]);
+        $this->same([900001], $found[800001]);
     }
 
     // step_render(), fetch_rendered()
@@ -1345,7 +1356,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $log = new \ArrayObject;
 
         add_filter('pre_http_request', static function ($pre, $args, $url) use ($respond, $log) {
-            $log[] = ['url' => (string) $url, 'args' => (array) $args];
+            $log->append(['url' => (string) $url, 'args' => (array) $args]);
             $answer = $respond((string) $url, (array) $args);
 
             if (is_string($answer)) {
@@ -1396,29 +1407,29 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->renderState([$parent]));
 
         $this->assertCount(1, $log);
-        $this->assertSame(add_query_arg('uams-mra-check', 'tok12345', (string) get_permalink($parent)), $log[0]['url']);
-        $this->assertSame([
+        $this->same(add_query_arg('uams-mra-check', 'tok12345', (string) get_permalink($parent)), $log[0]['url']);
+        $this->same([
             ['attachment_id' => $own, 'source_type' => 'render', 'source_id' => (string) $parent, 'source_label' => 'Rendered page: Showcase', 'site_id' => '0', 'confidence' => '2'],
             ['attachment_id' => (string) $other_files[0], 'source_type' => 'render', 'source_id' => (string) $parent, 'source_label' => 'Rendered page: Showcase', 'site_id' => '0', 'confidence' => '2'],
         ], $this->refs());
 
         $row = $this->result($files[0]);
 
-        $this->assertSame('found', $row['render_state']);
-        $this->assertSame(get_permalink($parent), $row['render_url']);
-        $this->assertSame('', $row['render_note']);
-        $this->assertSame('1', $row['ref_count']);
-        $this->assertSame('1', $row['ref_count_strict']);
+        $this->same('found', $row['render_state']);
+        $this->same(get_permalink($parent), $row['render_url']);
+        $this->same('', $row['render_note']);
+        $this->same('1', $row['ref_count']);
+        $this->same('1', $row['ref_count_strict']);
 
         // A file that belongs to another parent but is shown here is explained as well, and left for that parent's own turn.
         $row = $this->result($other_files[0]);
 
-        $this->assertSame('1', $row['ref_count']);
-        $this->assertSame('', $row['render_state']);
+        $this->same('1', $row['ref_count']);
+        $this->same('', $row['render_state']);
 
-        $this->assertSame('done', $state['step']);
-        $this->assertSame(1, $state['processed']);
-        $this->assertSame(['pages' => 1, 'found' => 1, 'absent' => 0, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->same('done', $state['step']);
+        $this->same(1, $state['processed']);
+        $this->same(['pages' => 1, 'found' => 1, 'absent' => 0, 'error' => 0, 'offsite' => 0], $state['render_stats']);
     }
 
     public function test_the_render_step_marks_a_file_the_page_does_not_serve_as_absent(): void
@@ -1432,14 +1443,14 @@ final class ScannerStepsTest extends IntegrationTestCase
         foreach ($files as $id) {
             $row = $this->result($id);
 
-            $this->assertSame('absent', $row['render_state']);
-            $this->assertSame(get_permalink($parent), $row['render_url']);
-            $this->assertSame('', $row['render_note']);
-            $this->assertSame('0', $row['ref_count']);
+            $this->same('absent', $row['render_state']);
+            $this->same(get_permalink($parent), $row['render_url']);
+            $this->same('', $row['render_note']);
+            $this->same('0', $row['ref_count']);
         }
 
-        $this->assertSame([], $this->refs());
-        $this->assertSame(['pages' => 1, 'found' => 0, 'absent' => 2, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->same([], $this->refs());
+        $this->same(['pages' => 1, 'found' => 0, 'absent' => 2, 'error' => 0, 'offsite' => 0], $state['render_stats']);
     }
 
     public function test_the_render_step_notes_the_host_when_a_page_serves_the_file_from_elsewhere(): void
@@ -1451,11 +1462,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $row = $this->result($files[0]);
 
-        $this->assertSame('offsite', $row['render_state']);
-        $this->assertSame('Served from old.example.edu', $row['render_note']);
-        $this->assertSame(get_permalink($parent), $row['render_url']);
-        $this->assertSame('absent', $this->result($files[1])['render_state']);
-        $this->assertSame(['pages' => 1, 'found' => 0, 'absent' => 1, 'error' => 0, 'offsite' => 1], $state['render_stats']);
+        $this->same('offsite', $row['render_state']);
+        $this->same('Served from old.example.edu', $row['render_note']);
+        $this->same(get_permalink($parent), $row['render_url']);
+        $this->same('absent', $this->result($files[1])['render_state']);
+        $this->same(['pages' => 1, 'found' => 0, 'absent' => 1, 'error' => 0, 'offsite' => 1], $state['render_stats']);
     }
 
     public function test_the_render_step_prefers_the_file_served_here_over_the_same_name_served_elsewhere(): void
@@ -1467,10 +1478,10 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->renderState([$parent]));
 
-        $this->assertSame('found', $this->result($files[0])['render_state']);
-        $this->assertSame('', $this->result($files[0])['render_note']);
-        $this->assertSame('absent', $this->result($files[1])['render_state']);
-        $this->assertSame(['pages' => 1, 'found' => 1, 'absent' => 1, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->same('found', $this->result($files[0])['render_state']);
+        $this->same('', $this->result($files[0])['render_note']);
+        $this->same('absent', $this->result($files[1])['render_state']);
+        $this->same(['pages' => 1, 'found' => 1, 'absent' => 1, 'error' => 0, 'offsite' => 0], $state['render_stats']);
     }
 
     public function test_a_page_that_cannot_be_fetched_leaves_its_files_for_a_person_to_check(): void
@@ -1483,11 +1494,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         foreach ($files as $id) {
             $row = $this->result($id);
 
-            $this->assertSame('error', $row['render_state']);
-            $this->assertSame(get_permalink($parent), $row['render_url']);
+            $this->same('error', $row['render_state']);
+            $this->same(get_permalink($parent), $row['render_url']);
         }
 
-        $this->assertSame(['pages' => 5, 'found' => 1, 'absent' => 1, 'error' => 3, 'offsite' => 1], $state['render_stats']);
+        $this->same(['pages' => 5, 'found' => 1, 'absent' => 1, 'error' => 3, 'offsite' => 1], $state['render_stats']);
     }
 
     public function test_a_parent_with_no_permalink_is_skipped_without_a_request(): void
@@ -1498,9 +1509,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->renderState([777777]));
 
         $this->assertCount(0, $log);
-        $this->assertSame('skipped', $this->result(555001)['render_state']);
-        $this->assertSame(0, $state['render_stats']['pages']);
-        $this->assertSame(1, $state['processed']);
+        $this->same('skipped', $this->result(555001)['render_state']);
+        $this->same(0, $state['render_stats']['pages']);
+        $this->same(1, $state['processed']);
     }
 
     public function test_a_queued_parent_whose_files_are_already_explained_is_not_fetched(): void
@@ -1512,9 +1523,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->renderState([$parent]));
 
         $this->assertCount(0, $log);
-        $this->assertSame('', $this->result($files[0])['render_state']);
-        $this->assertSame(1, $state['processed']);
-        $this->assertSame('done', $state['step']);
+        $this->same('', $this->result($files[0])['render_state']);
+        $this->same(1, $state['processed']);
+        $this->same('done', $state['step']);
     }
 
     public function test_a_file_cleared_by_an_earlier_page_in_the_batch_is_not_marked_absent_by_a_later_one(): void
@@ -1528,10 +1539,10 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->renderState([$first, $second]));
 
         $this->assertCount(1, $log);
-        $this->assertSame('absent', $this->result($first_files[0])['render_state']);
-        $this->assertSame('', $this->result($second_files[0])['render_state']);
-        $this->assertSame('1', $this->result($second_files[0])['ref_count']);
-        $this->assertSame(2, $state['processed']);
+        $this->same('absent', $this->result($first_files[0])['render_state']);
+        $this->same('', $this->result($second_files[0])['render_state']);
+        $this->same('1', $this->result($second_files[0])['ref_count']);
+        $this->same(2, $state['processed']);
     }
 
     public function test_the_render_step_takes_a_batch_by_its_setting_clamped_between_one_and_twenty_five(): void
@@ -1539,37 +1550,37 @@ final class ScannerStepsTest extends IntegrationTestCase
         $queue = range(900001, 900030);
 
         $three = $this->scanStep($this->renderState($queue));
-        $this->assertSame(3, $three['processed']);
-        $this->assertSame(array_slice($queue, 3), $three['render_queue']);
-        $this->assertSame('render', $three['step']);
+        $this->same(3, $three['processed']);
+        $this->same(array_slice($queue, 3), $three['render_queue']);
+        $this->same('render', $three['step']);
 
         $two = $this->scanStep($this->renderState($queue, ['batch_render' => 2]));
-        $this->assertSame(2, $two['processed']);
-        $this->assertSame(array_slice($queue, 2), $two['render_queue']);
+        $this->same(2, $two['processed']);
+        $this->same(array_slice($queue, 2), $two['render_queue']);
 
         $one = $this->scanStep($this->renderState($queue, ['batch_render' => 0]));
-        $this->assertSame(1, $one['processed']);
+        $this->same(1, $one['processed']);
 
         $cap = $this->scanStep($this->renderState($queue, ['batch_render' => 100]));
-        $this->assertSame(25, $cap['processed']);
-        $this->assertSame(array_slice($queue, 25), $cap['render_queue']);
+        $this->same(25, $cap['processed']);
+        $this->same(array_slice($queue, 25), $cap['render_queue']);
 
         $exact = $this->scanStep($this->renderState($queue, ['batch_render' => 25]));
-        $this->assertSame(25, $exact['processed']);
+        $this->same(25, $exact['processed']);
 
         $absent = $this->state('render', [], ['render_queue' => $queue]);
         unset($absent['settings']['batch_render']);
-        $this->assertSame(3, $this->scanStep($absent)['processed']);
+        $this->same(3, $this->scanStep($absent)['processed']);
 
-        $this->assertSame(3, $this->scanStep($this->renderState(array_slice($queue, 0, 3)))['processed']);
+        $this->same(3, $this->scanStep($this->renderState(array_slice($queue, 0, 3)))['processed']);
     }
 
     public function test_the_render_step_with_an_empty_queue_moves_on_and_keeps_its_stats_as_given(): void
     {
         $state = $this->scanStep($this->renderState([], [], ['processed' => 4]));
 
-        $this->assertSame('done', $state['step']);
-        $this->assertSame(4, $state['processed']);
+        $this->same('done', $state['step']);
+        $this->same(4, $state['processed']);
         $this->assertArrayNotHasKey('render_stats', $state);
     }
 
@@ -1580,11 +1591,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->scanStep($this->renderState([$parent]));
 
-        $this->assertSame(['pages' => 1, 'found' => 0, 'absent' => 1, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->same(['pages' => 1, 'found' => 0, 'absent' => 1, 'error' => 0, 'offsite' => 0], $state['render_stats']);
 
         $odd = $this->scanStep($this->renderState([999998], [], ['render_stats' => 'broken']));
 
-        $this->assertSame(['pages' => 0, 'found' => 0, 'absent' => 0, 'error' => 0, 'offsite' => 0], $odd['render_stats']);
+        $this->same(['pages' => 0, 'found' => 0, 'absent' => 0, 'error' => 0, 'offsite' => 0], $odd['render_stats']);
     }
 
     private function fetch(string $url = 'https://site.example.edu/page/', string $token = 'tok12345'): ?string
@@ -1598,20 +1609,20 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $log = $this->serve(fn (): string => '<p>ok</p>');
 
-        $this->assertSame('<p>ok</p>', $this->fetch('https://site.example.edu/page/'));
-        $this->assertSame('https://site.example.edu/page/?uams-mra-check=tok12345', $log[0]['url']);
+        $this->same('<p>ok</p>', $this->fetch('https://site.example.edu/page/'));
+        $this->same('https://site.example.edu/page/?uams-mra-check=tok12345', $log[0]['url']);
 
         $this->fetch('https://site.example.edu/page/?a=1');
-        $this->assertSame('https://site.example.edu/page/?a=1&uams-mra-check=tok12345', $log[1]['url']);
+        $this->same('https://site.example.edu/page/?a=1&uams-mra-check=tok12345', $log[1]['url']);
 
         $this->fetch('https://site.example.edu/page/', '');
-        $this->assertSame('https://site.example.edu/page/', $log[2]['url']);
+        $this->same('https://site.example.edu/page/', $log[2]['url']);
     }
 
     public function test_the_cache_bust_can_be_turned_off_per_page(): void
     {
         $seen = [];
-        add_filter('uams_mra_render_cache_bust', static function ($bust, $url) use (&$seen) {
+        add_filter('uams_mra_render_cache_bust', static function ($bust, $url) use (&$seen): false {
             $seen[] = [$bust, $url];
 
             return false;
@@ -1620,8 +1631,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->fetch('https://site.example.edu/page/');
 
-        $this->assertSame([[true, 'https://site.example.edu/page/']], $seen);
-        $this->assertSame('https://site.example.edu/page/', $log[0]['url']);
+        $this->same([[true, 'https://site.example.edu/page/']], $seen);
+        $this->same('https://site.example.edu/page/', $log[0]['url']);
     }
 
     public function test_the_filter_is_not_asked_when_there_is_no_token(): void
@@ -1636,7 +1647,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->fetch('https://site.example.edu/page/', '');
 
-        $this->assertSame(0, $asked);
+        $this->same(0, $asked);
     }
 
     public function test_a_fetch_sends_the_documented_request_arguments(): void
@@ -1647,18 +1658,18 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $args = $log[0]['args'];
 
-        $this->assertSame(15, $args['timeout']);
-        $this->assertSame(3, $args['redirection']);
+        $this->same(15, $args['timeout']);
+        $this->same(3, $args['redirection']);
         $this->assertTrue($args['sslverify']);
-        $this->assertSame('UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')', $args['user-agent']);
-        $this->assertSame('no-cache', $args['headers']['Cache-Control']);
-        $this->assertSame('no-cache', $args['headers']['Pragma']);
+        $this->same('UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')', $args['user-agent']);
+        $this->same('no-cache', $args['headers']['Cache-Control']);
+        $this->same('no-cache', $args['headers']['Pragma']);
     }
 
     public function test_the_request_arguments_and_ssl_check_can_be_changed_by_filters(): void
     {
         $given = [];
-        add_filter('uams_mra_render_sslverify', static fn ($verify) => ! $verify);
+        add_filter('uams_mra_render_sslverify', static fn ($verify): bool => ! $verify);
         add_filter('uams_mra_render_request_args', static function ($args, $url) use (&$given) {
             $given = [$args['sslverify'], $url];
             $args['timeout'] = 99;
@@ -1669,8 +1680,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->fetch('https://site.example.edu/page/');
 
-        $this->assertSame([false, 'https://site.example.edu/page/'], $given);
-        $this->assertSame(99, $log[0]['args']['timeout']);
+        $this->same([false, 'https://site.example.edu/page/'], $given);
+        $this->same(99, $log[0]['args']['timeout']);
         $this->assertFalse($log[0]['args']['sslverify']);
     }
 
@@ -1693,11 +1704,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         }
 
         $this->serve(fn (): array => $this->reply(200, '0'));
-        $this->assertSame('0', $this->fetch());
+        $this->same('0', $this->fetch());
         remove_all_filters('pre_http_request');
 
         $this->serve(fn (): array => $this->reply(200, "  <p>x</p>\n"));
-        $this->assertSame("  <p>x</p>\n", $this->fetch());
+        $this->same("  <p>x</p>\n", $this->fetch());
     }
 
     // post_label()
@@ -1706,17 +1717,17 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $label = fn (array $row): string => $this->call('post_label', (object) $row);
 
-        $this->assertSame('page: About', $label(['post_type' => 'page', 'post_title' => 'About', 'post_status' => 'publish']));
-        $this->assertSame('attachment: Photo', $label(['post_type' => 'attachment', 'post_title' => 'Photo', 'post_status' => 'inherit']));
-        $this->assertSame('post: About (draft)', $label(['post_type' => 'post', 'post_title' => 'About', 'post_status' => 'draft']));
-        $this->assertSame('post: About', $label(['post_type' => 'post', 'post_title' => 'About', 'post_status' => '']));
-        $this->assertSame('post: About', $label(['post_title' => 'About']));
-        $this->assertSame('post: (no title)', $label([]));
-        $this->assertSame('post: (no title)', $label(['post_title' => '']));
-        $this->assertSame('post: 0', $label(['post_title' => '0']));
-        $this->assertSame('post: (no title) (private)', $label(['post_title' => '', 'post_status' => 'private']));
-        $this->assertSame('post: A (publish2)', $label(['post_title' => 'A', 'post_status' => 'publish2']));
-        $this->assertSame('post: A (Inherit)', $label(['post_title' => 'A', 'post_status' => 'Inherit']));
+        $this->same('page: About', $label(['post_type' => 'page', 'post_title' => 'About', 'post_status' => 'publish']));
+        $this->same('attachment: Photo', $label(['post_type' => 'attachment', 'post_title' => 'Photo', 'post_status' => 'inherit']));
+        $this->same('post: About (draft)', $label(['post_type' => 'post', 'post_title' => 'About', 'post_status' => 'draft']));
+        $this->same('post: About', $label(['post_type' => 'post', 'post_title' => 'About', 'post_status' => '']));
+        $this->same('post: About', $label(['post_title' => 'About']));
+        $this->same('post: (no title)', $label([]));
+        $this->same('post: (no title)', $label(['post_title' => '']));
+        $this->same('post: 0', $label(['post_title' => '0']));
+        $this->same('post: (no title) (private)', $label(['post_title' => '', 'post_status' => 'private']));
+        $this->same('post: A (publish2)', $label(['post_title' => 'A', 'post_status' => 'publish2']));
+        $this->same('post: A (Inherit)', $label(['post_title' => 'A', 'post_status' => 'Inherit']));
     }
 
     // attachment_bytes()
@@ -1844,8 +1855,8 @@ final class ScannerStepsTest extends IntegrationTestCase
             ],
         ]);
 
-        $this->assertSame(1130, UAMS_MRA_Scanner::attachment_bytes($id));
-        $this->assertSame(1130, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zb-photo.jpg'));
+        $this->same(1130, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(1130, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zb-photo.jpg'));
     }
 
     public function test_attachment_bytes_counts_the_file_alone_when_there_is_no_metadata_and_zero_when_there_is_no_file(): void
@@ -1853,14 +1864,14 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->putFiles(['2025/11/zc-solo.jpg' => str_repeat('a', 7)]);
         $id = $this->attachment('2025/11/zc-solo.jpg');
 
-        $this->assertSame(7, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(7, UAMS_MRA_Scanner::attachment_bytes($id));
 
         $none = self::factory()->attachment->create();
         delete_post_meta($none, '_wp_attached_file');
 
-        $this->assertSame(0, UAMS_MRA_Scanner::attachment_bytes($none));
-        $this->assertSame(0, UAMS_MRA_Scanner::attachment_bytes($none, ''));
-        $this->assertSame(0, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zc-missing.jpg'));
+        $this->same(0, UAMS_MRA_Scanner::attachment_bytes($none));
+        $this->same(0, UAMS_MRA_Scanner::attachment_bytes($none, ''));
+        $this->same(0, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zc-missing.jpg'));
     }
 
     public function test_attachment_bytes_reads_an_explicit_file_over_the_stored_one_and_tolerates_a_leading_slash(): void
@@ -1868,8 +1879,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->putFiles(['2025/11/zd-one.jpg' => str_repeat('a', 3), '2025/11/zd-two.jpg' => str_repeat('b', 5)]);
         $id = $this->attachment('2025/11/zd-one.jpg');
 
-        $this->assertSame(5, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zd-two.jpg'));
-        $this->assertSame(5, UAMS_MRA_Scanner::attachment_bytes($id, '/2025/11/zd-two.jpg'));
+        $this->same(5, UAMS_MRA_Scanner::attachment_bytes($id, '2025/11/zd-two.jpg'));
+        $this->same(5, UAMS_MRA_Scanner::attachment_bytes($id, '/2025/11/zd-two.jpg'));
     }
 
     public function test_attachment_bytes_finds_sizes_beside_a_file_kept_at_the_top_of_the_uploads_folder(): void
@@ -1878,7 +1889,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $id = $this->attachment('ze-root.jpg');
         wp_update_attachment_metadata($id, ['sizes' => ['thumbnail' => ['file' => 'ze-root-150x150.jpg']]]);
 
-        $this->assertSame(10, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(10, UAMS_MRA_Scanner::attachment_bytes($id));
     }
 
     public function test_attachment_bytes_ignores_a_folder_and_a_malformed_size_list(): void
@@ -1890,11 +1901,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         $id = $this->attachment('2025/11/zf-main.jpg');
         wp_update_attachment_metadata($id, ['original_image' => 'zf-folder.jpg', 'sizes' => 'broken']);
 
-        $this->assertSame(9, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(9, UAMS_MRA_Scanner::attachment_bytes($id));
 
         wp_update_attachment_metadata($id, ['sizes' => ['x' => ['file' => 'zf-folder.jpg']]]);
 
-        $this->assertSame(9, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(9, UAMS_MRA_Scanner::attachment_bytes($id));
     }
 
     // A whole scan
@@ -1946,23 +1957,23 @@ final class ScannerStepsTest extends IntegrationTestCase
         $attachments = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'");
         $state = UAMS_MRA_Scanner::start();
 
-        $this->assertSame('index', $state['step']);
+        $this->same('index', $state['step']);
 
         $seen = $this->runToEnd();
         $final = UAMS_MRA_Scanner::get_state();
 
-        $this->assertSame(['posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'finalize', 'render', 'done'], $seen);
-        $this->assertSame('done', $final['step']);
-        $this->assertSame('Scan complete', $final['message']);
+        $this->same(['posts', 'postmeta', 'options', 'termmeta', 'usermeta', 'commentmeta', 'finalize', 'render', 'done'], $seen);
+        $this->same('done', $final['step']);
+        $this->same('Scan complete', $final['message']);
         $this->assertGreaterThanOrEqual($state['started'], $final['finished']);
-        $this->assertSame($attachments, $final['attachments']);
+        $this->same($attachments, $final['attachments']);
         $this->assertGreaterThanOrEqual(3, $attachments);
 
-        $this->assertSame('1', $this->result($linked)['ref_count']);
-        $this->assertSame('found', $this->result($shown)['render_state']);
-        $this->assertSame('1', $this->result($shown)['ref_count']);
-        $this->assertSame('0', $this->result($unused)['ref_count']);
-        $this->assertSame('', $this->result($unused)['render_state']);
+        $this->same('1', $this->result($linked)['ref_count']);
+        $this->same('found', $this->result($shown)['render_state']);
+        $this->same('1', $this->result($shown)['ref_count']);
+        $this->same('0', $this->result($unused)['ref_count']);
+        $this->same('', $this->result($unused)['render_state']);
         $this->assertGreaterThan(0, $parent);
     }
 
@@ -1983,16 +1994,16 @@ final class ScannerStepsTest extends IntegrationTestCase
         $kept = $this->refs();
 
         $this->assertNotSame([], $kept);
-        $this->assertSame($started['started'], $midway['started']);
+        $this->same($started['started'], $midway['started']);
 
         $this->runToEnd();
 
         $final = UAMS_MRA_Scanner::get_state();
 
-        $this->assertSame('done', $final['step']);
-        $this->assertSame($started['started'], $final['started']);
-        $this->assertSame($kept, array_slice($this->refs(), 0, count($kept)));
-        $this->assertSame('1', $this->result($linked)['ref_count']);
+        $this->same('done', $final['step']);
+        $this->same($started['started'], $final['started']);
+        $this->same($kept, array_slice($this->refs(), 0, count($kept)));
+        $this->same('1', $this->result($linked)['ref_count']);
     }
 
     // Paths that only a later page, row or setting can show
@@ -2006,7 +2017,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('posts', [], ['cursor' => $post - 1]));
 
-        $this->assertSame(['zh-first.jpg', 'zh-second.jpg'], array_column($this->offsite(), 'base_norm'));
+        $this->same(['zh-first.jpg', 'zh-second.jpg'], array_column($this->offsite(), 'base_norm'));
     }
 
     public function test_a_skipped_meta_key_does_not_end_the_batch(): void
@@ -2019,7 +2030,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('postmeta', [], ['cursor' => $before]));
 
-        $this->assertSame([(string) $attachment], array_column($this->refs(), 'attachment_id'));
+        $this->same([(string) $attachment], array_column($this->refs(), 'attachment_id'));
     }
 
     public function test_an_empty_option_does_not_end_the_batch(): void
@@ -2031,7 +2042,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->state('options', [], ['cursor' => $before]));
 
-        $this->assertSame([(string) $attachment], array_column($this->refs(), 'attachment_id'));
+        $this->same([(string) $attachment], array_column($this->refs(), 'attachment_id'));
     }
 
     public function test_the_render_step_is_skipped_by_its_setting_even_when_pages_are_waiting(): void
@@ -2040,13 +2051,13 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->call('advance', $this->state('finalize', ['include_render' => 0]));
 
-        $this->assertSame('done', $state['step']);
-        $this->assertSame([], $state['render_queue']);
+        $this->same('done', $state['step']);
+        $this->same([], $state['render_queue']);
         $this->assertArrayNotHasKey('render_token', $state);
 
         $on = $this->call('advance', $this->state('finalize', ['include_render' => 1]));
 
-        $this->assertSame('render', $on['step']);
+        $this->same('render', $on['step']);
         $this->assertCount(1, $on['render_queue']);
     }
 
@@ -2058,8 +2069,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $exact = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
 
         $this->assertCount(2, $exact['render_queue']);
-        $this->assertSame(0, $exact['render_capped']);
-        $this->assertSame(0, $exact['render_skipped']);
+        $this->same(0, $exact['render_capped']);
+        $this->same(0, $exact['render_skipped']);
     }
 
     public function test_the_render_token_is_eight_letters_and_digits_with_no_symbols(): void
@@ -2073,8 +2084,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $state = $this->call('build_render_queue', $this->state('finalize'));
 
-        $this->assertSame([[8, false, false]], $asked);
-        $this->assertSame(8, strlen($state['render_token']));
+        $this->same([[8, false, false]], $asked);
+        $this->same(8, strlen($state['render_token']));
     }
 
     public function test_a_page_with_nothing_waiting_does_not_stop_the_pages_after_it(): void
@@ -2088,7 +2099,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->renderState([$explained, $live]));
 
-        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+        $this->same('absent', $this->result($live_files[0])['render_state']);
     }
 
     public function test_a_page_with_no_permalink_does_not_stop_the_pages_after_it(): void
@@ -2101,8 +2112,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->renderState([777778, $live]));
 
-        $this->assertSame('skipped', $this->result(555002)['render_state']);
-        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+        $this->same('skipped', $this->result(555002)['render_state']);
+        $this->same('absent', $this->result($live_files[0])['render_state']);
     }
 
     public function test_a_page_that_fails_does_not_stop_the_pages_after_it(): void
@@ -2115,15 +2126,15 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($this->renderState([$broken, $live]));
 
-        $this->assertSame('error', $this->result($broken_files[0])['render_state']);
-        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+        $this->same('error', $this->result($broken_files[0])['render_state']);
+        $this->same('absent', $this->result($live_files[0])['render_state']);
     }
 
     public function test_pending_files_ignore_a_row_with_no_parent_even_when_it_is_marked_attached(): void
     {
         $this->putResult(555003, ['parent_id' => 0, 'is_attached' => 1, 'ref_count' => 0]);
 
-        $this->assertSame([], $this->call('pending_attachment_ids', [0]));
+        $this->same([], $this->call('pending_attachment_ids', [0]));
     }
 
     public function test_a_file_with_no_stored_path_counts_no_bytes_even_when_its_metadata_lists_sizes(): void
@@ -2133,7 +2144,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         delete_post_meta($id, '_wp_attached_file');
         wp_update_attachment_metadata($id, ['sizes' => ['thumbnail' => ['file' => 'zk-size.jpg']]]);
 
-        $this->assertSame(0, UAMS_MRA_Scanner::attachment_bytes($id));
+        $this->same(0, UAMS_MRA_Scanner::attachment_bytes($id));
     }
 
     /**
@@ -2156,6 +2167,18 @@ final class ScannerStepsTest extends IntegrationTestCase
         $expected = $wpdb->prefix.'uams_mra_refs';
         restore_current_blog();
 
-        $this->assertSame($expected, $table);
+        $this->same($expected, $table);
+    }
+
+    public function test_a_render_state_with_no_token_fetches_the_plain_permalink(): void
+    {
+        [$parent] = $this->parentWithFiles(1);
+        $log = $this->serve(fn (): string => '<p>none</p>');
+        $state = $this->renderState([$parent]);
+        unset($state['render_token']);
+
+        $this->scanStep($state);
+
+        $this->same((string) get_permalink($parent), $log[0]['url']);
     }
 }
