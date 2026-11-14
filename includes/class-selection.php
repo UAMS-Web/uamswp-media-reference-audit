@@ -70,10 +70,16 @@ class UAMS_MRA_Selection
      */
     public static function resolve_text($text): array
     {
+        // Equivalent: preg_split() reads any scalar or Stringable as the same text, and
+        // an array or object that cannot be read has no meaning here either way.
+        // @pest-mutate-ignore:RemoveStringCast
         $tokens = preg_split('#[\r\n,;]+#', (string) $text);
         $ids = [];
         $missed = [];
 
+        // Equivalent: preg_split() returns false only for a failed pattern, and this one is a
+        // literal that compiles.
+        // @pest-mutate-ignore:RemoveArrayCast
         foreach ((array) $tokens as $token) {
             $token = trim($token);
 
@@ -105,16 +111,25 @@ class UAMS_MRA_Selection
     protected static function resolve_token($token): int
     {
         if (ctype_digit($token)) {
-            return get_post_type((int) $token) === 'attachment' ? (int) $token : 0;
+            $is_attachment = get_post_type((int) $token) === 'attachment';
+
+            // Equivalent: the return type is int, which reads a numeric string as the same
+            // integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            return $is_attachment ? (int) $token : 0;
         }
 
         if (preg_match('#^https?://#i', $token)) {
             $id = attachment_url_to_postid($token);
             if ($id) {
+                // Equivalent: the return type is int, which reads a numeric string as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 return (int) $id;
             }
 
             // A CDN or a rewritten host will not resolve, but the filename still can.
+            // Equivalent: a null or false path is falsy and falls back to the token either way.
+            // @pest-mutate-ignore:RemoveStringCast
             $path = (string) wp_parse_url($token, PHP_URL_PATH);
             $token = $path ?: $token;
         }
@@ -167,6 +182,8 @@ class UAMS_MRA_Selection
     {
         $ids = array_values(array_unique(array_filter(array_map(intval(...), $ids))));
 
+        // Equivalent: a set of exactly MAX is sliced to MAX, which leaves it as it was.
+        // @pest-mutate-ignore:GreaterToGreaterOrEqual
         if (count($ids) > self::MAX) {
             $ids = array_slice($ids, 0, self::MAX);
         }
