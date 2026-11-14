@@ -1715,9 +1715,18 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
         $this->sideloadJob([$group]);
 
-        $asked = 0;
-        add_filter('image_memory_limit', static function ($limit) use (&$asked) {
-            $asked++;
+        // Core raises the limit for its own image work too, so only a raise requested by the side-load itself counts.
+        $callers = [];
+        add_filter('image_memory_limit', static function ($limit) use (&$callers) {
+            $frames = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+
+            foreach ($frames as $i => $frame) {
+                if ($frame['function'] === 'wp_raise_memory_limit') {
+                    $callers[] = $frames[$i + 1]['function'] ?? '';
+
+                    break;
+                }
+            }
 
             return $limit;
         });
@@ -1733,7 +1742,7 @@ final class RepointJobsTest extends IntegrationTestCase
         }
 
         $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($url))['local_id']);
-        $this->assertGreaterThan(0, $asked);
+        $this->assertContains('sideload_one', $callers);
         $this->assertNotSame('100M', $after);
     }
 
