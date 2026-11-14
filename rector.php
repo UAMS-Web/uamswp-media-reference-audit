@@ -110,6 +110,7 @@ return RectorConfig::configure()
     // modifications.
     ->withPaths([
         __DIR__.'/includes',
+        __DIR__.'/scripts',
         __DIR__.'/tests',
     ])
     // The PHP files at the repository root: the plugin header file and

@@ -49,6 +49,7 @@ parameters:
     # modifications.
     paths:
         - includes
+        - scripts
         - tests
         - uamswp-media-reference-audit.php
         - uninstall.php
