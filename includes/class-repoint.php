@@ -1458,6 +1458,13 @@ class UAMS_MRA_Repoint
         // preg_replace() returns null only on a regex error, and the next line joins it as text, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
         $from_bare = (string) preg_replace('#^https?:#i', '', $from);
+
+        // Nothing is left to look for. An empty needle matches at every position, so the
+        // text would be rewritten around each character; no needles leaves it as it is.
+        if ($from_bare === '') {
+            return [[], []];
+        }
+
         $to_json = str_replace('/', '\\/', $to);
 
         // Every variant maps to the target exactly as WordPress gave it, scheme
