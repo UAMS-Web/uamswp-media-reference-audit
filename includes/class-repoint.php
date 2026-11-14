@@ -134,7 +134,7 @@ class UAMS_MRA_Repoint
     public static function verdicts(): array
     {
         return [
-            'identical' => __('The local file has the same name and the same size. Safe to repoint.', 'uams-mra'),
+            'identical' => __('The local file has the same name and the same size. The contents were not compared.', 'uams-mra'),
             'resized' => __('The library holds this image, but not at the same byte size. Look before including these.', 'uams-mra'),
             'differs' => __('Same filename, different file. Someone has to decide which one is wanted.', 'uams-mra'),
             'ambiguous' => __('More than one local attachment shares this filename, so there is no single right target.', 'uams-mra'),
@@ -791,6 +791,62 @@ class UAMS_MRA_Repoint
     }
 
     /**
+     * Download a file to a temporary path, stopping at a byte limit.
+     *
+     * `download_url()` has no limit. This asks the HTTP API to write at most one
+     * byte past it, which is enough to tell a file over the limit from one exactly
+     * at it. Requests' cURL transport drops what arrives beyond the limit but keeps
+     * reading the response, so this bounds the disk and memory a download uses and
+     * leaves the duration to the timeout.
+     *
+     * @param  string  $url  URL of the file.
+     * @param  int  $timeout  Seconds.
+     * @param  int  $max  Largest accepted size in bytes.
+     * @return string|WP_Error Path of the temporary file.
+     */
+    protected static function download_capped($url, $timeout, $max): string|WP_Error
+    {
+        $tmp = wp_tempnam($url);
+
+        if ($tmp === '') {
+            return new WP_Error('fetchfailed', __('Could not create a temporary file.', 'uams-mra'));
+        }
+
+        $response = wp_safe_remote_get(
+            $url,
+            [
+                'timeout' => $timeout,
+                'stream' => true,
+                'filename' => $tmp,
+                'limit_response_size' => $max + 1,
+            ]
+        );
+
+        if (is_wp_error($response)) {
+            wp_delete_file($tmp);
+
+            return new WP_Error('fetchfailed', $response->get_error_message());
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+
+        if ($code !== 200) {
+            wp_delete_file($tmp);
+
+            /* translators: %d: HTTP status code. */
+            return new WP_Error('fetchfailed', sprintf(__('The server answered %d.', 'uams-mra'), $code));
+        }
+
+        if (filesize($tmp) > $max) {
+            wp_delete_file($tmp);
+
+            return new WP_Error('toobig', __('Larger than the configured limit.', 'uams-mra'));
+        }
+
+        return $tmp;
+    }
+
+    /**
      * Fetch one file and put it in the media library.
      *
      * @param  string  $url  URL of the original.
@@ -813,18 +869,12 @@ class UAMS_MRA_Repoint
             return new WP_Error('toobig', __('Larger than the configured limit.', 'uams-mra'));
         }
 
-        $tmp = download_url($url, max(10, (int) $timeout));
+        // A server that answers a HEAD without content-length can still hand back
+        // something enormous, so the transfer itself is capped, not only checked after.
+        $tmp = self::download_capped($url, max(10, (int) $timeout), $max);
 
         if (is_wp_error($tmp)) {
-            return new WP_Error('fetchfailed', $tmp->get_error_message());
-        }
-
-        // A server that answers a HEAD without content-length can still hand back
-        // something enormous, so the limit is enforced again on what arrived.
-        if (filesize($tmp) > $max) {
-            wp_delete_file($tmp);
-
-            return new WP_Error('toobig', __('Larger than the configured limit.', 'uams-mra'));
+            return $tmp;
         }
 
         $name = basename((string) wp_parse_url($url, PHP_URL_PATH));
@@ -1181,12 +1231,31 @@ class UAMS_MRA_Repoint
             }
 
             $value = get_option($name);
+
+            // An object is changed in place, so $new and $value would be the same
+            // instance and compare equal. Its serialized form, taken first, is
+            // what tells whether the rewrite changed anything.
+            $before = serialize($value); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
             $new = self::replace_variants($value, $from, $to);
 
-            if ($new === $value) {
+            if (serialize($new) === $before) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+                // Unchanged with the URL still in it means it sits somewhere this
+                // tool cannot reach; "skipped" would say there was nothing to do.
+                return self::holds_url($before, $from)
+                    ? [
+                        'status' => 'failed',
+                        'applied' => 3,
+                    ]
+                    : [
+                        'status' => 'skipped',
+                        'applied' => 2,
+                    ];
+            }
+
+            if (self::holds_url($new, $from)) {
                 return [
-                    'status' => 'skipped',
-                    'applied' => 2,
+                    'status' => 'failed',
+                    'applied' => 3,
                 ];
             }
 
@@ -1238,9 +1307,24 @@ class UAMS_MRA_Repoint
         $new = self::replace_variants($current, $from, $to);
 
         if ($new === $current) {
+            // See the option branch: unchanged with the URL still present is a miss, not a no-op.
+            return self::holds_url($current, $from)
+                ? [
+                    'status' => 'failed',
+                    'applied' => 3,
+                ]
+                : [
+                    'status' => 'skipped',
+                    'applied' => 2,
+                ];
+        }
+
+        // Some of the URL's places were rewritten and one was not (inside an object
+        // this tool cannot read). Writing half would leave the row pointing two ways.
+        if (self::holds_url($new, $from)) {
             return [
-                'status' => 'skipped',
-                'applied' => 2,
+                'status' => 'failed',
+                'applied' => 3,
             ];
         }
 
@@ -1313,10 +1397,40 @@ class UAMS_MRA_Repoint
      */
     public static function replace_variants($value, $from, $to)
     {
+        [$search, $replace] = self::variants((string) $from, (string) $to);
+
+        // Never turn an unreadable serialized value into serialize(false).
+        if (self::is_unreadable($value)) {
+            return $value;
+        }
+
+        $data = self::read_value($value);
+        $data = self::deep_replace($data, $search, $replace);
+
+        // Round-trip exactly what came in. maybe_serialize() would drop the
+        // wrapper from a serialized *scalar*, and anything that arrived already
+        // unserialized -- an option, say -- has to go back the same way so the
+        // caller's own update_option() can serialize it once.
+        if (is_string($value) && is_serialized($value)) {
+            return serialize($data); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+        }
+
+        return $data;
+    }
+
+    /**
+     * Every form a URL is stored in, paired with its replacement.
+     *
+     * @param  string  $from  URL to replace.
+     * @param  string  $to  Replacement.
+     * @return array{array<int, string>, array<int, string>} Needles and replacements, in the order they must run.
+     */
+    protected static function variants(string $from, string $to): array
+    {
         $search = [];
         $replace = [];
 
-        $from_bare = preg_replace('#^https?:#i', '', $from);
+        $from_bare = (string) preg_replace('#^https?:#i', '', $from);
         $to_json = str_replace('/', '\\/', $to);
 
         // Every variant maps to the target exactly as WordPress gave it, scheme
@@ -1337,30 +1451,41 @@ class UAMS_MRA_Repoint
             $replace[] = $to_json;
         }
 
-        // Never turn an unreadable serialized value into serialize(false).
-        if (self::is_unreadable($value)) {
+        return [$search, $replace];
+    }
+
+    /**
+     * Read a stored value without instantiating any class it names.
+     *
+     * A serialized value can name any class, and building one runs its
+     * `__wakeup()` or `__unserialize()`. Only `stdClass`, which has no methods,
+     * is built; any other object comes back as an incomplete one that serializes
+     * back to the same bytes and that this tool cannot rewrite.
+     *
+     * @param  mixed  $value  Stored value.
+     * @return mixed The value, unserialized when it was serialized. False when it cannot be read.
+     */
+    protected static function read_value($value)
+    {
+        if (! is_string($value) || ! is_serialized($value)) {
             return $value;
         }
 
-        $data = maybe_unserialize($value);
-        $data = self::deep_replace($data, $search, $replace);
+        // A malformed value raises a notice or a warning, depending on the PHP version.
+        set_error_handler(static fn (): bool => true);
 
-        // Round-trip exactly what came in. maybe_serialize() would drop the
-        // wrapper from a serialized *scalar*, and anything that arrived already
-        // unserialized -- an option, say -- has to go back the same way so the
-        // caller's own update_option() can serialize it once.
-        if (is_string($value) && is_serialized($value)) {
-            return serialize($data); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+        try {
+            return unserialize(trim($value), ['allowed_classes' => [stdClass::class]]);
+        } finally {
+            restore_error_handler();
         }
-
-        return $data;
     }
 
     /**
      * Whether a value looks serialized but cannot be read back.
      *
-     * `maybe_unserialize()` returns false for it, which is also what a stored
-     * `b:0;` returns, so the one real false is excluded.
+     * Reading it returns false, which is also what a stored `b:0;` returns, so
+     * the one real false is excluded.
      *
      * @param  mixed  $value  Stored value.
      */
@@ -1369,7 +1494,25 @@ class UAMS_MRA_Repoint
         return is_string($value)
             && is_serialized($value)
             && trim($value) !== 'b:0;'
-            && maybe_unserialize($value) === false;
+            && self::read_value($value) === false;
+    }
+
+    /**
+     * Whether any stored form of a URL is still in a value.
+     *
+     * Read on the serialized text, so a URL held by an object this tool cannot
+     * rewrite (a class that is not loaded, a private property) is still seen.
+     *
+     * @param  mixed  $value  Stored value.
+     * @param  string  $from  URL.
+     */
+    public static function holds_url($value, $from): bool
+    {
+        [$search, $replace] = self::variants((string) $from, '');
+
+        $raw = is_string($value) ? $value : serialize($value); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+
+        return self::replace_urls_in_string($raw, $search, $replace) !== $raw;
     }
 
     /**
