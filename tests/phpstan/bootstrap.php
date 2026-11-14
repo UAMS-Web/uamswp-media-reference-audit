@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Constants PHPStan cannot discover on its own.
  *

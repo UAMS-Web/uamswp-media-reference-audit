@@ -21,7 +21,7 @@ includes:
     # pestphp/pest. It registers Pest's expectation classes as universal object
     # crates, so chained expectations analyze instead of reporting undefined
     # properties. Uncomment together with the Pest entries under ignoreErrors.
-    # - vendor/pestphp/pest/extension.neon
+    - vendor/pestphp/pest/extension.neon
 
 parameters:
     # the PHP versions the code must parse and run on. `min` is the
@@ -49,8 +49,16 @@ parameters:
     # modifications.
     paths:
         - includes
+        - tests
         - uamswp-media-reference-audit.php
         - uninstall.php
+
+    # The Integration suite's own Composer setup: its vendor/ sits inside `tests`,
+    # so it is excluded from analysis, under `analyse` only, so its WordPress
+    # test classes can still be scanned below.
+    excludePaths:
+        analyse:
+            - tests/Integration/vendor
 
     # WP-CLI's classes and functions. includes/class-cli.php registers the
     # `uams-media-audit` command, and php-stubs/wordpress-stubs stops at core,
@@ -71,10 +79,12 @@ parameters:
     # Indexed for symbols but not analyzed. `php-stubs/wordpress-stubs` covers
     # core's runtime surface and stops there: `WP_UnitTestCase`, the factories
     # and `tests_add_filter()` ship with WordPress' test suite, not with
-    # WordPress. Uncomment when the tests run on wp-phpunit, or the Integration
-    # suite analyzes as a pile of undefined classes.
-    # scanDirectories:
-    #     - vendor/wp-phpunit/wp-phpunit/includes
+    # WordPress. The Integration suite runs on wp-phpunit, and without these paths
+    # it analyzes as a pile of undefined classes. They sit in the Integration
+    # suite's own Composer setup, so `composer setup:integration` must have run.
+    scanDirectories:
+        - tests/Integration/vendor/wp-phpunit/wp-phpunit/includes
+        - tests/Integration/vendor/yoast/phpunit-polyfills/src
 
     # Checkout-scoped cache. PHPStan's default tmpDir is
     # `sys_get_temp_dir()/phpstan`: machine-global, shared by every checkout and
@@ -147,6 +157,22 @@ parameters:
         -
             identifier: function.alreadyNarrowedType
             path: includes/class-archive.php
+
+        # `$this` inside a closure passed to `uses()->beforeEach()` / `afterEach()`
+        # is bound by Pest at runtime, which PHPStan cannot see. Pinned to
+        # `tests/Pest.php`, so the same error anywhere else still fails.
+        -
+            identifier: variable.undefined
+            message: '#^Undefined variable: \$this$#'
+            path: tests/Pest.php
+            reportUnmatched: false
+        # Pest routes its public API through classes it tags @internal; calling
+        # them from a test is Pest's intended use.
+        -
+            identifier: method.internalClass
+            message: '#of internal class Pest\\#'
+            path: tests
+            reportUnmatched: false
         # The entry most plugins need once the level reaches 4, from
         # uamswp-migration-api: the PHP version guard in the plugin header.
         # PHPStan analyzes at the `min` above, so
