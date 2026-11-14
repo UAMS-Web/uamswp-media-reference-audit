@@ -179,7 +179,7 @@ size checked against the local copy, giving one of:
 
 | Verdict | Meaning | Eligible |
 |---|---|---|
-| `identical` | Same file name and the same size | Yes |
+| `identical` | Same file name and the same size; the contents are not compared | Yes |
 | `resized` | The library has this image, but not at the same byte size | Opt-in |
 | `differs` | Same filename, different file | No |
 | `ambiguous` | More than one local attachment shares the filename | No |
@@ -189,6 +189,11 @@ size checked against the local copy, giving one of:
 **Repoint** rewrites the rows the comparison cleared. Each value is re-read
 first, so a page edited since the scan is left alone rather than written from a
 stale plan.
+
+A stored value is read without building any class it names (only `stdClass` is
+built). A value whose URL sits where the rewrite cannot reach, such as an object
+of a class that is not loaded or a private property, is reported as **failed** and
+left as it was, never as skipped and never half rewritten.
 
 What it writes, and what that costs:
 

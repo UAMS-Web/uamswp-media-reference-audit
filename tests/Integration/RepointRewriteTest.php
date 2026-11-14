@@ -162,6 +162,63 @@ final class RepointRewriteTest extends IntegrationTestCase
         $this->assertSame(['logo' => self::NEW_URL, 'keep' => 'x'], get_option('uams_mra_test_option'));
     }
 
+    public function test_an_option_holding_an_object_is_rewritten_and_reported_applied(): void
+    {
+        $object = new \stdClass;
+        $object->logo = self::OLD_URL;
+        update_option('uams_mra_test_object', $object);
+
+        $result = $this->rewrite(['source_type' => 'option', 'source_pk' => 0, 'source_key' => 'uams_mra_test_object']);
+
+        $this->assertSame('applied', $result['status']);
+        $this->assertSame(self::NEW_URL, get_option('uams_mra_test_object')->logo);
+    }
+
+    public function test_an_option_whose_url_sits_in_a_private_property_is_failed_not_skipped(): void
+    {
+        update_option('uams_mra_test_private', new UamsMraPrivateHolder(self::OLD_URL));
+
+        $result = $this->rewrite(['source_type' => 'option', 'source_pk' => 0, 'source_key' => 'uams_mra_test_private']);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame(self::OLD_URL, get_option('uams_mra_test_private')->url());
+    }
+
+    public function test_a_meta_value_holding_a_class_that_is_not_loaded_is_left_untouched_and_failed(): void
+    {
+        $post_id = self::factory()->post->create();
+        $value = 'O:11:"MissingKind":1:{s:3:"url";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";}';
+        $meta_id = $this->insertRawMeta($post_id, $value);
+
+        $result = $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $meta_id, 'source_id' => $post_id]);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame($value, $this->rawMeta($meta_id));
+    }
+
+    public function test_a_meta_value_with_one_url_inside_an_object_and_one_outside_is_not_half_written(): void
+    {
+        $post_id = self::factory()->post->create();
+        $inner = 'O:11:"MissingKind":1:{s:3:"url";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";}';
+        $value = 'a:2:{s:3:"one";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";s:3:"two";'.$inner.'}';
+        $meta_id = $this->insertRawMeta($post_id, $value);
+
+        $result = $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $meta_id, 'source_id' => $post_id]);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame($value, $this->rawMeta($meta_id));
+    }
+
+    public function test_a_meta_value_with_no_url_in_it_is_still_skipped(): void
+    {
+        $post_id = self::factory()->post->create();
+        $meta_id = $this->insertRawMeta($post_id, serialize(['other' => 'https://elsewhere.example/a.jpg']));
+
+        $result = $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $meta_id, 'source_id' => $post_id]);
+
+        $this->assertSame('skipped', $result['status']);
+    }
+
     public function test_a_revision_is_never_rewritten(): void
     {
         $post_id = self::factory()->post->create(['post_content' => self::OLD_URL]);
@@ -170,6 +227,19 @@ final class RepointRewriteTest extends IntegrationTestCase
 
         $this->assertSame('skipped', $result['status']);
         $this->assertSame(self::OLD_URL, get_post($post_id)->post_content);
+    }
+}
+
+/**
+ * An object whose URL sits in a private property, out of reach of the rewrite.
+ */
+final class UamsMraPrivateHolder
+{
+    public function __construct(private string $url) {}
+
+    public function url(): string
+    {
+        return $this->url;
     }
 }
 
