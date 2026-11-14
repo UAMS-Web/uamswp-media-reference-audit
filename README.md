@@ -179,7 +179,7 @@ size checked against the local copy, giving one of:
 
 | Verdict | Meaning | Eligible |
 |---|---|---|
-| `identical` | Byte for byte the same file | Yes |
+| `identical` | Same file name and the same size | Yes |
 | `resized` | The library has this image, but not at the same byte size | Opt-in |
 | `differs` | Same filename, different file | No |
 | `ambiguous` | More than one local attachment shares the filename | No |

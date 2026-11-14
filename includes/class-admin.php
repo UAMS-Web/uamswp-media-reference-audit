@@ -1875,6 +1875,21 @@ class UAMS_MRA_Admin
     }
 
     /**
+     * Make one CSV cell safe to open in a spreadsheet.
+     *
+     * A cell that starts with = + - @ or a control character is read as a formula,
+     * and a post title (which any author sets) ends up in this report.
+     *
+     * @param  mixed  $value  Cell text.
+     */
+    protected static function csv_cell($value): string
+    {
+        $value = (string) $value;
+
+        return $value !== '' && strpbrk($value[0], "=+-@\t\r") !== false ? "'".$value : $value;
+    }
+
+    /**
      * Stream the offsite report as CSV.
      */
     public function export_offsite_csv(): void
@@ -1917,13 +1932,13 @@ class UAMS_MRA_Admin
                 fputcsv(
                     $out,
                     [
-                        $file['base_norm'],
-                        $file['url'],
-                        $file['host'],
+                        self::csv_cell($file['base_norm']),
+                        self::csv_cell($file['url']),
+                        self::csv_cell($file['host']),
                         $file['hits'],
                         $file['source_types'],
                         (string) $file['local_ids'],
-                        implode(' | ', $labels),
+                        self::csv_cell(implode(' | ', $labels)),
                     ],
                     ',',
                     '"',

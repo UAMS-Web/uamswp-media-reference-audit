@@ -134,7 +134,7 @@ class UAMS_MRA_Repoint
     public static function verdicts(): array
     {
         return [
-            'identical' => __('The local file is byte for byte the same. Safe to repoint.', 'uams-mra'),
+            'identical' => __('The local file has the same name and the same size. Safe to repoint.', 'uams-mra'),
             'resized' => __('The library holds this image, but not at the same byte size. Look before including these.', 'uams-mra'),
             'differs' => __('Same filename, different file. Someone has to decide which one is wanted.', 'uams-mra'),
             'ambiguous' => __('More than one local attachment shares this filename, so there is no single right target.', 'uams-mra'),
@@ -497,7 +497,7 @@ class UAMS_MRA_Repoint
             $url
         );
 
-        $response = wp_remote_head($url, $args);
+        $response = wp_safe_remote_head($url, $args);
 
         if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200) {
             return null;
@@ -1119,8 +1119,11 @@ class UAMS_MRA_Repoint
             $updated = wp_update_post(
                 [
                     'ID' => $pk,
-                    'post_content' => $content,
-                    'post_excerpt' => $excerpt,
+                    // wp_update_post() expects slashed input and unslashes it, so
+                    // unslashed text loses every backslash: the \/ and \" that block
+                    // JSON carries would be saved as / and ".
+                    'post_content' => wp_slash($content),
+                    'post_excerpt' => wp_slash($excerpt),
                 ],
                 true
             );
@@ -1156,7 +1159,12 @@ class UAMS_MRA_Repoint
                 ];
             }
 
-            update_option($name, $new);
+            if (! update_option($name, $new)) {
+                return [
+                    'status' => 'failed',
+                    'applied' => 3,
+                ];
+            }
 
             return [
                 'status' => 'applied',
@@ -1177,6 +1185,17 @@ class UAMS_MRA_Repoint
         $current = $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$meta['table']} WHERE {$meta['pk']} = %d", $pk));
 
         if ($current === null) {
+            return [
+                'status' => 'failed',
+                'applied' => 3,
+            ];
+        }
+
+        // A value that looks serialized but does not unserialize (a length prefix
+        // broken by an earlier search and replace) reads back as false. Writing
+        // that back would replace the stored value with `b:0;`, and meta keeps no
+        // revision to restore from.
+        if (self::is_unreadable($current)) {
             return [
                 'status' => 'failed',
                 'applied' => 3,
@@ -1285,6 +1304,11 @@ class UAMS_MRA_Repoint
             $replace[] = $to_json;
         }
 
+        // Never turn an unreadable serialized value into serialize(false).
+        if (self::is_unreadable($value)) {
+            return $value;
+        }
+
         $data = maybe_unserialize($value);
         $data = self::deep_replace($data, $search, $replace);
 
@@ -1297,6 +1321,47 @@ class UAMS_MRA_Repoint
         }
 
         return $data;
+    }
+
+    /**
+     * Whether a value looks serialized but cannot be read back.
+     *
+     * `maybe_unserialize()` returns false for it, which is also what a stored
+     * `b:0;` returns, so the one real false is excluded.
+     *
+     * @param  mixed  $value  Stored value.
+     */
+    public static function is_unreadable($value): bool
+    {
+        return is_string($value)
+            && is_serialized($value)
+            && trim($value) !== 'b:0;'
+            && maybe_unserialize($value) === false;
+    }
+
+    /**
+     * Replace one URL's variants inside a string, only where the URL ends.
+     *
+     * Without the boundary `…/a.jpg` also matches the front of `…/a.jpg.webp`,
+     * the file a WebP plugin keeps beside the original, and the rewrite would
+     * point at a file the target does not have.
+     *
+     * @param  string  $subject  Text.
+     * @param  array  $search  Needles, in the order they must run.
+     * @param  array  $replace  Replacements, same order.
+     */
+    protected static function replace_urls_in_string($subject, array $search, array $replace): string
+    {
+        foreach ($search as $i => $needle) {
+            $with = $replace[$i];
+            $subject = (string) preg_replace_callback(
+                '#'.preg_quote($needle, '#').'(?![\w%]|\.\w)#',
+                static fn (): string => $with,
+                $subject
+            );
+        }
+
+        return $subject;
     }
 
     /**
@@ -1315,7 +1380,7 @@ class UAMS_MRA_Repoint
         }
 
         if (is_string($data)) {
-            return str_replace($search, $replace, $data);
+            return self::replace_urls_in_string($data, $search, $replace);
         }
 
         if (is_array($data)) {

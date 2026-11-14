@@ -1118,6 +1118,8 @@ class UAMS_MRA_Scanner
         }
 
         $ours = self::upload_path_prefixes();
+        $hosts = self::own_hosts();
+        $base = self::own_uploads_path();
         $out = [];
 
         foreach ($matches as $match) {
@@ -1127,12 +1129,25 @@ class UAMS_MRA_Scanner
 
             // Anything under this site's own uploads, or under a prefix the
             // settings already claim as ours, is handled by extract_paths().
+            //
+            // The site's own uploads path is the same on most WordPress installs
+            // (wp-content/uploads), so on its own it says nothing about whose file
+            // a URL names: another host serving the same layout is the offsite
+            // case this report exists for. It counts as ours only on this site's
+            // host. A prefix named in the settings is claimed on any host, since
+            // that is how a CDN or an offload bucket is declared.
             $is_ours = false;
             foreach ($ours as $prefix) {
-                if ($prefix !== '' && stripos($full, $prefix.'/') !== false) {
-                    $is_ours = true;
-                    break;
+                if ($prefix === '' || stripos($full, $prefix.'/') === false) {
+                    continue;
                 }
+
+                if ($prefix === $base && ! in_array($host, $hosts, true)) {
+                    continue;
+                }
+
+                $is_ours = true;
+                break;
             }
 
             if ($is_ours || isset($out[$full])) {
@@ -1339,6 +1354,37 @@ class UAMS_MRA_Scanner
                 ]
             )
         );
+    }
+
+    /**
+     * Path of this site's uploads folder, without slashes at either end.
+     */
+    protected static function own_uploads_path(): string
+    {
+        $uploads = wp_get_upload_dir();
+
+        return trim((string) wp_parse_url((string) $uploads['baseurl'], PHP_URL_PATH), '/');
+    }
+
+    /**
+     * Hosts that count as this site: where uploads are served, and the site itself.
+     *
+     * @return array<int, string>
+     */
+    protected static function own_hosts(): array
+    {
+        $uploads = wp_get_upload_dir();
+        $hosts = [];
+
+        foreach ([(string) $uploads['baseurl'], home_url(), site_url()] as $url) {
+            $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+
+            if ($host !== '') {
+                $hosts[] = $host;
+            }
+        }
+
+        return array_values(array_unique($hosts));
     }
 
     /**
