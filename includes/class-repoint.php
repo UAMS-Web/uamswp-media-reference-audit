@@ -520,6 +520,8 @@ class UAMS_MRA_Repoint
             $length = reset($length);
         }
 
+        // The return type is ?int, which converts a numeric string to the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return ($length === '' || $length === false) ? null : (int) $length;
     }
 
@@ -557,7 +559,11 @@ class UAMS_MRA_Repoint
         }
 
         $file = get_attached_file($attachment_id);
+        // dirname() converts a false path to an empty string itself, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $dir = trailingslashit(dirname((string) $file));
+        // dirname() converts a false URL to an empty string itself, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $base = (string) wp_get_attachment_url($attachment_id);
         $base = trailingslashit(dirname($base));
 
@@ -577,6 +583,8 @@ class UAMS_MRA_Repoint
             }
 
             return [
+                // filesize() returns an integer for a file that passed is_file(), so the cast changes nothing.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 'bytes' => (int) filesize($path),
                 'url' => $base.$size['file'],
             ];
@@ -594,7 +602,13 @@ class UAMS_MRA_Repoint
     {
         $path = get_attached_file($attachment_id);
 
-        return ($path && is_readable($path) && is_file($path)) ? (int) filesize($path) : 0;
+        // Only a file that exists and cannot be read tells the path check from the readable check, and Pest's mutation stream wrapper cannot stat one, so no unit test can kill it there. Under plain PHPUnit it returns 6 for a mode-0 file where the code returns 0.
+        // @pest-mutate-ignore:BooleanAndToBooleanOr
+        $readable = $path && is_readable($path);
+
+        // filesize() returns an integer for a file that passed is_file(), and the return type is int, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        return ($readable && is_file($path)) ? (int) filesize($path) : 0;
     }
 
     /**
@@ -609,15 +623,23 @@ class UAMS_MRA_Repoint
      */
     protected static function time_budget(): int
     {
+        // A numeric string compares and multiplies as the same number, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $max = (int) ini_get('max_execution_time');
 
         // Zero means no limit, which is common on CLI and rare on a web request.
         // Assume a conservative ceiling rather than trusting it.
         if ($max <= 0) {
+            // Thirty and thirty-one seconds both round down to a budget of eighteen, so the mutant cannot be told apart.
+            // @pest-mutate-ignore:IncrementInteger
             $max = 30;
         }
 
-        return (int) apply_filters('uams_mra_repoint_time_budget', max(5, (int) floor($max * 0.6)));
+        $budget = max(5, (int) floor($max * 0.6));
+
+        // The return type is int, which converts a numeric filter result to the same integer, so the outer cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        return (int) apply_filters('uams_mra_repoint_time_budget', $budget);
     }
 
     /* ---------------------------------------------------------------------
@@ -970,6 +992,9 @@ class UAMS_MRA_Repoint
             $limit = 512 * MB_IN_BYTES;
         }
 
+        // Any image that reaches this line needs at least ten bytes, so a free amount of minus one or one compares the same as zero.
+        // @pest-mutate-ignore:DecrementInteger
+        // @pest-mutate-ignore:IncrementInteger
         $free = max(0, $limit - memory_get_usage(true));
         $needed = (int) $dimensions[0] * (int) $dimensions[1] * 4 * 2.5;
 
@@ -1430,6 +1455,8 @@ class UAMS_MRA_Repoint
         $search = [];
         $replace = [];
 
+        // preg_replace() returns null only on a regex error, and the next line joins it as text, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $from_bare = (string) preg_replace('#^https?:#i', '', $from);
         $to_json = str_replace('/', '\\/', $to);
 
@@ -1508,6 +1535,8 @@ class UAMS_MRA_Repoint
      */
     public static function holds_url($value, $from): bool
     {
+        // Only whether a replacement changed the text is read, so the replacement text is never compared.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         [$search, $replace] = self::variants((string) $from, '');
 
         $raw = is_string($value) ? $value : serialize($value); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
@@ -1530,6 +1559,8 @@ class UAMS_MRA_Repoint
     {
         foreach ($search as $i => $needle) {
             $with = $replace[$i];
+            // preg_replace_callback() returns null only on a regex error, which a literal needle cannot raise, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $subject = (string) preg_replace_callback(
                 '#'.preg_quote($needle, '#').'(?![\w%]|\.\w)#',
                 static fn (): string => $with,
@@ -1559,6 +1590,8 @@ class UAMS_MRA_Repoint
             return self::replace_urls_in_string($data, $search, $replace);
         }
 
+        // The branch's own return hands back the same value the final return does, so dropping it changes nothing for an array.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (is_array($data)) {
             foreach ($data as $key => $value) {
                 $data[$key] = self::deep_replace($value, $search, $replace, $depth + 1);
@@ -1567,6 +1600,8 @@ class UAMS_MRA_Repoint
             return $data;
         }
 
+        // The branch's own return hands back the same value the final return does, so dropping it changes nothing for a readable object.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (is_object($data) && ! ($data instanceof __PHP_Incomplete_Class)) {
             foreach (get_object_vars($data) as $key => $value) {
                 $data->$key = self::deep_replace($value, $search, $replace, $depth + 1);
