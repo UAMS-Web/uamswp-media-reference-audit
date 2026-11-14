@@ -14,7 +14,8 @@ class UAMS_MRA_Index
      * Normalize a file path so that every generated size collapses onto the original.
      *
      * Strips query strings, size suffixes (-1024x768), -scaled, -rotated, and the
-     * -e1234567890 suffix WordPress adds to edited images.
+     * -e1234567890 suffix WordPress adds to edited images, in whatever order they
+     * are stacked. Backslashes are read as separators on every platform.
      *
      * @param  mixed  $file  Relative or absolute path or URL fragment; any other value is cast to a string.
      * @return array {path_norm, base_norm}
@@ -23,24 +24,40 @@ class UAMS_MRA_Index
     {
         $file = (string) $file;
         $file = preg_replace('#[?\#].*$#', '', $file);
-        // Equivalent: a `\/` left in place is split on its `/` and its `\` becomes `/` below, which gives the same segments.
-        // @pest-mutate-ignore:UnwrapStrReplace
-        $file = str_replace('\\/', '/', $file);
         $file = rawurldecode($file);
+
+        // One separator, whatever the source wrote: dirname() and basename() read a
+        // backslash as one only on Windows, so left alone the same value would split
+        // differently there. This also covers the slash-escaped `\/` of block JSON
+        // and a `%5C` that decoding just produced.
+        $file = str_replace('\\', '/', $file);
         $file = strtolower(trim($file, "/ \t\n\r\0\x0B"));
 
         // Equivalent: a leading `/` only adds an empty first segment, which the segment filter drops below.
         // @pest-mutate-ignore:UnwrapLtrim
-        $dir = ltrim(str_replace('\\', '/', dirname($file)), '/');
+        $dir = ltrim(dirname($file), '/');
         $base = basename($file);
         // Equivalent: `$file` was lower-cased above, so its extension already is.
         // @pest-mutate-ignore:UnwrapStrtolower
         $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
         $name = pathinfo($base, PATHINFO_FILENAME);
 
-        foreach (self::derivative_patterns() as $pattern) {
-            $name = preg_replace($pattern, '', $name);
-        }
+        // Repeat until nothing more comes off: WordPress stacks suffixes in either
+        // order (an edit stamp after -scaled, a size after an edit stamp), and one
+        // pass in a fixed order leaves whatever the last pattern uncovered.
+        $patterns = self::derivative_patterns();
+
+        do {
+            $before = $name;
+
+            foreach ($patterns as $pattern) {
+                // Equivalent: preg_replace() returns null only when a filtered pattern
+                // fails to run, and null reaches the next call as an empty string either
+                // way. The cast is for the analyzer, which sees string|null.
+                // @pest-mutate-ignore:RemoveStringCast
+                $name = (string) preg_replace($pattern, '', $name);
+            }
+        } while ($name !== $before);
 
         $base_norm = $ext !== '' ? $name.'.'.$ext : $name;
 

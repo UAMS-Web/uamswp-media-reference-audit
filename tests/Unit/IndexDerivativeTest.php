@@ -44,11 +44,33 @@ it('applies the patterns in order, so a size comes off before -scaled beneath it
     expect(UAMS_MRA_Index::normalize('2025/11/photo-scaled-2560x1440.jpg')[1])->toBe('photo.jpg');
 });
 
-it('leaves -scaled on a name whose edit stamp came last', function (): void {
-    // Current behavior, pinned so a fix is a deliberate change: UAMS-Web/uamswp-media-reference-audit#68
-    // wants this to collapse to photo.jpg. The edit-stamp pattern runs after -scaled.
-    expect(UAMS_MRA_Index::normalize('2025/11/photo-scaled-e1700000000000.jpg')[1])->toBe('photo-scaled.jpg');
+it('collapses suffixes stacked in either order', function (string $file): void {
+    expect(UAMS_MRA_Index::normalize($file)[1])->toBe('photo.jpg');
+})->with([
+    'an edit stamp after -scaled' => ['2025/11/photo-scaled-e1700000000000.jpg'],
+    'a size after an edit stamp after -scaled' => ['2025/11/photo-scaled-e1700000000000-300x200.jpg'],
+    '-rotated after -scaled' => ['2025/11/photo-scaled-rotated.jpg'],
+    '-scaled after an edit stamp' => ['2025/11/photo-e1700000000000-scaled.jpg'],
+    'a size after -rotated after -scaled' => ['2025/11/photo-scaled-rotated-100x100.jpg'],
+]);
+
+it('stops when a pattern list can no longer shorten the name', function (): void {
+    expectApplied('uams_mra_derivative_patterns')
+        ->once()
+        ->andReturn(['#-x$#']);
+
+    expect(UAMS_MRA_Index::normalize('2025/11/a-x-x-x.jpg')[1])->toBe('a.jpg');
 });
+
+it('reads a backslash as a separator, whatever the platform', function (string $file, array $expected): void {
+    expect(UAMS_MRA_Index::normalize($file))->toBe($expected);
+})->with([
+    'backslash folders' => ['2025\\11\\a-300x200.jpg', ['2025/11/a.jpg', 'a.jpg']],
+    'an encoded backslash' => ['2025%5C11%5Ca.jpg', ['2025/11/a.jpg', 'a.jpg']],
+    'a Windows path' => ['C:\\uploads\\2025\\11\\a.jpg', ['2025/11/a.jpg', 'a.jpg']],
+    'the slash-escaped form of block JSON' => ['2025\\/11\\/a.jpg', ['2025/11/a.jpg', 'a.jpg']],
+    'mixed separators' => ['2025/11\\a.jpg', ['2025/11/a.jpg', 'a.jpg']],
+]);
 
 it('removes each pattern once and only at the end of the name', function (string $file, string $expected): void {
     expect(UAMS_MRA_Index::normalize($file)[1])->toBe($expected);
