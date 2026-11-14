@@ -125,7 +125,7 @@ final class ScannerStepsTest extends IntegrationTestCase
      *
      * @return array<string, mixed>
      */
-    private function result(int $attachment_id): array
+    public function result(?int $attachment_id = null): array
     {
         global $wpdb;
 
@@ -2188,7 +2188,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
         $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
-        add_post_meta($revision, 'zl_old', 'x');
+        // add_post_meta() writes a revision's meta to its parent, so the row is inserted directly.
+        $GLOBALS['wpdb']->insert($GLOBALS['wpdb']->postmeta, ['post_id' => $revision, 'meta_key' => 'zl_old', 'meta_value' => 'x']);
         add_post_meta($post, 'zl_empty', '');
         add_post_meta($post, 'zl_hero', $this->url('2025/11/zl-a.jpg'));
 
@@ -2218,5 +2219,28 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same(500, $asked['number']);
         $this->same('ids', $asked['fields']);
         $this->same([get_current_blog_id()], $asked['site__not_in']);
+    }
+
+    public function test_the_finalize_step_reads_the_stored_paths_with_one_meta_query(): void
+    {
+        global $wpdb;
+
+        $first = $this->attachment('2025/11/zm-a.jpg');
+        $this->attachment('2025/11/zm-b.jpg');
+        $this->attachment('2025/11/zm-c.jpg');
+        wp_cache_flush();
+
+        $queries = 0;
+        add_filter('query', static function ($sql) use (&$queries, $wpdb) {
+            if (str_contains((string) $sql, "FROM {$wpdb->postmeta}")) {
+                $queries++;
+            }
+
+            return $sql;
+        });
+
+        $this->scanStep($this->state('finalize', [], ['cursor' => $first - 1]));
+
+        $this->same(1, $queries);
     }
 }
