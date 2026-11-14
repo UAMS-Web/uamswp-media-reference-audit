@@ -224,6 +224,6 @@ class UAMS_MRA_Store
         );
         // phpcs:enable
 
-        return is_array($row) ? array_map('intval', $row) : [];
+        return is_array($row) ? array_map(intval(...), $row) : [];
     }
 }

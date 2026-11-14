@@ -107,7 +107,7 @@ class UAMS_MRA_Triage
      */
     protected static function distributable_sql(): string
     {
-        $mimes = array_map('esc_sql', self::distributable_mimes());
+        $mimes = array_map(esc_sql(...), self::distributable_mimes());
         $list = "'".implode("','", $mimes)."'";
 
         // LEFT() rather than LIKE 'video/%': this fragment is concatenated into
@@ -124,16 +124,12 @@ class UAMS_MRA_Triage
      */
     public static function tier_where($tier): string
     {
-        switch ($tier) {
-            case 'verify':
-                return 'is_attached = 1';
-            case 'ask':
-                return 'is_attached = 0 AND '.self::distributable_sql();
-            case 'clear':
-                return 'is_attached = 0 AND NOT '.self::distributable_sql();
-            default:
-                return '1=1';
-        }
+        return match ($tier) {
+            'verify' => 'is_attached = 1',
+            'ask' => 'is_attached = 0 AND '.self::distributable_sql(),
+            'clear' => 'is_attached = 0 AND NOT '.self::distributable_sql(),
+            default => '1=1',
+        };
     }
 
     /**
@@ -149,7 +145,7 @@ class UAMS_MRA_Triage
 
         $mime = isset($row['mime']) ? (string) $row['mime'] : '';
 
-        if (strpos($mime, 'video/') === 0 || strpos($mime, 'audio/') === 0) {
+        if (str_starts_with($mime, 'video/') || str_starts_with($mime, 'audio/')) {
             return 'ask';
         }
 
@@ -273,7 +269,7 @@ class UAMS_MRA_Triage
             )
         );
 
-        return array_map('intval', (array) $ids);
+        return array_map(intval(...), (array) $ids);
     }
 
     /**
@@ -299,7 +295,6 @@ class UAMS_MRA_Triage
                 'ask' => 0,
                 'delete' => 0,
             ],
-            'none' => 0,
             'delete_bytes' => 0,
         ];
 

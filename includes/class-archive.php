@@ -82,13 +82,10 @@ class UAMS_MRA_Archive
     /* ---------------------------------------------------------------------
      * Job state
      * ------------------------------------------------------------------ */
-
     /**
      * Read the current job.
-     *
-     * @return array|null
      */
-    public static function get_job()
+    public static function get_job(): ?array
     {
         $job = get_user_meta(get_current_user_id(), self::META_KEY, true);
 
@@ -125,7 +122,7 @@ class UAMS_MRA_Archive
      * @param  array  $ids  Attachment IDs.
      * @return array|WP_Error The job.
      */
-    public static function start(array $ids)
+    public static function start(array $ids): WP_Error|array
     {
         if (! self::available()) {
             return new WP_Error(
@@ -136,7 +133,7 @@ class UAMS_MRA_Archive
 
         self::discard();
 
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $ids = array_values(array_unique(array_filter(array_map(intval(...), $ids))));
 
         if ($ids === []) {
             return new WP_Error('uams_mra_empty', __('Nothing is selected, so there is nothing to archive.', 'uams-mra'));
@@ -175,7 +172,7 @@ class UAMS_MRA_Archive
      *
      * @return array|WP_Error The job.
      */
-    public static function step()
+    public static function step(): WP_Error|array
     {
         $job = self::get_job();
 
@@ -340,14 +337,13 @@ class UAMS_MRA_Archive
      *
      * @param  int  $id  Attachment ID.
      * @param  string  $path  Absolute path.
-     * @return string
      */
-    protected static function local_name($id, $path)
+    protected static function local_name($id, $path): string
     {
         $uploads = wp_get_upload_dir();
         $base = trailingslashit($uploads['basedir']);
 
-        if (strpos($path, (string) $base) === 0) {
+        if (str_starts_with($path, (string) $base)) {
             return substr($path, strlen($base));
         }
 
@@ -516,7 +512,7 @@ class UAMS_MRA_Archive
         $base = self::base_dir();
 
         // Never walk outside the plugin's own folder.
-        if (! $dir || strpos($dir, $base) !== 0 || $dir === $base) {
+        if (! $dir || ! str_starts_with($dir, $base) || $dir === $base) {
             return;
         }
 

@@ -161,7 +161,7 @@ class UAMS_MRA_Admin
 
         check_admin_referer('bulk-media_items');
 
-        $ids = isset($_POST['ids']) ? array_map('absint', (array) wp_unslash($_POST['ids'])) : [];
+        $ids = isset($_POST['ids']) ? array_map(absint(...), (array) wp_unslash($_POST['ids'])) : [];
         $ids = array_filter($ids);
 
         if ($ids === []) {
@@ -551,7 +551,7 @@ class UAMS_MRA_Admin
         $path = $job['dir'].'/'.$job['parts'][$part]['name'];
 
         // The job folder is the only place this may ever read from.
-        if (strpos($path, UAMS_MRA_Archive::base_dir()) !== 0 || ! file_exists($path)) {
+        if (! str_starts_with($path, UAMS_MRA_Archive::base_dir()) || ! file_exists($path)) {
             wp_die(esc_html__('That archive file is missing. Build it again.', 'uams-mra'));
         }
 

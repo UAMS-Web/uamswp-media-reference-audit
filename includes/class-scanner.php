@@ -149,7 +149,7 @@ class UAMS_MRA_Scanner
                     'site__not_in' => [get_current_blog_id()],
                 ]
             );
-            $state['site_queue'] = array_map('intval', (array) $sites);
+            $state['site_queue'] = array_map(intval(...), (array) $sites);
             if (empty($state['site_queue'])) {
                 return self::advance($state);
             }
@@ -656,7 +656,7 @@ class UAMS_MRA_Scanner
         }
 
         $ids = wp_list_pluck($rows, 'ID');
-        $ids = array_map('intval', $ids);
+        $ids = array_map(intval(...), $ids);
 
         // One meta query for the whole batch instead of two per attachment.
         update_meta_cache('post', $ids);
@@ -672,7 +672,7 @@ class UAMS_MRA_Scanner
         }
 
         $parent_statuses = [];
-        $parents = array_filter(array_map('intval', wp_list_pluck($rows, 'post_parent')));
+        $parents = array_filter(array_map(intval(...), wp_list_pluck($rows, 'post_parent')));
         if ($parents !== []) {
             $parents = array_values(array_unique($parents));
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
@@ -860,7 +860,7 @@ class UAMS_MRA_Scanner
     {
         $content = (string) $content;
 
-        if (strpos($content, '/') === false) {
+        if (! str_contains($content, '/')) {
             return [];
         }
 
@@ -929,7 +929,7 @@ class UAMS_MRA_Scanner
         }
 
         // Block comments carry their attachment IDs as JSON.
-        if (strpos($content, '<!-- wp:') !== false && preg_match_all('#<!--\s+/?wp:.*?-->#s', $content, $blocks)) {
+        if (str_contains($content, '<!-- wp:') && preg_match_all('#<!--\s+/?wp:.*?-->#s', $content, $blocks)) {
             foreach ($blocks[0] as $block) {
                 if (preg_match_all('#"id"\s*:\s*(\d+)#', $block, $bm)) {
                     $ids = array_merge($ids, $bm[1]);
@@ -943,7 +943,7 @@ class UAMS_MRA_Scanner
             }
         }
 
-        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+        return array_values(array_unique(array_filter(array_map(intval(...), $ids))));
     }
 
     /**
@@ -978,7 +978,7 @@ class UAMS_MRA_Scanner
 
         // Strong: JSON style id and ids keys, used by most page builders.
         $json_ids = [];
-        if (strpos($value, '"') !== false) {
+        if (str_contains($value, '"')) {
             if (preg_match_all('#"(?:id|ids|image_id|attachment_id|thumbnail_id|media_id)"\s*:\s*(\d+)#i', $value, $m)) {
                 $json_ids = array_merge($json_ids, $m[1]);
             }

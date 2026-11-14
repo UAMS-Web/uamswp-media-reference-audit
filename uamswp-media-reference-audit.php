@@ -6,7 +6,7 @@
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
  * Version:           1.2.0
  * Requires at least: 6.0
- * Requires PHP:      7.4
+ * Requires PHP:      8.2
  * Author:            UAMS Web Services
  * Author URI:        https://communications.uams.edu/web/
  * License:           GPL-2.0-or-later

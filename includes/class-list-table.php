@@ -70,20 +70,14 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public static function where_for_view($view)
     {
-        switch ($view) {
-            case 'orphaned':
-                return 'ref_count = 0 AND is_attached = 0';
-            case 'unreferenced':
-                return 'ref_count = 0';
-            case 'unattached':
-                return 'is_attached = 0';
-            case 'weak':
-                return 'ref_count > 0 AND ref_count_strict = 0';
-            case 'referenced':
-                return 'ref_count > 0';
-            default:
-                return '1=1';
-        }
+        return match ($view) {
+            'orphaned' => 'ref_count = 0 AND is_attached = 0',
+            'unreferenced' => 'ref_count = 0',
+            'unattached' => 'is_attached = 0',
+            'weak' => 'ref_count > 0 AND ref_count_strict = 0',
+            'referenced' => 'ref_count > 0',
+            default => '1=1',
+        };
     }
 
     /**

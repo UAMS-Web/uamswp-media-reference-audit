@@ -52,7 +52,7 @@ class UAMS_MRA_Selection
             ? $wpdb->get_col($wpdb->prepare($sql, $query['params']))
             : $wpdb->get_col($sql);
 
-        return array_map('intval', (array) $ids);
+        return array_map(intval(...), (array) $ids);
     }
 
     /**
@@ -161,7 +161,7 @@ class UAMS_MRA_Selection
      */
     public static function store(array $ids): array
     {
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $ids = array_values(array_unique(array_filter(array_map(intval(...), $ids))));
 
         if (count($ids) > self::MAX) {
             $ids = array_slice($ids, 0, self::MAX);
@@ -181,7 +181,7 @@ class UAMS_MRA_Selection
     {
         $ids = get_user_meta(get_current_user_id(), self::META_KEY, true);
 
-        return is_array($ids) ? array_map('intval', $ids) : [];
+        return is_array($ids) ? array_map(intval(...), $ids) : [];
     }
 
     /**
@@ -207,7 +207,7 @@ class UAMS_MRA_Selection
         }
 
         $table = UAMS_MRA_Store::results_table();
-        $ids = array_map('intval', $ids);
+        $ids = array_map(intval(...), $ids);
         $in = implode(',', $ids);
 
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared

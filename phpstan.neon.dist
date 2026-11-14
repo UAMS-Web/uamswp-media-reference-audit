@@ -34,7 +34,7 @@ parameters:
     # 7.0 = 70000, 7.4 = 70400, 8.2 = 80200, 8.4 = 80400. The range form needs
     # PHPStan 2.0 or later.
     phpVersion:
-        min: 70400
+        min: 80200
         max: 80400
 
     # the highest level the code passes today. Find it by running
@@ -141,7 +141,7 @@ parameters:
 
         # ZipArchive::setCompressionName() exists on every PHP from 7.0, so
         # PHPStan is right that the method_exists() guard in front of it is
-        # always true at the 7.4 floor. Removing a runtime guard is a behavior
+        # always true at the 8.2 floor. Removing a runtime guard is a behavior
         # decision outside this adoption, which changes no behavior; remove
         # this entry in the same change that removes the guard.
         -
