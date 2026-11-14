@@ -927,6 +927,8 @@ class UAMS_MRA_Repoint
 
         $settings = uams_mra_settings();
         $defaults = uams_mra_default_settings();
+        // The product with a number of bytes is the same whether `max()` hands back a number or a numeric string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $max = max(1, (int) ($settings['sideload_max_mb'] ?? $defaults['sideload_max_mb'])) * MB_IN_BYTES;
 
         $size = self::remote_size($url);
