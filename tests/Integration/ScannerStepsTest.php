@@ -1462,15 +1462,15 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $this->useRealTables();
 
-        [$parent, $files] = $this->parentWithFiles(1);
+        [$parent, $files] = $this->parentWithFiles(2);
         $this->serve(fn (): string => '<img src="'.$this->url('2025/11/f'.$parent.'-0.jpg').'"><img src="https://old.example.edu/wp-content/uploads/sites/2/2020/01/f'.$parent.'-0.jpg">');
 
         $state = $this->scanStep($this->renderState([$parent]));
 
         $this->assertSame('found', $this->result($files[0])['render_state']);
         $this->assertSame('', $this->result($files[0])['render_note']);
-        $this->assertSame(0, $state['render_stats']['offsite']);
-        $this->assertSame(1, $state['render_stats']['found']);
+        $this->assertSame('absent', $this->result($files[1])['render_state']);
+        $this->assertSame(['pages' => 1, 'found' => 1, 'absent' => 1, 'error' => 0, 'offsite' => 0], $state['render_stats']);
     }
 
     public function test_a_page_that_cannot_be_fetched_leaves_its_files_for_a_person_to_check(): void
@@ -1993,5 +1993,169 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->assertSame($started['started'], $final['started']);
         $this->assertSame($kept, array_slice($this->refs(), 0, count($kept)));
         $this->assertSame('1', $this->result($linked)['ref_count']);
+    }
+
+    // Paths that only a later page, row or setting can show
+
+    public function test_the_posts_step_reads_the_content_before_the_excerpt(): void
+    {
+        $post = self::factory()->post->create([
+            'post_content' => 'https://old.example.edu/wp-content/uploads/2020/01/zh-first.jpg',
+            'post_excerpt' => 'https://old.example.edu/wp-content/uploads/2020/01/zh-second.jpg',
+        ]);
+
+        $this->scanStep($this->state('posts', [], ['cursor' => $post - 1]));
+
+        $this->assertSame(['zh-first.jpg', 'zh-second.jpg'], array_column($this->offsite(), 'base_norm'));
+    }
+
+    public function test_a_skipped_meta_key_does_not_end_the_batch(): void
+    {
+        $attachment = $this->attachment('2025/11/zi-a.jpg');
+        $post = self::factory()->post->create();
+        $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
+        add_post_meta($post, '_edit_lock', '1:1');
+        add_post_meta($post, 'zi_hero', $this->url('2025/11/zi-a.jpg'));
+
+        $this->scanStep($this->state('postmeta', [], ['cursor' => $before]));
+
+        $this->assertSame([(string) $attachment], array_column($this->refs(), 'attachment_id'));
+    }
+
+    public function test_an_empty_option_does_not_end_the_batch(): void
+    {
+        $attachment = $this->attachment('2025/11/zj-a.jpg');
+        $before = $this->maxId($GLOBALS['wpdb']->options, 'option_id');
+        add_option('zj_empty', '');
+        add_option('zj_hero', $this->url('2025/11/zj-a.jpg'));
+
+        $this->scanStep($this->state('options', [], ['cursor' => $before]));
+
+        $this->assertSame([(string) $attachment], array_column($this->refs(), 'attachment_id'));
+    }
+
+    public function test_the_render_step_is_skipped_by_its_setting_even_when_pages_are_waiting(): void
+    {
+        $this->parentWithFiles(1);
+
+        $state = $this->call('advance', $this->state('finalize', ['include_render' => 0]));
+
+        $this->assertSame('done', $state['step']);
+        $this->assertSame([], $state['render_queue']);
+        $this->assertArrayNotHasKey('render_token', $state);
+
+        $on = $this->call('advance', $this->state('finalize', ['include_render' => 1]));
+
+        $this->assertSame('render', $on['step']);
+        $this->assertCount(1, $on['render_queue']);
+    }
+
+    public function test_a_queue_with_exactly_as_many_pages_as_the_ceiling_is_not_reported_as_capped(): void
+    {
+        $this->parentWithFiles(1);
+        $this->parentWithFiles(1);
+
+        $exact = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
+
+        $this->assertCount(2, $exact['render_queue']);
+        $this->assertSame(0, $exact['render_capped']);
+        $this->assertSame(0, $exact['render_skipped']);
+    }
+
+    public function test_the_render_token_is_eight_letters_and_digits_with_no_symbols(): void
+    {
+        $asked = [];
+        add_filter('random_password', static function ($password, $length, $special, $extra) use (&$asked) {
+            $asked[] = [$length, $special, $extra];
+
+            return $password;
+        }, 10, 4);
+
+        $state = $this->call('build_render_queue', $this->state('finalize'));
+
+        $this->assertSame([[8, false, false]], $asked);
+        $this->assertSame(8, strlen($state['render_token']));
+    }
+
+    public function test_a_page_with_nothing_waiting_does_not_stop_the_pages_after_it(): void
+    {
+        $this->useRealTables();
+
+        [$explained, $explained_files] = $this->parentWithFiles(1);
+        $this->putResult($explained_files[0], ['parent_id' => $explained, 'is_attached' => 1, 'ref_count' => 2]);
+        [$live, $live_files] = $this->parentWithFiles(1);
+        $this->serve(fn (): string => '<p>none</p>');
+
+        $this->scanStep($this->renderState([$explained, $live]));
+
+        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+    }
+
+    public function test_a_page_with_no_permalink_does_not_stop_the_pages_after_it(): void
+    {
+        $this->useRealTables();
+
+        $this->putResult(555002, ['parent_id' => 777778, 'is_attached' => 1, 'ref_count' => 0]);
+        [$live, $live_files] = $this->parentWithFiles(1);
+        $this->serve(fn (): string => '<p>none</p>');
+
+        $this->scanStep($this->renderState([777778, $live]));
+
+        $this->assertSame('skipped', $this->result(555002)['render_state']);
+        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+    }
+
+    public function test_a_page_that_fails_does_not_stop_the_pages_after_it(): void
+    {
+        $this->useRealTables();
+
+        [$broken, $broken_files] = $this->parentWithFiles(1);
+        [$live, $live_files] = $this->parentWithFiles(1);
+        $this->serve(static fn (string $url): string|\WP_Error => str_contains($url, 'p='.$broken.'&') ? new \WP_Error('x', 'down') : '<p>none</p>');
+
+        $this->scanStep($this->renderState([$broken, $live]));
+
+        $this->assertSame('error', $this->result($broken_files[0])['render_state']);
+        $this->assertSame('absent', $this->result($live_files[0])['render_state']);
+    }
+
+    public function test_pending_files_ignore_a_row_with_no_parent_even_when_it_is_marked_attached(): void
+    {
+        $this->putResult(555003, ['parent_id' => 0, 'is_attached' => 1, 'ref_count' => 0]);
+
+        $this->assertSame([], $this->call('pending_attachment_ids', [0]));
+    }
+
+    public function test_a_file_with_no_stored_path_counts_no_bytes_even_when_its_metadata_lists_sizes(): void
+    {
+        $this->putFiles(['2025/11/zk-size.jpg' => str_repeat('a', 5)]);
+        $id = self::factory()->attachment->create();
+        delete_post_meta($id, '_wp_attached_file');
+        wp_update_attachment_metadata($id, ['sizes' => ['thumbnail' => ['file' => 'zk-size.jpg']]]);
+
+        $this->assertSame(0, UAMS_MRA_Scanner::attachment_bytes($id));
+    }
+
+    /**
+     * @expectedDeprecated wpmu_new_blog
+     */
+    public function test_the_network_step_hands_the_table_prefix_back_when_it_is_done(): void
+    {
+        if (! is_multisite()) {
+            $this->markTestSkipped('Needs a network.');
+        }
+
+        global $wpdb;
+
+        $blog = self::factory()->blog->create();
+
+        $this->scanStep($this->state('network', [], ['site_queue' => [$blog]]));
+
+        switch_to_blog($blog);
+        $table = UAMS_MRA_Store::refs_table();
+        $expected = $wpdb->prefix.'uams_mra_refs';
+        restore_current_blog();
+
+        $this->assertSame($expected, $table);
     }
 }
