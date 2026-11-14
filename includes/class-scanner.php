@@ -164,8 +164,6 @@ class UAMS_MRA_Scanner
         }
 
         if ($state['step'] === 'network') {
-            // Only a network of more than 499 other sites could tell a ceiling of 499 from one of 500.
-            // @pest-mutate-ignore:DecrementInteger
             $sites = get_sites(
                 [
                     'number' => 500,
@@ -355,7 +353,11 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
 
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) $state['settings']['batch_meta'];
+        // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
         $rows = $wpdb->get_results(
@@ -410,6 +412,8 @@ class UAMS_MRA_Scanner
                 // The key reaches a string parameter, which coerces the same way.
                 // @pest-mutate-ignore:RemoveStringCast
                 $meta_key = (string) $row->meta_key;
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $offsite = array_merge($offsite, self::collect_offsite($row->meta_value, $source, (int) $row->post_id, $label, $meta_id, $meta_key));
             }
 
@@ -510,6 +514,8 @@ class UAMS_MRA_Scanner
                 // The name reaches a string parameter, which coerces the same way.
                 // @pest-mutate-ignore:RemoveStringCast
                 $option_name = (string) $row->option_name;
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $offsite = array_merge(
                     $offsite,
                     self::collect_offsite($row->option_value, 'option', (int) $row->option_id, 'Option: '.$row->option_name, $option_pk, $option_name)
@@ -737,6 +743,8 @@ class UAMS_MRA_Scanner
             }
 
             foreach (UAMS_MRA_Index::resolve_paths($paths) as $attachment_id) {
+                // The value is stored in an integer column, so a numeric string is stored as the same integer.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs[] = [
                     'attachment_id' => $attachment_id,
                     'source_type' => 'network',
@@ -805,6 +813,8 @@ class UAMS_MRA_Scanner
         }
 
         $ids = wp_list_pluck($rows, 'ID');
+        // The IDs reach a %d placeholder and get_post_meta(), which read a numeric string as the same integer.
+        // @pest-mutate-ignore:UnwrapArrayMap
         $ids = array_map(intval(...), $ids);
 
         // One meta query for the whole batch instead of two per attachment.
@@ -983,6 +993,8 @@ class UAMS_MRA_Scanner
         $max = max(1, (int) ($state['settings']['render_max_pages'] ?? $defaults['render_max_pages']));
         $over_cap = [];
 
+        // A queue exactly as long as the ceiling slices to the same list with nothing over it, so the two comparisons give the same state.
+        // @pest-mutate-ignore:GreaterToGreaterOrEqual
         if (count($fetchable) > $max) {
             $over_cap = array_slice($fetchable, $max);
             $fetchable = array_slice($fetchable, 0, $max);
@@ -1887,6 +1899,8 @@ class UAMS_MRA_Scanner
         $basedir = trailingslashit($uploads['basedir']);
 
         if ($file === '') {
+            // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $file = (string) get_post_meta($attachment_id, '_wp_attached_file', true);
         }
 

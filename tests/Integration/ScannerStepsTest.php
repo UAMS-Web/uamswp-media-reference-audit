@@ -2139,7 +2139,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_a_file_with_no_stored_path_counts_no_bytes_even_when_its_metadata_lists_sizes(): void
     {
-        $this->putFiles(['2025/11/zk-size.jpg' => str_repeat('a', 5)]);
+        $this->putFiles(['zk-size.jpg' => str_repeat('a', 5)]);
         $id = self::factory()->attachment->create();
         delete_post_meta($id, '_wp_attached_file');
         wp_update_attachment_metadata($id, ['sizes' => ['thumbnail' => ['file' => 'zk-size.jpg']]]);
@@ -2180,5 +2180,43 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->scanStep($state);
 
         $this->same((string) get_permalink($parent), $log[0]['url']);
+    }
+
+    public function test_a_revision_row_and_an_empty_value_do_not_end_the_postmeta_batch(): void
+    {
+        $attachment = $this->attachment('2025/11/zl-a.jpg');
+        $post = self::factory()->post->create();
+        $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
+        $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
+        add_post_meta($revision, 'zl_old', 'x');
+        add_post_meta($post, 'zl_empty', '');
+        add_post_meta($post, 'zl_hero', $this->url('2025/11/zl-a.jpg'));
+
+        $this->scanStep($this->state('postmeta', ['include_revisions' => 0], ['cursor' => $before]));
+
+        $this->same([(string) $attachment], array_column($this->refs(), 'attachment_id'));
+    }
+
+    /**
+     * @expectedDeprecated wpmu_new_blog
+     */
+    public function test_the_network_step_asks_for_up_to_500_other_sites_by_id(): void
+    {
+        if (! is_multisite()) {
+            $this->markTestSkipped('Needs a network.');
+        }
+
+        $other = self::factory()->blog->create();
+        $asked = [];
+        add_action('pre_get_sites', static function ($query) use (&$asked): void {
+            $asked = $query->query_vars;
+        });
+
+        $state = $this->call('advance', $this->state('commentmeta', ['include_network' => 1]));
+
+        $this->same([$other], $state['site_queue']);
+        $this->same(500, $asked['number']);
+        $this->same('ids', $asked['fields']);
+        $this->same([get_current_blog_id()], $asked['site__not_in']);
     }
 }
