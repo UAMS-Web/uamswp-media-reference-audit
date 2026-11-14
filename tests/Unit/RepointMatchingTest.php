@@ -565,7 +565,7 @@ it('does not measure a file it cannot read', function (): void {
         chmod($dir.'locked.jpg', 0600);
         repoint_clean($dir);
     }
-});
+})->skip(PHP_OS_FAMILY === 'Windows' || (function_exists('posix_geteuid') && posix_geteuid() === 0), 'A file with no permissions is still readable on Windows and to root.');
 
 it('measures the attachment file on disk, and says zero when it cannot', function (): void {
     [$dir] = repoint_scratch();
