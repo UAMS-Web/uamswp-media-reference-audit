@@ -1,0 +1,9 @@
+# Keep-list: the download holds only what the plugin runs. Every top-level
+# entry is excluded first, then each runtime path is put back.
+/* export-ignore
+/.* export-ignore
+/includes -export-ignore
+/assets -export-ignore
+/languages -export-ignore
+/uamswp-media-reference-audit.php -export-ignore
+/uninstall.php -export-ignore
