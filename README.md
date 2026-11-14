@@ -210,7 +210,7 @@ request after that.
 
 Then go to **Media > Media Audit** and run a scan.
 
-Requires WordPress 6.0 and PHP 7.4.
+Requires WordPress 6.0 and PHP 8.2.
 
 ## Development
 
@@ -218,7 +218,7 @@ The plugin has no runtime dependencies. `composer.json` holds development tools
 only: Rector, PHPStan with the WordPress extension and stubs, and Pint, set up
 from the shared `code-quality` skill in UAMS-Web/uams-claude-skills. They run on
 your PHP (Pint needs 8.3 or later); `rector.php` and `phpstan.neon.dist` are
-pinned to the plugin's floor, PHP 7.4, so neither suggests syntax 7.4 cannot
+pinned to the plugin's floor, PHP 8.2, so neither suggests syntax 8.2 cannot
 parse.
 
 ```bash
@@ -266,3 +266,19 @@ Developers:
 
 - Josh Daugherty
 - Brent Passmore
+
+## Tests
+
+```bash
+composer install
+composer test:unit
+```
+
+The Unit suite runs on Pest 5 with no WordPress and no database: WordPress functions are mocked with Brain Monkey. The Integration suite runs on PHPUnit 9.6 from its own Composer setup, because WordPress' test suite supports PHPUnit 9 only:
+
+```bash
+composer setup:integration
+composer test:integration
+```
+
+It needs a WordPress core tree and a test database that nothing else uses; `tests/Integration/wp-tests-config.php` lists the `WP_TESTS_*` environment variables. `composer test` runs both suites, each in its own process.
