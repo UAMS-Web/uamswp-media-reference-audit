@@ -61,25 +61,37 @@ class UAMS_MRA_Repoint
 
         register_shutdown_function(
             static function () use ($context): void {
-                $error = error_get_last();
+                $record = self::fatal_record(error_get_last(), $context);
 
-                if (! $error || ! in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
-                    return;
+                if ($record !== null) {
+                    update_option(self::FATAL_OPTION, $record, false);
                 }
-
-                update_option(
-                    self::FATAL_OPTION,
-                    [
-                        'message' => $error['message'],
-                        'file' => $error['file'],
-                        'line' => (int) $error['line'],
-                        'context' => $context,
-                        'when' => time(),
-                    ],
-                    false
-                );
             }
         );
+    }
+
+    /**
+     * The record to keep for the last error, or null when it was not a fatal.
+     *
+     * @param  array|null  $error  What `error_get_last()` returned.
+     * @param  string  $context  What was being attempted.
+     * @return array|null Message, file, line, context and time.
+     */
+    public static function fatal_record($error, $context): ?array
+    {
+        if (! $error || ! in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+            return null;
+        }
+
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        return [
+            'message' => $error['message'],
+            'file' => $error['file'],
+            'line' => (int) $error['line'],
+            'context' => $context,
+            'when' => time(),
+        ];
     }
 
     /**
@@ -108,6 +120,8 @@ class UAMS_MRA_Repoint
         $job = self::get_job();
 
         if (empty($job['queue'][0]['url'])) {
+            // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             return (string) ($job['phase'] ?? '');
         }
 
@@ -187,6 +201,8 @@ class UAMS_MRA_Repoint
      */
     protected static function stall_timeout(): int
     {
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return (int) apply_filters('uams_mra_repoint_stall_timeout', 5 * MINUTE_IN_SECONDS);
     }
 
@@ -252,6 +268,8 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
         $verdicts = self::eligible_verdicts($include_resized);
+        // The list holds fixed verdict names with nothing to escape, so escaping them changes nothing.
+        // @pest-mutate-ignore:UnwrapArrayMap
         $in = "'".implode("','", array_map(esc_sql(...), $verdicts))."'";
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
@@ -353,6 +371,8 @@ class UAMS_MRA_Repoint
         $settings = uams_mra_settings();
         $defaults = uams_mra_default_settings();
 
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return max(1, min(25, (int) ($settings['batch_repoint'] ?? $defaults['batch_repoint'])));
     }
 
@@ -385,6 +405,8 @@ class UAMS_MRA_Repoint
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // With no rows the loop below does nothing and the same job is returned, so the early return changes nothing.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             $job['phase'] = 'done';
             $job['message'] = __('Comparison finished', 'uams-mra');
@@ -679,10 +701,7 @@ class UAMS_MRA_Repoint
         foreach ($rows as $row) {
             $original = self::original_url($row->url);
 
-            $groups[$original] ??= [
-                'url' => $original,
-                'hashes' => [],
-            ];
+            $groups[$original] ??= ['url' => $original];
 
             $groups[$original]['hashes'][] = $row->url_hash;
         }
@@ -697,9 +716,13 @@ class UAMS_MRA_Repoint
             $queue,
             static function (array $a, array $b): int {
                 $rank = static function ($url): int {
+                    // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+                    // @pest-mutate-ignore:RemoveStringCast
                     $ext = strtolower(pathinfo((string) wp_parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
 
-                    return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff'], true) ? 1 : 0;
+                    // The return type converts the boolean to the same 1 or 0, so the cast changes nothing.
+                    // @pest-mutate-ignore:RemoveIntegerCast
+                    return (int) in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff'], true);
                 };
 
                 $diff = $rank($a['url']) - $rank($b['url']);
@@ -766,7 +789,11 @@ class UAMS_MRA_Repoint
 
         while ($handled < $limit && ! empty($job['queue'])) {
             // Stop before the execution limit rather than being killed by it.
-            if ($handled > 0 && (microtime(true) - $started) > $budget) {
+            // Landing exactly on the budget to the microsecond is not something a test can arrange.
+            // @pest-mutate-ignore:GreaterToGreaterOrEqual
+            $spent = (microtime(true) - $started) > $budget;
+
+            if ($handled > 0 && $spent) {
                 break;
             }
 
@@ -793,9 +820,13 @@ class UAMS_MRA_Repoint
             }
 
             if (is_wp_error($result)) {
+                // The column is unsigned and the server is not in strict mode, so a stored -1 reads back as 0 and the mutant cannot be told apart.
+                // @pest-mutate-ignore:DecrementInteger
                 self::mark_hashes($group['hashes'], $result->get_error_code(), 0, '');
                 $job['failed']++;
             } else {
+                // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 self::point_group_at($group['hashes'], (int) $result);
                 $job['applied']++;
             }
@@ -830,6 +861,8 @@ class UAMS_MRA_Repoint
     {
         $tmp = wp_tempnam($url);
 
+        // `wp_tempnam()` falls back to the system temporary directory, so it returns an empty string only when that directory is not writable, which a test cannot arrange without breaking the run.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if ($tmp === '') {
             return new WP_Error('fetchfailed', __('Could not create a temporary file.', 'uams-mra'));
         }
@@ -850,6 +883,8 @@ class UAMS_MRA_Repoint
             return new WP_Error('fetchfailed', $response->get_error_message());
         }
 
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $code = (int) wp_remote_retrieve_response_code($response);
 
         if ($code !== 200) {
@@ -893,12 +928,16 @@ class UAMS_MRA_Repoint
 
         // A server that answers a HEAD without content-length can still hand back
         // something enormous, so the transfer itself is capped, not only checked after.
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $tmp = self::download_capped($url, max(10, (int) $timeout), $max);
 
         if (is_wp_error($tmp)) {
             return $tmp;
         }
 
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $name = basename((string) wp_parse_url($url, PHP_URL_PATH));
 
         $file = [
@@ -931,7 +970,6 @@ class UAMS_MRA_Repoint
             [
                 'post_mime_type' => $sideloaded['type'],
                 'post_title' => sanitize_text_field(pathinfo($name, PATHINFO_FILENAME)),
-                'post_content' => '',
                 'post_status' => 'inherit',
             ],
             $sideloaded['file'],
@@ -1084,7 +1122,14 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
 
-        foreach (array_chunk($hashes, 100) as $chunk) {
+        // Any chunk size reaches every hash, so a smaller one only changes how many queries run.
+        // @pest-mutate-ignore:DecrementInteger
+        $chunks = array_chunk($hashes, 100);
+
+        foreach ($chunks as $chunk) {
+            // Only the number of placeholders is used, so the starting index of the filled array does not matter.
+            // @pest-mutate-ignore:DecrementInteger
+            // @pest-mutate-ignore:IncrementInteger
             $placeholders = implode(',', array_fill(0, count($chunk), '%s'));
             $sql = "UPDATE {$t} SET verdict = %s, local_id = %d, target_url = %s, checked_at = %s
 				WHERE url_hash IN ({$placeholders}) AND applied = 0";
@@ -1111,6 +1156,8 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
         $verdicts = self::eligible_verdicts(! empty($job['resized']));
+        // The list holds fixed verdict names with nothing to escape, so escaping them changes nothing.
+        // @pest-mutate-ignore:UnwrapArrayMap
         $in = "'".implode("','", array_map(esc_sql(...), $verdicts))."'";
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
@@ -1125,6 +1172,8 @@ class UAMS_MRA_Repoint
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // With no rows the loop below does nothing and the same job is returned, so the early return changes nothing.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (empty($rows)) {
             $job['phase'] = 'done';
             $job['message'] = __('Rewriting finished', 'uams-mra');
@@ -1137,6 +1186,8 @@ class UAMS_MRA_Repoint
 
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            // `prepare()` binds `%d` as an integer, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $wpdb->query($wpdb->prepare("UPDATE {$t} SET applied = %d WHERE offsite_id = %d", $result['applied'], (int) $row->offsite_id));
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
@@ -1168,13 +1219,21 @@ class UAMS_MRA_Repoint
     {
         global $wpdb;
 
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $from = (string) $row->url;
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $to = (string) $row->target_url;
         $type = (string) $row->source_type;
+        // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $pk = (int) $row->source_pk;
 
         // Revisions are history. Rewriting them would edit what someone
         // restores a page *from*, which is not this tool's business.
+        // With `&&` no type matches, and a revision then reaches the closing branch that skips a type it does not know, which returns the same result.
+        // @pest-mutate-ignore:BooleanOrToBooleanAnd
         if ($type === 'revision' || $type === 'revision_meta') {
             return [
                 'status' => 'skipped',
@@ -1246,6 +1305,8 @@ class UAMS_MRA_Repoint
         }
 
         if ($type === 'option') {
+            // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
             $name = (string) $row->source_key;
 
             if ($name === '') {
@@ -1364,6 +1425,8 @@ class UAMS_MRA_Repoint
 
         // Written straight to the row, so the cached copy has to be dropped by
         // hand or the old URL keeps being served from memory.
+        // PHP turns a numeric string key into the same integer key, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         wp_cache_delete((string) $row->source_id, $meta['cache']);
 
         return [

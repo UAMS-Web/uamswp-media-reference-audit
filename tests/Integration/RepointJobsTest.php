@@ -1081,7 +1081,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $corrupt = 'a:1:{s:3:"url";s:5:"'.self::OLD.'";}';
         $broken = $this->metaRow($wpdb->postmeta, 'post_id', 4246, $corrupt);
-        $this->assertSame('failed', $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $broken, 'source_id' => 4246])['status']);
+        $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $broken, 'source_id' => 4246]));
         $this->assertSame($corrupt, $this->metaValue($wpdb->postmeta, 'meta_id', $broken));
 
         $hidden = serialize(new UamsMraJobsPrivateHolder(self::OLD));
@@ -1163,17 +1163,20 @@ final class RepointJobsTest extends IntegrationTestCase
         $full = 'https://old.example.edu/u/grp.jpg';
         $thumb = 'https://old.example.edu/u/grp-150x150.jpg';
         $odd = 'https://old.example.edu/u/grp-77x55.jpg';
+        $medium = 'https://old.example.edu/u/grp-300x225.jpg';
+        $d = $this->row(['url' => $medium]);
         $a = $this->row(['url' => $full]);
         $b = $this->row(['url' => $thumb]);
         $c = $this->row(['url' => $odd]);
 
-        $this->call('point_group_at', [md5($full), md5($thumb), md5($odd)], $id);
+        $this->call('point_group_at', [md5($full), md5($thumb), md5($odd), md5($medium)], $id);
 
         $this->assertSame('sideloaded', $this->stored($a)['verdict']);
         $this->assertSame((string) $id, $this->stored($a)['local_id']);
         $this->assertSame(wp_get_attachment_url($id), $this->stored($a)['target_url']);
         $this->assertSame(dirname((string) wp_get_attachment_url($id)).'/'.$sizes['thumbnail']['file'], $this->stored($b)['target_url']);
         $this->assertSame(wp_get_attachment_url($id), $this->stored($c)['target_url']);
+        $this->assertSame(dirname((string) wp_get_attachment_url($id)).'/'.$sizes['medium']['file'], $this->stored($d)['target_url']);
     }
 
     public function test_a_hash_with_no_row_is_pointed_at_the_full_size(): void
@@ -1285,6 +1288,8 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = function () use ($url, &$seen): array {
             global $wpdb;
             $seen['verdict'] = $wpdb->get_var('SELECT verdict FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
+            $seen['local'] = $wpdb->get_var('SELECT local_id FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
+            $seen['target'] = (string) $wpdb->get_var('SELECT target_url FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
             $seen['queue'] = array_column(UAMS_MRA_Repoint::get_job()['queue'], 'url');
 
             return [200, $this->jpeg(50, 50)];
@@ -1294,6 +1299,8 @@ final class RepointJobsTest extends IntegrationTestCase
         UAMS_MRA_Repoint::step();
 
         $this->assertSame('crashed', $seen['verdict']);
+        $this->assertSame('0', $seen['local']);
+        $this->assertSame('', $seen['target']);
         $this->assertSame([$second], $seen['queue']);
     }
 
@@ -1456,10 +1463,9 @@ final class RepointJobsTest extends IntegrationTestCase
         }
 
         $this->settings(['batch_sideload' => 10]);
-        add_filter('uams_mra_repoint_time_budget', static fn (): int => 0);
+        add_filter('uams_mra_repoint_time_budget', static fn (): int => -1);
         $this->sideloadJob($queue);
 
-        usleep(2000);
         $job = UAMS_MRA_Repoint::step();
 
         // The first file is always taken; with no time left the rest wait for the next batch.
@@ -1519,6 +1525,195 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame(0, (int) get_post($attachment)->post_parent);
     }
 
+    /**
+     * The last GET the stand-in saw.
+     *
+     * @return array{string, string, array<string, mixed>}
+     */
+    private function lastGet(): array
+    {
+        $gets = array_values(array_filter($this->requests, static fn (array $r): bool => $r[0] === 'GET'));
+
+        return $gets[count($gets) - 1];
+    }
+
+    /**
+     * A JPEG whose header claims a very large picture, so there is no memory to resize it in.
+     */
+    private function hugeJpeg(): string
+    {
+        $bytes = $this->jpeg(40, 30);
+        $at = strpos($bytes, "\xFF\xC0");
+        $this->assertIsInt($at);
+
+        return substr($bytes, 0, $at + 5).pack('nn', 20000, 30000).substr($bytes, $at + 9);
+    }
+
+    public function test_a_fatal_is_kept_only_for_the_error_types_that_end_a_request(): void
+    {
+        foreach ([E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR] as $type) {
+            $record = UAMS_MRA_Repoint::fatal_record(['type' => $type, 'message' => 'boom', 'file' => '/a.php', 'line' => '12'], 'while testing');
+
+            $this->assertIsArray($record, 'type '.$type);
+            $this->assertSame('boom', $record['message']);
+            $this->assertSame('/a.php', $record['file']);
+            $this->assertSame(12, $record['line']);
+            $this->assertSame('while testing', $record['context']);
+            $this->assertEqualsWithDelta(time(), $record['when'], 5);
+        }
+
+        foreach ([E_WARNING, E_NOTICE, E_DEPRECATED, E_CORE_WARNING, E_COMPILE_WARNING, E_USER_WARNING, E_USER_NOTICE, E_USER_DEPRECATED] as $type) {
+            $this->assertNull(UAMS_MRA_Repoint::fatal_record(['type' => $type, 'message' => 'm', 'file' => 'f', 'line' => 1], ''), 'type '.$type);
+        }
+
+        $this->assertNull(UAMS_MRA_Repoint::fatal_record(null, ''));
+        $this->assertNull(UAMS_MRA_Repoint::fatal_record([], ''));
+    }
+
+    public function test_the_next_target_skips_a_head_entry_with_no_url_rather_than_reading_the_next(): void
+    {
+        $this->putJob(['phase' => 'sideload', 'queue' => [['hashes' => []], ['url' => 'https://o.example.edu/b.pdf']]]);
+
+        $this->assertSame('sideload', UAMS_MRA_Repoint::next_target());
+    }
+
+    public function test_a_job_with_no_usable_timestamp_is_not_running_however_long_the_timeout(): void
+    {
+        add_filter('uams_mra_repoint_stall_timeout', static fn (): int => PHP_INT_MAX);
+
+        $this->putJob(['phase' => 'apply']);
+        $missing = UAMS_MRA_Repoint::is_running();
+
+        $this->putJob(['phase' => 'apply', 'updated' => 0]);
+        $zero = UAMS_MRA_Repoint::is_running();
+
+        $this->assertSame([false, false], [$missing, $zero]);
+    }
+
+    public function test_a_side_load_batch_never_takes_more_than_ten_files(): void
+    {
+        $queue = [];
+
+        for ($i = 0; $i < 11; $i++) {
+            $url = 'https://old.example.edu/u/f'.$i.'.pdf';
+            $queue[] = $this->group($url);
+            $this->http['HEAD'][$url] = [200, null];
+            $this->http['GET'][$url] = [404, 'no'];
+        }
+
+        $this->settings(['batch_sideload' => 50]);
+        $this->sideloadJob($queue);
+
+        $job = UAMS_MRA_Repoint::step();
+
+        $this->assertSame(10, $job['done']);
+        $this->assertCount(1, $job['queue']);
+    }
+
+    public function test_the_size_limit_is_never_under_one_megabyte_and_otherwise_follows_the_setting(): void
+    {
+        $small = $this->jpeg(40, 40);
+        $exact = 'https://old.example.edu/u/exactly-one.jpg';
+        $big = 'https://old.example.edu/u/three-meg.jpg';
+
+        $this->settings(['sideload_max_mb' => 0]);
+        $this->http['HEAD'][$exact] = [200, 1048576];
+        $this->http['GET'][$exact] = [200, $small];
+        $this->sideloadJob([$this->group($exact)]);
+        $this->assertSame(1, UAMS_MRA_Repoint::step()['applied']);
+        $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($exact))['local_id']);
+
+        $this->settings(['sideload_max_mb' => 5]);
+        $this->http['HEAD'][$big] = [200, 3 * 1048576];
+        $this->http['GET'][$big] = [200, $small];
+        $this->sideloadJob([$this->group($big)]);
+        $this->assertSame(1, UAMS_MRA_Repoint::step()['applied']);
+        $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($big))['local_id']);
+    }
+
+    public function test_core_refusing_the_attachment_marks_the_file_rejected_and_removes_the_copy(): void
+    {
+        $url = 'https://old.example.edu/u/refused.pdf';
+        $group = $this->group($url);
+        $this->http['HEAD'][$url] = [200, null];
+        $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
+        $this->sideloadJob([$group]);
+
+        $stored = [];
+        add_filter('wp_handle_upload', static function (array $upload) use (&$stored): array {
+            $stored[] = $upload['file'];
+
+            return $upload;
+        });
+        add_filter('wp_insert_post_empty_content', '__return_true');
+
+        $job = UAMS_MRA_Repoint::step();
+
+        $this->assertSame('rejected', $this->stored($this->firstRowId($url))['verdict']);
+        $this->assertSame(1, $job['failed']);
+        $this->assertCount(1, $stored);
+        $this->assertFileDoesNotExist($stored[0]);
+    }
+
+    public function test_a_picture_too_large_to_resize_is_kept_at_full_size_with_its_dimensions(): void
+    {
+        $url = 'https://old.example.edu/u/vast.jpg';
+        $group = $this->group($url);
+        $this->http['HEAD'][$url] = [200, null];
+        $this->http['GET'][$url] = [200, $this->hugeJpeg()];
+        $this->sideloadJob([$group]);
+
+        $job = UAMS_MRA_Repoint::step();
+
+        $this->assertSame(1, $job['applied']);
+        $id = (int) $this->stored($this->firstRowId($url))['local_id'];
+        $this->files[] = (string) get_attached_file($id);
+        $meta = wp_get_attachment_metadata($id);
+
+        $this->assertSame(30000, $meta['width']);
+        $this->assertSame(20000, $meta['height']);
+        $this->assertSame([], $meta['sizes']);
+        $this->assertSame(_wp_relative_upload_path((string) get_attached_file($id)), $meta['file']);
+    }
+
+    public function test_a_pulled_file_that_is_not_an_image_has_its_metadata_generated(): void
+    {
+        $url = 'https://old.example.edu/u/meta.pdf';
+        $group = $this->group($url, ['source_type' => 'option']);
+        $this->http['HEAD'][$url] = [200, null];
+        $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
+        $this->sideloadJob([$group]);
+
+        UAMS_MRA_Repoint::step();
+
+        $id = (int) $this->stored($this->firstRowId($url))['local_id'];
+        $this->files[] = (string) get_attached_file($id);
+
+        $this->assertArrayHasKey('filesize', wp_get_attachment_metadata($id));
+    }
+
+    public function test_the_memory_limit_is_raised_before_a_file_is_pulled(): void
+    {
+        $url = 'https://old.example.edu/u/memory.pdf';
+        $group = $this->group($url);
+        $this->http['HEAD'][$url] = [200, null];
+        $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
+        $this->sideloadJob([$group]);
+
+        $before = ini_get('memory_limit');
+        ini_set('memory_limit', '100M');
+
+        try {
+            UAMS_MRA_Repoint::step();
+            $after = ini_get('memory_limit');
+        } finally {
+            ini_set('memory_limit', (string) $before);
+        }
+
+        $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($url))['local_id']);
+        $this->assertNotSame('100M', $after);
+    }
+
     public function test_pulling_a_file_directly_returns_its_attachment_or_the_reason_it_could_not(): void
     {
         $url = 'https://old.example.edu/u/direct.pdf';
@@ -1528,7 +1723,9 @@ final class RepointJobsTest extends IntegrationTestCase
         $id = $this->call('sideload_one', $url);
         $this->assertIsInt($id);
         $this->assertSame('direct', get_post($id)->post_title);
+        $this->assertSame('', get_post($id)->post_content);
         $this->files[] = (string) get_attached_file($id);
+        $this->assertSame(60, $this->lastGet()[2]['timeout']);
 
         $this->http['GET'][$url] = [503, 'down'];
         $error = $this->call('sideload_one', $url, 30);
