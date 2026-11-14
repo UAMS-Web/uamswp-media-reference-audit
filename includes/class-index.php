@@ -16,23 +16,25 @@ class UAMS_MRA_Index
      * Strips query strings, size suffixes (-1024x768), -scaled, -rotated, and the
      * -e1234567890 suffix WordPress adds to edited images.
      *
-     * @param  string  $file  Relative or absolute path or URL fragment.
+     * @param  mixed  $file  Relative or absolute path or URL fragment; any other value is cast to a string.
      * @return array {path_norm, base_norm}
      */
     public static function normalize($file): array
     {
         $file = (string) $file;
         $file = preg_replace('#[?\#].*$#', '', $file);
+        // Equivalent: a `\/` left in place is split on its `/` and its `\` becomes `/` below, which gives the same segments.
+        // @pest-mutate-ignore:UnwrapStrReplace
         $file = str_replace('\\/', '/', $file);
         $file = rawurldecode($file);
         $file = strtolower(trim($file, "/ \t\n\r\0\x0B"));
 
-        if ($file === '') {
-            return ['', ''];
-        }
-
+        // Equivalent: a leading `/` only adds an empty first segment, which the segment filter drops below.
+        // @pest-mutate-ignore:UnwrapLtrim
         $dir = ltrim(str_replace('\\', '/', dirname($file)), '/');
         $base = basename($file);
+        // Equivalent: `$file` was lower-cased above, so its extension already is.
+        // @pest-mutate-ignore:UnwrapStrtolower
         $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
         $name = pathinfo($base, PATHINFO_FILENAME);
 
@@ -44,6 +46,8 @@ class UAMS_MRA_Index
 
         // Keep only the trailing YYYY/MM (or custom folder) segments so that
         // year/month folders match whether or not the URL carried a full path.
+        // Equivalent: array_slice() renumbers a list, so the keys array_filter() leaves gaps in never reach the output.
+        // @pest-mutate-ignore:UnwrapArrayValues
         $parts = array_values(
             array_filter(
                 explode('/', $dir),
