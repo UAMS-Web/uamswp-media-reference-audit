@@ -928,6 +928,18 @@ describe('the cells', function (): void {
             );
         });
 
+        it('prints the id as a number and reads the marks by that number', function (): void {
+            $asked = [];
+            when('get_post_meta')->alias(static function ($id, $key, $single) use (&$asked): string {
+                $asked[] = $id;
+
+                return '';
+            });
+
+            expect(lt_table()->column_triage(lt_row(['attachment_id' => '07'])))->toContain('data-id="7"')
+                ->and($asked)->toBe([7, 7]);
+        });
+
         it('hides the note when there is neither a disposition nor a note', function (): void {
             when('get_post_meta')->justReturn('');
 
