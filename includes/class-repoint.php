@@ -871,6 +871,7 @@ class UAMS_MRA_Repoint
 
         // `wp_tempnam()` falls back to the system temporary directory, so it returns an empty string only when that directory is not writable, which a test cannot arrange without breaking the run.
         // @pest-mutate-ignore:RemoveEarlyReturn
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         if ($tmp === '') {
             return new WP_Error('fetchfailed', __('Could not create a temporary file.', 'uams-mra'));
         }
@@ -1010,6 +1011,8 @@ class UAMS_MRA_Repoint
             );
         }
 
+        // `wp_insert_attachment()` returns an integer here (the error case returned above), so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return (int) $attachment_id;
     }
 
@@ -1136,6 +1139,7 @@ class UAMS_MRA_Repoint
 
         // Any chunk size reaches every hash, so a smaller one only changes how many queries run.
         // @pest-mutate-ignore:DecrementInteger
+        // @pest-mutate-ignore:IncrementInteger
         $chunks = array_chunk($hashes, 100);
 
         foreach ($chunks as $chunk) {

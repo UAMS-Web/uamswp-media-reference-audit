@@ -315,6 +315,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('user', $result['context']);
     }
 
+    public function test_a_fatal_with_no_context_given_is_recorded_with_an_empty_one(): void
+    {
+        $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal(); trigger_error('stop', E_USER_ERROR);");
+
+        $this->assertSame('', $result['context']);
+    }
+
     public function test_watching_for_a_fatal_forgets_the_one_recorded_before(): void
     {
         update_option(UAMS_MRA_Repoint::FATAL_OPTION, ['message' => 'old']);
