@@ -46,12 +46,11 @@ class UAMS_MRA_List_Table extends WP_List_Table
     {
         $allowed = ['all', 'orphaned', 'unreferenced', 'unattached', 'weak', 'referenced'];
 
+        // An absent name is not a view either, so it takes the same default as an unknown one.
+        // A different fallback string would not be in the list, so it reads the same.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $view = isset($_REQUEST['view']) ? sanitize_key(wp_unslash($_REQUEST['view'])) : '';
-
-        if ($view === '') {
-            return self::default_view();
-        }
 
         return in_array($view, $allowed, true) ? $view : self::default_view();
     }
@@ -67,7 +66,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      *
      * @return string View key.
      */
-    public static function default_view()
+    public static function default_view(): string
     {
         $s = UAMS_MRA_Store::summary();
 
@@ -78,13 +77,17 @@ class UAMS_MRA_List_Table extends WP_List_Table
         }
 
         $candidates = [
-            'orphaned' => $s['orphaned'] ?? 0,
-            'unreferenced' => $s['unreferenced'] ?? 0,
-            'unattached' => $s['unattached'] ?? 0,
-            'weak' => $s['weak_only'] ?? 0,
+            'orphaned' => 'orphaned',
+            'unreferenced' => 'unreferenced',
+            'unattached' => 'unattached',
+            'weak' => 'weak_only',
         ];
 
-        foreach ($candidates as $view => $count) {
+        foreach ($candidates as $view => $key) {
+            // A missing count and a count of -1 are both "nothing", so the default only has to be below one.
+            // @pest-mutate-ignore:DecrementInteger
+            $count = $s[$key] ?? 0;
+
             if ($count > 0) {
                 return $view;
             }
@@ -111,9 +114,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * looked at, rather than reporting on the whole library.
      *
      * @param  string  $view  View key.
-     * @return string
      */
-    public static function where_for_view($view)
+    public static function where_for_view($view): string
     {
         return match ($view) {
             'orphaned' => 'ref_count = 0 AND is_attached = 0',
@@ -127,10 +129,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * View links.
-     *
-     * @return array
      */
-    protected function get_views()
+    protected function get_views(): array
     {
         $s = $this->summary;
         $current = static::current_view();
@@ -172,10 +172,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Columns.
-     *
-     * @return array
      */
-    public function get_columns()
+    public function get_columns(): array
     {
         return [
             'cb' => '<input type="checkbox" />',
@@ -192,10 +190,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Sortable columns.
-     *
-     * @return array
      */
-    public function get_sortable_columns()
+    public function get_sortable_columns(): array
     {
         return [
             'title' => ['title', false],
@@ -206,10 +202,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Bulk actions.
-     *
-     * @return array
      */
-    public function get_bulk_actions()
+    public function get_bulk_actions(): array
     {
         return [
             'uams_mra_delete' => __('Delete permanently', 'uams-mra'),
@@ -219,7 +213,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     /**
      * Load rows.
      */
-    public static function build_query()
+    public static function build_query(): array
     {
         global $wpdb;
 
@@ -259,7 +253,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
         global $wpdb;
 
         $per_page = 50;
-        $paged = max(1, (int) $this->get_pagenum());
+        $paged = max(1, $this->get_pagenum());
         $offset = ($paged - 1) * $per_page;
         $table = UAMS_MRA_Store::results_table();
 
@@ -267,12 +261,13 @@ class UAMS_MRA_List_Table extends WP_List_Table
         $where = $query['where'];
         $params = $query['params'];
 
-        $orderby_allowed = ['title', 'bytes', 'post_date', 'attachment_id'];
+        // 'bytes' is the fallback below, so it needs no entry of its own.
+        $orderby_allowed = ['title', 'post_date', 'attachment_id'];
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $orderby = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'bytes';
         $orderby = in_array($orderby, $orderby_allowed, true) ? $orderby : 'bytes';
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        $order = isset($_REQUEST['order']) && strtolower(sanitize_key(wp_unslash($_REQUEST['order']))) === 'asc' ? 'ASC' : 'DESC';
+        $order = isset($_REQUEST['order']) && sanitize_key(wp_unslash($_REQUEST['order'])) === 'asc' ? 'ASC' : 'DESC';
 
         $count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where}";
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -307,6 +302,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public static function current_tier()
     {
+        // A different fallback string is not a tier, so it reads as no tier.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $tier = isset($_REQUEST['tier']) ? sanitize_key(wp_unslash($_REQUEST['tier'])) : '';
 
@@ -320,6 +317,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public static function current_disposition()
     {
+        // A different fallback string is not a disposition, so it reads as any.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $value = isset($_REQUEST['disp']) ? sanitize_key(wp_unslash($_REQUEST['disp'])) : '';
 
@@ -334,10 +333,11 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Checkbox column.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    public function column_cb($item)
+    public function column_cb($item): string
     {
+        // `%d` reads the number out of a string itself, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return sprintf('<input type="checkbox" name="ids[]" value="%d" />', (int) $item['attachment_id']);
     }
 
@@ -365,9 +365,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * File column.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    public function column_title($item)
+    public function column_title($item): string
     {
         $id = (int) $item['attachment_id'];
         $title = $item['title'] !== '' ? $item['title'] : __('(no title)', 'uams-mra');
@@ -388,9 +387,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Status column.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    public function column_status($item)
+    public function column_status($item): string
     {
         $badges = [];
 
@@ -428,15 +426,13 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * and must never look like the same thing on screen.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    protected function render_badge($item)
+    protected function render_badge($item): string
     {
+        // A state that is not a string, or a different fallback string, is not a key of the map, so it
+        // returns empty below like any other unknown state.
+        // @pest-mutate-ignore:RemoveStringCast,EmptyStringToNotEmpty
         $state = isset($item['render_state']) ? (string) $item['render_state'] : '';
-
-        if ($state === '') {
-            return '';
-        }
 
         $map = [
             'found' => ['ok', __('Shown on the page', 'uams-mra')],
@@ -452,12 +448,16 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
         [$class, $label] = $map[$state];
 
+        // The value is a database string; the test below reads it the same cast or not.
+        // @pest-mutate-ignore:RemoveStringCast
         $checked = isset($item['render_checked_at']) ? (string) $item['render_checked_at'] : '';
         $title = ($checked && $checked !== '0000-00-00 00:00:00')
             /* translators: %s: date and time the parent page was read. */
             ? sprintf(__('Page read %s', 'uams-mra'), $checked)
             : '';
 
+        // The note is only compared with '' and printed, which read a database string the same cast or not.
+        // @pest-mutate-ignore:RemoveStringCast
         $note = isset($item['render_note']) ? (string) $item['render_note'] : '';
         if ($note !== '') {
             $title = $note.($title ? ' -- '.$title : '');
@@ -467,6 +467,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
             .($title ? ' title="'.esc_attr($title).'"' : '').'>'
             .esc_html($label).'</span>';
 
+        // The URL is only tested for truthiness and escaped, which read a database string the same cast or not.
+        // @pest-mutate-ignore:RemoveStringCast
         $url = isset($item['render_url']) ? (string) $item['render_url'] : '';
 
         if ($url && in_array($state, ['absent', 'found', 'offsite'], true)) {
@@ -505,9 +507,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * References column.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    public function column_refs($item)
+    public function column_refs($item): string
     {
         $count = (int) $item['ref_count'];
 
@@ -524,6 +525,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
                 ? get_edit_post_link((int) $ref->source_id)
                 : '';
 
+            // A numeric string compares with 2 as its number, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $weak = ((int) $ref->confidence < 2) ? ' <span class="uams-mra-muted">(by ID)</span>' : '';
 
             $list[] = $link
@@ -577,9 +580,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Decision column: the tier the scan derived, and the mark a person set.
      *
      * @param  array  $item  Row.
-     * @return string
      */
-    public function column_triage($item)
+    public function column_triage($item): string
     {
         $id = (int) $item['attachment_id'];
         $tier = UAMS_MRA_Triage::tier($item);
