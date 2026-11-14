@@ -47,10 +47,12 @@ class UAMS_MRA_Selection
 
         $sql = "SELECT attachment_id FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT ".(self::MAX + 1);
 
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $ids = $query['params']
             ? $wpdb->get_col($wpdb->prepare($sql, $query['params']))
             : $wpdb->get_col($sql);
+        // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
         return array_map(intval(...), (array) $ids);
     }
@@ -141,6 +143,7 @@ class UAMS_MRA_Selection
 
         $table = UAMS_MRA_Store::results_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $id = $wpdb->get_var(
             $wpdb->prepare(
@@ -149,6 +152,7 @@ class UAMS_MRA_Selection
                 '%/'.$wpdb->esc_like($filename)
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return (int) $id;
     }
@@ -210,11 +214,13 @@ class UAMS_MRA_Selection
         $ids = array_map(intval(...), $ids);
         $in = implode(',', $ids);
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             "SELECT * FROM {$table} WHERE attachment_id IN ( {$in} ) ORDER BY bytes DESC",
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return (array) $rows;
     }

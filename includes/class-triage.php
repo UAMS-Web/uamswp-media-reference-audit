@@ -263,6 +263,7 @@ class UAMS_MRA_Triage
 
         $table = UAMS_MRA_Store::results_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $ids = $wpdb->get_col(
             $wpdb->prepare(
@@ -275,6 +276,7 @@ class UAMS_MRA_Triage
                 $disposition
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return array_map(intval(...), (array) $ids);
     }
@@ -307,12 +309,15 @@ class UAMS_MRA_Triage
 
         foreach (array_keys(self::tiers()) as $tier) {
             $where = self::tier_where($tier);
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $out['tier'][$tier] = (int) $wpdb->get_var(
                 "SELECT COUNT(*) FROM {$table} WHERE ( {$scope} ) AND ( {$where} )"
             );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         }
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -326,6 +331,7 @@ class UAMS_MRA_Triage
             ),
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $marked = 0;
 
@@ -342,8 +348,10 @@ class UAMS_MRA_Triage
             }
         }
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE ( {$scope} )");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $out['none'] = max(0, $total - $marked);
 
         return $out;

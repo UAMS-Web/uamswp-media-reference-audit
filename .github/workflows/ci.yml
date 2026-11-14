@@ -2,15 +2,13 @@ name: CI
 
 # The checks every UAMS-Web plugin runs, called from the shared chain in
 # `UAMS-Web/uams-ci-workflows` so one definition serves every repository and this one carries
-# no copy that drifts. The call switches on the two plugin jobs this repository uses
-# (`floor-lint`, `download-archive`), runs the unit suite as `composer test:unit`, and keeps
+# no copy that drifts. The call switches on the three plugin jobs this repository uses
+# (`floor-lint`, `download-archive`, `phpcs`), runs the unit suite as `composer test:unit`, and keeps
 # the chain's defaults of Linux, Windows and macOS legs. The chain's own header lists every
 # input and its default.
 #
 # Left off, each for a stated reason:
 # - `mutate`: mutation testing is a separate ticket (UAMS-Web/uamswp-media-reference-audit#31).
-# - `phpcs`: the WordPress security sniffs report existing findings in `includes/`, which need
-#   their own review before the job can pass. It is a follow-up ticket.
 #
 # `integration` stays here as a plain job beside the call, because its MySQL service and the
 # WordPress download are not part of the chain. It runs the Integration suite on a real WordPress
@@ -64,6 +62,7 @@ jobs:
       floor-lint: true
       floor-lint-php: '8.2'
       download-archive: true
+      phpcs: true
       download-archive-command: node .claude/skills/download-archive-check/check-download-archive.mjs
       pest-command: composer test:unit
 

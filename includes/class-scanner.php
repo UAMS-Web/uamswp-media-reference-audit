@@ -246,6 +246,7 @@ class UAMS_MRA_Scanner
             ? "AND post_type != 'revision'"
             : '';
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the fragment is one of two literals chosen from the scan settings.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -257,6 +258,7 @@ class UAMS_MRA_Scanner
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return self::advance($state);
@@ -426,6 +428,7 @@ class UAMS_MRA_Scanner
         $limit = (int) $state['settings']['batch_meta'];
         $cursor = (int) $state['cursor'];
 
+        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT option_id, option_name, option_value
@@ -439,6 +442,7 @@ class UAMS_MRA_Scanner
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery
 
         if (empty($rows)) {
             return self::advance($state);
@@ -737,8 +741,10 @@ class UAMS_MRA_Scanner
         if ($parents !== []) {
             $parents = array_values(array_unique($parents));
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- the placeholder list is built from `%d` and has one entry per integer bound.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             foreach ($wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM {$wpdb->posts} WHERE ID IN ({$placeholders})", $parents)) as $parent_row) {
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 $parent_statuses[(int) $parent_row->ID] = $parent_row->post_status;
             }
         }
@@ -809,6 +815,7 @@ class UAMS_MRA_Scanner
 
         $results = UAMS_MRA_Store::results_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             "SELECT r.parent_id, p.post_type, p.post_status, p.post_password, COUNT(*) AS pending
@@ -818,6 +825,7 @@ class UAMS_MRA_Scanner
 			 GROUP BY r.parent_id, p.post_type, p.post_status, p.post_password
 			 ORDER BY pending DESC, r.parent_id ASC"
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $fetchable = [];
         $skipped = [];

@@ -211,11 +211,15 @@ class UAMS_MRA_Repoint
 
         // A previous plan is cleared rather than resumed. Content moves, and a
         // verdict from before the last scan is not evidence about now.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $wpdb->query("UPDATE {$t} SET verdict = '', local_id = 0, remote_bytes = 0, local_bytes = 0, target_url = '', checked_at = '0000-00-00 00:00:00' WHERE applied = 0");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $total = (int) $wpdb->get_var("SELECT COUNT(DISTINCT url_hash) FROM {$t} WHERE applied = 0");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $job = [
             'phase' => 'plan',
@@ -250,8 +254,10 @@ class UAMS_MRA_Repoint
         $verdicts = self::eligible_verdicts($include_resized);
         $in = "'".implode("','", array_map(esc_sql(...), $verdicts))."'";
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$t} WHERE applied = 0 AND target_url <> '' AND verdict IN ({$in})");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $job = [
             'phase' => 'apply',
@@ -366,6 +372,7 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -376,6 +383,7 @@ class UAMS_MRA_Repoint
                 self::batch()
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             $job['phase'] = 'done';
@@ -387,6 +395,7 @@ class UAMS_MRA_Repoint
         foreach ($rows as $row) {
             $verdict = self::classify($row->url, $row->base_norm);
 
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $wpdb->query(
                 $wpdb->prepare(
@@ -401,6 +410,7 @@ class UAMS_MRA_Repoint
                     $row->url_hash
                 )
             );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             $job['done']++;
         }
@@ -637,8 +647,10 @@ class UAMS_MRA_Repoint
 
         // 'crashed' rows are deliberately not picked up again here. Retrying them
         // is a decision a person makes, by running the comparison again.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results("SELECT url_hash, url FROM {$t} WHERE verdict = 'nolocal' AND applied = 0 GROUP BY url_hash, url");
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $groups = [];
 
@@ -930,6 +942,7 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $parent = $wpdb->get_var(
             $wpdb->prepare(
@@ -939,6 +952,7 @@ class UAMS_MRA_Repoint
                 UAMS_MRA_Index::normalize($url)[1]
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return $parent ? (int) $parent : 0;
     }
@@ -956,8 +970,10 @@ class UAMS_MRA_Repoint
         $t = UAMS_MRA_Store::offsite_table();
 
         foreach ($hashes as $hash) {
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $url = $wpdb->get_var($wpdb->prepare("SELECT url FROM {$t} WHERE url_hash = %s LIMIT 1", $hash));
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             $target = (string) wp_get_attachment_url($attachment_id);
             $sized = $url ? self::parse_size($url) : null;
@@ -1022,6 +1038,7 @@ class UAMS_MRA_Repoint
         $verdicts = self::eligible_verdicts(! empty($job['resized']));
         $in = "'".implode("','", array_map(esc_sql(...), $verdicts))."'";
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -1031,6 +1048,7 @@ class UAMS_MRA_Repoint
                 self::batch()
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             $job['phase'] = 'done';
@@ -1042,8 +1060,10 @@ class UAMS_MRA_Repoint
         foreach ($rows as $row) {
             $result = self::rewrite_row($row);
 
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $wpdb->query($wpdb->prepare("UPDATE {$t} SET applied = %d WHERE offsite_id = %d", $result['applied'], (int) $row->offsite_id));
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             $job['done']++;
 
@@ -1192,8 +1212,10 @@ class UAMS_MRA_Repoint
             ];
         }
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table and key come from the fixed map in `meta_target()`, never from stored data.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $current = $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$meta['table']} WHERE {$meta['pk']} = %d", $pk));
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if ($current === null) {
             return [
@@ -1427,8 +1449,10 @@ class UAMS_MRA_Repoint
 
         $out = [];
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         foreach ($wpdb->get_results("SELECT verdict, COUNT(DISTINCT url_hash) AS files, COUNT(*) AS rows_affected FROM {$t} WHERE verdict <> '' AND applied = 0 GROUP BY verdict", ARRAY_A) as $row) {
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $out[$row['verdict']] = [
                 'files' => (int) $row['files'],
                 'rows' => (int) $row['rows_affected'],
@@ -1447,12 +1471,14 @@ class UAMS_MRA_Repoint
 
         $t = UAMS_MRA_Store::offsite_table();
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $row = $wpdb->get_row("SELECT
 				SUM(CASE WHEN applied = 1 THEN 1 ELSE 0 END) AS applied,
 				SUM(CASE WHEN applied = 2 THEN 1 ELSE 0 END) AS skipped,
 				SUM(CASE WHEN applied = 3 THEN 1 ELSE 0 END) AS failed
 			FROM {$t}", ARRAY_A);
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return is_array($row) ? array_map(intval(...), $row) : [];
     }
