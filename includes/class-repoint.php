@@ -1252,8 +1252,9 @@ class UAMS_MRA_Repoint
 
         // Revisions are history. Rewriting them would edit what someone
         // restores a page *from*, which is not this tool's business.
-        // With `&&` no type matches, and a revision then reaches the closing branch that skips a type it does not know, which returns the same result.
+        // Without the guard, or with `&&`, a revision reaches the closing branch that skips a type it does not know, which returns the same result.
         // @pest-mutate-ignore:BooleanOrToBooleanAnd
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if ($type === 'revision' || $type === 'revision_meta') {
             return [
                 'status' => 'skipped',
