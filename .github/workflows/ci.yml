@@ -1,0 +1,92 @@
+name: CI
+
+# The checks every UAMS-Web plugin runs, called from the shared chain in
+# `UAMS-Web/uams-ci-workflows` so one definition serves every repository and this one carries
+# no copy that drifts. The call switches on the two plugin jobs this repository uses
+# (`floor-lint`, `download-archive`), runs the unit suite as `composer test:unit`, and keeps
+# the chain's defaults of Linux, Windows and macOS legs. The chain's own header lists every
+# input and its default.
+#
+# Left off, each for a stated reason:
+# - `mutate`: mutation testing is a separate ticket (UAMS-Web/uamswp-media-reference-audit#31).
+# - `phpcs`: the WordPress security sniffs report existing findings in `includes/`, which need
+#   their own review before the job can pass. It is a follow-up ticket.
+# - The WordPress integration matrix: `tests/Integration` holds no test yet. When it does, add
+#   a plain `integration` job beside the call and list it in the `needs:` of `CI`.
+#
+# `legs` calls the shared `runner-legs.yml`, which checks that the call's run put every job on
+# the runners its classification names. Its pin must name the same commit as the `checks` pin,
+# so the two move together.
+#
+# The last job, `CI`, is the one check a ruleset requires from this workflow (with the two
+# pull-request-body checks, `Attribution footer` and `Closing keywords`). It `needs:` the call
+# and `legs`, runs `if: always()`, and fails unless every needed job reports `success`: a
+# `skipped` or `cancelled` job fails it. Adding a plain job here means adding it to the
+# `needs:` list of `CI`; the `aggregate-needs` job in the chain fails the pull request when
+# one is missing. Do not rename `CI`, and do not rename `checks` without changing `needs:`.
+#
+# The repository is public, so the chain runs on every pull request with no gate. What it
+# carries for the call, because the called jobs check out this repository:
+# `.github/actions/setup/action.yml`, the synced `.claude/skills` scripts, and the Composer
+# scripts `test:pint`, `test:refactor`, `stan` and `test:unit`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's stale run. Every other run gets a
+# group of its own, keyed on the commit, so a later push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # The shared chain. Its checks report as `checks / <job name> (<operating system>)`.
+  checks:
+    # Pinned to a release tag, never a branch. To take a newer chain, move the pin to the next tag.
+    uses: UAMS-Web/uams-ci-workflows/.github/workflows/ci.yml@v0.11.1
+    with:
+      mutate: false
+      floor-lint: true
+      floor-lint-php: '8.2'
+      download-archive: true
+      download-archive-command: node .claude/skills/download-archive-check/check-download-archive.mjs
+      pest-command: composer test:unit
+
+  # Checks that the run of `checks` above ran every job on the runners its classification names.
+  legs:
+    needs: [checks]
+    if: always()
+    uses: UAMS-Web/uams-ci-workflows/.github/workflows/runner-legs.yml@v0.11.1
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+
+  # The one check a ruleset requires from this workflow.
+  ci:
+    name: CI
+    needs: [checks, legs]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `skipped` and `cancelled` fail as well as `failure`: a job that did not run proved nothing.
+      - name: Every needed job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Needed job results: $RESULTS"
+          # An empty list would run no iterations and pass having read nothing.
+          if [ -z "$RESULTS" ]; then echo "::error::No needed job results to read"; exit 1; fi
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A needed job reported $result"
+              exit 1
+            fi
+          done
