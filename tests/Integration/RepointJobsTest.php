@@ -1679,6 +1679,9 @@ final class RepointJobsTest extends IntegrationTestCase
     public function test_a_pulled_file_that_is_not_an_image_has_its_metadata_generated(): void
     {
         $url = 'https://old.example.edu/u/meta.pdf';
+        // Nothing else may generate the metadata, so only the call under test can.
+        remove_all_actions('add_attachment');
+        remove_all_actions('edit_attachment');
         $group = $this->group($url, ['source_type' => 'option']);
         $this->http['HEAD'][$url] = [200, null];
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
@@ -1700,6 +1703,13 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
         $this->sideloadJob([$group]);
 
+        $asked = 0;
+        add_filter('image_memory_limit', static function ($limit) use (&$asked) {
+            $asked++;
+
+            return $limit;
+        });
+
         $before = ini_get('memory_limit');
         ini_set('memory_limit', '100M');
 
@@ -1711,6 +1721,7 @@ final class RepointJobsTest extends IntegrationTestCase
         }
 
         $this->files[] = (string) get_attached_file((int) $this->stored($this->firstRowId($url))['local_id']);
+        $this->assertGreaterThan(0, $asked);
         $this->assertNotSame('100M', $after);
     }
 
