@@ -144,12 +144,18 @@ class UAMS_MRA_Triage
      */
     public static function tier($row): string
     {
+        // Equivalent: a missing state and any other text both differ from 'absent', so
+        // the placeholder cannot change which branch runs.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $render = isset($row['render_state']) ? (string) $row['render_state'] : '';
 
         if (! empty($row['is_attached']) && $render !== 'absent') {
             return 'verify';
         }
 
+        // Equivalent: a missing type and any unlisted text are both low risk, so the
+        // placeholder cannot change the tier.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $mime = isset($row['mime']) ? (string) $row['mime'] : '';
 
         if (str_starts_with($mime, 'video/') || str_starts_with($mime, 'audio/')) {
@@ -222,6 +228,9 @@ class UAMS_MRA_Triage
         }
 
         $note = sanitize_text_field((string) $note);
+        // Equivalent: a note of exactly NOTE_MAX characters is cut to NOTE_MAX characters,
+        // which leaves it as it was.
+        // @pest-mutate-ignore:GreaterToGreaterOrEqual
         if (mb_strlen($note) > self::NOTE_MAX) {
             $note = mb_substr($note, 0, self::NOTE_MAX);
         }
@@ -336,12 +345,17 @@ class UAMS_MRA_Triage
         $marked = 0;
 
         foreach ((array) $rows as $row) {
+            // Equivalent: an array key reads a numeric string and an integer the same way, and a
+            // null falls through to the unknown-group skip either way.
+            // @pest-mutate-ignore:RemoveStringCast
             $key = (string) $row['d'];
             if (! isset($out['disp'][$key])) {
                 continue;
             }
 
             $out['disp'][$key] = (int) $row['n'];
+            // Equivalent: adding a numeric string to an integer gives the same integer.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $marked += (int) $row['n'];
             if ($key === 'delete') {
                 $out['delete_bytes'] = (int) $row['b'];
@@ -350,6 +364,9 @@ class UAMS_MRA_Triage
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        // Equivalent: the total is only subtracted from, and a numeric string or a null
+        // subtracts the same as the integer.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE ( {$scope} )");
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $out['none'] = max(0, $total - $marked);
