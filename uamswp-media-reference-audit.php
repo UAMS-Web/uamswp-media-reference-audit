@@ -5,7 +5,7 @@
  * Plugin URI:        https://github.com/UAMS-Web/uamswp-media-reference-audit
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
  * Version:           1.11.0
- * Requires at least: 6.0
+ * Requires at least: 6.8
  * Requires PHP:      8.2
  * Author:            UAMS Web Services
  * Author URI:        https://communications.uams.edu/web/
