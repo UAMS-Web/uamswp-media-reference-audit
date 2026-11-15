@@ -271,7 +271,7 @@ final class AdminRequestsTest extends IntegrationTestCase
      *
      * @param  array<string, mixed>  $row
      */
-    private function result(int $id, array $row = []): void
+    private function seedResult(int $id, array $row = []): void
     {
         global $wpdb;
 
@@ -357,7 +357,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_nothing_runs_off_the_plugin_screen(): void
     {
         $id = $this->attachment('keep.pdf');
-        $this->result($id);
+        $this->seedResult($id);
 
         $post = ['uams_mra_delete_marked' => '1', 'uams_mra_save_settings' => '1', 'action' => 'uams_mra_delete', 'ids' => [$id], '_wpnonce' => wp_create_nonce('bulk-media_items')];
 
@@ -373,7 +373,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_a_user_without_the_capability_runs_nothing_on_the_plugin_screen(): void
     {
         $id = $this->attachment('keep.pdf');
-        $this->result($id);
+        $this->seedResult($id);
         $this->login('subscriber');
 
         $this->assertNull($this->handle(['action' => 'uams_mra_delete', 'ids' => [$id], '_wpnonce' => wp_create_nonce('bulk-media_items')]));
@@ -540,7 +540,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_a_bulk_delete_runs_from_either_action_menu(array $action): void
     {
         $id = $this->attachment('gone.pdf');
-        $this->result($id, ['bytes' => 2048]);
+        $this->seedResult($id, ['bytes' => 2048]);
 
         $this->assertNull($this->handle($action + ['ids' => [(string) $id], '_wpnonce' => wp_create_nonce('bulk-media_items')]));
 
@@ -552,7 +552,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_another_action_deletes_nothing(): void
     {
         $id = $this->attachment('stay.pdf');
-        $this->result($id);
+        $this->seedResult($id);
 
         foreach ([['action' => 'trash'], ['action' => 'trash', 'action2' => 'trash'], ['action2' => 'uams_mra_deletes'], []] as $action) {
             $this->assertNull($this->handle($action + ['ids' => [$id], '_wpnonce' => wp_create_nonce('bulk-media_items')]));
@@ -590,7 +590,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_a_bulk_delete_accepts_a_single_value_as_the_list(): void
     {
         $id = $this->attachment('single.pdf');
-        $this->result($id);
+        $this->seedResult($id);
 
         $this->handle(['action' => 'uams_mra_delete', 'ids' => (string) $id, '_wpnonce' => wp_create_nonce('bulk-media_items')]);
 
@@ -601,8 +601,8 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $kept = $this->attachment('kept.pdf');
         $free = $this->attachment('free.pdf');
-        $this->result($kept, ['ref_count' => 2, 'bytes' => 1000]);
-        $this->result($free, ['ref_count' => 0, 'bytes' => 3000]);
+        $this->seedResult($kept, ['ref_count' => 2, 'bytes' => 1000]);
+        $this->seedResult($free, ['ref_count' => 0, 'bytes' => 3000]);
 
         $this->handle(['action' => 'uams_mra_delete', 'ids' => [(string) $kept, (string) $free], '_wpnonce' => wp_create_nonce('bulk-media_items')]);
 
@@ -646,7 +646,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $post = self::factory()->post->create();
         $id = $this->attachment('after.pdf');
-        $this->result($id);
+        $this->seedResult($id);
 
         $this->handle(['action' => 'uams_mra_delete', 'ids' => [(string) $post, (string) $id], '_wpnonce' => wp_create_nonce('bulk-media_items')]);
 
@@ -657,7 +657,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_a_file_is_deleted_for_good_not_trashed(): void
     {
         $id = $this->attachment('forced.pdf');
-        $this->result($id);
+        $this->seedResult($id);
         $forced = [];
         $watch = static function ($delete, $post, $force) use (&$forced) {
             $forced[] = $force;
@@ -678,7 +678,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_a_file_core_will_not_delete_is_not_counted_and_keeps_its_row(): void
     {
         $id = $this->attachment('refused.pdf');
-        $this->result($id, ['bytes' => 500]);
+        $this->seedResult($id, ['bytes' => 500]);
 
         $refuse = static fn (): bool => false;
         add_filter('pre_delete_attachment', $refuse);
@@ -697,7 +697,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_deleting_the_marked_files_needs_the_nonce(): void
     {
         $id = $this->attachment('marked.pdf');
-        $this->result($id);
+        $this->seedResult($id);
         UAMS_MRA_Triage::set($id, 'delete', '');
 
         $end = $this->handle(['uams_mra_delete_marked' => '1']);
@@ -709,7 +709,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_deleting_the_marked_files_with_nothing_marked_says_so(): void
     {
         $id = $this->attachment('unmarked.pdf');
-        $this->result($id);
+        $this->seedResult($id);
         UAMS_MRA_Triage::set($id, 'keep', '');
 
         $this->assertNull($this->handle(['uams_mra_delete_marked' => '1', '_wpnonce' => wp_create_nonce('bulk-media_items')]));
@@ -726,9 +726,9 @@ final class AdminRequestsTest extends IntegrationTestCase
         $marked = $this->attachment('marked.pdf');
         $guarded = $this->attachment('guarded.pdf');
         $other = $this->attachment('other.pdf');
-        $this->result($marked, ['bytes' => 1024]);
-        $this->result($guarded, ['ref_count' => 1, 'bytes' => 1024]);
-        $this->result($other, ['bytes' => 1024]);
+        $this->seedResult($marked, ['bytes' => 1024]);
+        $this->seedResult($guarded, ['ref_count' => 1, 'bytes' => 1024]);
+        $this->seedResult($other, ['bytes' => 1024]);
         UAMS_MRA_Triage::set($marked, 'delete', '');
         UAMS_MRA_Triage::set($guarded, 'delete', '');
         UAMS_MRA_Triage::set($other, 'ask', '');
@@ -793,8 +793,8 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $one = $this->attachment('one.pdf');
         $two = $this->attachment('two.pdf');
-        $this->result($one, ['bytes' => 10]);
-        $this->result($two, ['bytes' => 20]);
+        $this->seedResult($one, ['bytes' => 10]);
+        $this->seedResult($two, ['bytes' => 20]);
 
         $end = $this->handle(['uams_mra_select_filter' => '1', '_wpnonce' => wp_create_nonce('uams_mra_select')]);
 
@@ -869,7 +869,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $one = $this->attachment('one.pdf');
         $two = $this->attachment('two.pdf');
-        $this->result($one);
+        $this->seedResult($one);
 
         $this->handle(['uams_mra_select_filter' => '1', 'uams_mra_select_text' => '1', 'pasted' => (string) $two, '_wpnonce' => wp_create_nonce('uams_mra_select')]);
 
@@ -905,8 +905,8 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $one = $this->attachment('one.pdf');
         $two = $this->attachment('two.pdf');
-        $this->result($one, ['bytes' => 1024]);
-        $this->result($two, ['bytes' => 1024]);
+        $this->seedResult($one, ['bytes' => 1024]);
+        $this->seedResult($two, ['bytes' => 1024]);
         UAMS_MRA_Selection::store([$one, $two]);
 
         $end = $this->handle(['uams_mra_delete_selection' => '1', '_wpnonce' => wp_create_nonce('uams_mra_review')]);
@@ -923,8 +923,8 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $kept = $this->attachment('kept.pdf');
         $free = $this->attachment('free.pdf');
-        $this->result($kept, ['ref_count' => 3, 'bytes' => 1024]);
-        $this->result($free, ['bytes' => 1024]);
+        $this->seedResult($kept, ['ref_count' => 3, 'bytes' => 1024]);
+        $this->seedResult($free, ['bytes' => 1024]);
         UAMS_MRA_Selection::store([$kept, $free]);
 
         $this->handle(['uams_mra_delete_selection' => '1', '_wpnonce' => wp_create_nonce('uams_mra_review')]);
@@ -1353,8 +1353,8 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $one = $this->attachment('one.pdf');
         $two = $this->attachment('two.pdf');
-        $this->result($one, ['bytes' => 2048]);
-        $this->result($two, ['bytes' => 1024]);
+        $this->seedResult($one, ['bytes' => 2048]);
+        $this->seedResult($two, ['bytes' => 1024]);
         UAMS_MRA_Triage::set($two, 'delete', '');
 
         $answer = $this->ajax('ajax_triage', 'uams_mra_triage', ['id' => (string) $one, 'd' => 'DELETE', 'note' => '  <b>owner left</b>  ']);
@@ -1370,7 +1370,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_triage_with_no_mark_or_note_clears_what_was_stored(): void
     {
         $id = $this->attachment('one.pdf');
-        $this->result($id);
+        $this->seedResult($id);
         UAMS_MRA_Triage::set($id, 'keep', 'old note');
 
         $answer = $this->ajax('ajax_triage', 'uams_mra_triage', ['id' => (string) $id]);
