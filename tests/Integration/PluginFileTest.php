@@ -312,7 +312,10 @@ final class PluginFileTest extends IntegrationTestCase
         uams_mra_load_textdomain();
 
         $paths = (new \ReflectionProperty($wp_textdomain_registry, 'custom_paths'))->getValue($wp_textdomain_registry);
-        $this->assertSame(WP_PLUGIN_DIR.'/'.basename(dirname(UAMS_MRA_FILE)).'/languages', $paths['uams-mra']);
+        // The folder is named relative to the plugins directory: the plugin's own folder when it is
+        // installed there, and a path below it when the checkout sits elsewhere (as on a CI runner).
+        $this->assertSame(WP_PLUGIN_DIR.'/'.dirname(plugin_basename(UAMS_MRA_FILE)).'/languages', $paths['uams-mra']);
+        $this->assertStringEndsWith('/languages', $paths['uams-mra']);
     }
 
     public function test_the_new_site_hooks_leave_a_site_alone_when_the_plugin_is_not_network_active(): void
