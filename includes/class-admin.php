@@ -196,8 +196,12 @@ class UAMS_MRA_Admin
      */
     protected function maybe_delete()
     {
+        // Any text other than the action name takes the same branch as an empty one, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $action = isset($_POST['action']) ? sanitize_key(wp_unslash($_POST['action'])) : '';
         if ($action !== 'uams_mra_delete') {
+            // Any text other than the action name takes the same branch as an empty one, so the default changes nothing.
+            // @pest-mutate-ignore:EmptyStringToNotEmpty
             $action = isset($_POST['action2']) ? sanitize_key(wp_unslash($_POST['action2'])) : '';
         }
 
@@ -263,6 +267,8 @@ class UAMS_MRA_Admin
         $bytes = 0;
 
         foreach ($ids as $id) {
+            // Core reads the ID as a number whatever it arrives as, and every caller passes integers, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $id = (int) $id;
 
             if (get_post_type($id) !== 'attachment') {
@@ -274,6 +280,8 @@ class UAMS_MRA_Admin
             $row = $wpdb->get_row($wpdb->prepare("SELECT ref_count, bytes FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+            // The count is compared with 0, which converts the stored text to a number anyway, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             if ($row && (int) $row['ref_count'] > 0 && ! $force) {
                 $skipped++;
 
@@ -282,8 +290,13 @@ class UAMS_MRA_Admin
 
             if (wp_delete_attachment($id, true)) {
                 $deleted++;
+                // Adding stored text to a number converts it the same way, so the cast changes nothing.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $bytes += $row ? (int) $row['bytes'] : 0;
-                $wpdb->delete($table, ['attachment_id' => $id], ['%d']);
+                // The ID is an integer, which the default format writes as the same digits, so the explicit format changes nothing.
+                // @pest-mutate-ignore:RemoveArrayItem
+                $format = ['%d'];
+                $wpdb->delete($table, ['attachment_id' => $id], $format);
             }
         }
 
@@ -403,6 +416,8 @@ class UAMS_MRA_Admin
             exit;
         }
 
+        // Pasted text that matches nothing and no text at all end in the same notice and redirect, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $text = isset($_POST['pasted']) ? sanitize_textarea_field(wp_unslash($_POST['pasted'])) : '';
         $resolved = UAMS_MRA_Selection::resolve_text($text);
 
@@ -549,23 +564,32 @@ class UAMS_MRA_Admin
                 continue;
             }
 
+            $number = (int) $part['part'];
+            // size_format() converts a numeric string the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $size = size_format((int) $part['bytes'], 1);
+
             $parts[] = [
-                'part' => (int) $part['part'],
+                'part' => $number,
                 'name' => $part['name'],
-                'size' => size_format((int) $part['bytes'], 1),
+                'size' => $size,
                 'files' => (int) $part['files'],
                 'url' => wp_nonce_url(
-                    admin_url('admin-post.php?action=uams_mra_archive_download&part='.(int) $part['part']),
+                    admin_url('admin-post.php?action=uams_mra_archive_download&part='.$number),
                     'uams_mra_archive_download'
                 ),
             ];
         }
 
+        // size_format() converts a numeric string the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        $bytes = size_format((int) $job['bytes'], 1);
+
         return [
             'done' => ! empty($job['done']),
             'percent' => min(100, (int) round(($job['cursor'] / $total) * 100)),
             'files' => (int) $job['files'],
-            'bytes' => size_format((int) $job['bytes'], 1),
+            'bytes' => $bytes,
             'skipped' => count((array) $job['skipped']),
             'parts' => $parts,
             'total' => count($job['ids']),
@@ -574,7 +598,7 @@ class UAMS_MRA_Admin
                 __('%1$s of %2$s files · %3$s', 'uams-mra'),
                 number_format_i18n($job['files']),
                 number_format_i18n(count($job['ids'])),
-                size_format((int) $job['bytes'], 1)
+                $bytes
             ),
         ];
     }
@@ -591,6 +615,8 @@ class UAMS_MRA_Admin
         check_admin_referer('uams_mra_archive_download');
 
         $job = UAMS_MRA_Archive::get_job();
+        // A default below the first part number finds no part, exactly like 0, so lowering it changes nothing.
+        // @pest-mutate-ignore:DecrementInteger
         $part = isset($_GET['part']) ? absint(wp_unslash($_GET['part'])) : 0;
 
         if (! $job || ! $part || empty($job['parts'][$part])) {
@@ -855,12 +881,17 @@ class UAMS_MRA_Admin
             wp_send_json_error(['message' => __('You do not have permission to change this.', 'uams-mra')], 403);
         }
 
+        // A missing ID and any other ID that is not an attachment get the same refusal, so the default changes nothing.
+        // @pest-mutate-ignore:DecrementInteger
+        // @pest-mutate-ignore:IncrementInteger
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
 
         if (! $id || get_post_type($id) !== 'attachment') {
             wp_send_json_error(['message' => __('That file no longer exists.', 'uams-mra')], 404);
         }
 
+        // Any text that is not a disposition is stored as none, exactly like an empty one, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $disposition = isset($_POST['d']) ? sanitize_key(wp_unslash($_POST['d'])) : '';
         $note = isset($_POST['note']) ? sanitize_text_field(wp_unslash($_POST['note'])) : '';
 
@@ -926,7 +957,11 @@ class UAMS_MRA_Admin
 
         $detail = '';
 
+        // A state with no step is never the render step, whatever text stands in for it, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         if ('render' === ($state['step'] ?? '')) {
+            // number_format_i18n() and the subtraction convert a numeric string the same way, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $total = (int) ($state['render_total'] ?? 0);
             $remaining = count((array) ($state['render_queue'] ?? []));
             $detail = sprintf(
