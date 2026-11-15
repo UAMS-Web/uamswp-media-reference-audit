@@ -12,10 +12,11 @@
  * helper reads the file and wraps that one declaration in a function_exists() guard
  * before running it, so every test can run the real file. Nothing else is changed.
  *
- * Mutants this suite cannot kill, each equivalent: the `|| exit` guards on the two
- * files (constants are always defined when the file runs, WP_UNINSTALL_PLUGIN is
- * defined by the helper); the version header read by get_file_data() is pinned by
- * PluginVersionTest; the hour offset of the first cleanup run is only bounded here.
+ * Mutants this suite cannot kill are annotated in the plugin file with their reasons:
+ * the nine `require_once` paths (PHP resolves a relative path against the including
+ * file's directory, so dropping the base constant loads the same file), the
+ * deprecated argument of `load_plugin_textdomain()` (ignored when a path is given),
+ * and the `WP_CLI` block, which only runs when `WP_CLI` is defined at load (#95).
  *
  * @see uamswp-media-reference-audit.php
  * @see uninstall.php

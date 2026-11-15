@@ -22,16 +22,50 @@ define('UAMS_MRA_DIR', plugin_dir_path(__FILE__));
 define('UAMS_MRA_URL', plugin_dir_url(__FILE__));
 define('UAMS_MRA_CAP', 'manage_options');
 
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-store.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-triage.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-selection.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-archive.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-index.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-repoint.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-scanner.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-admin.php';
+// Equivalent: PHP resolves a relative require path against the including file's
+// own directory, so without the base constant it loads the same file.
+// @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-list-table.php';
 
+// Not killable here: this block runs only when WP_CLI is defined at load time, which
+// the Integration bootstrap does not do. The class it loads is pinned by the Unit
+// suite's CliTest; the load and the command registration are tracked in #95.
+// @pest-mutate-ignore:ConcatRemoveLeft
+// @pest-mutate-ignore:ConcatRemoveRight
+// @pest-mutate-ignore:ConcatSwitchSides
+// @pest-mutate-ignore:RemoveMethodCall
 if (defined('WP_CLI') && WP_CLI) {
     require_once UAMS_MRA_DIR.'includes/class-cli.php';
     WP_CLI::add_command('uams-media-audit', 'UAMS_MRA_CLI');
@@ -160,6 +194,9 @@ function uams_mra_deactivate(): void
  */
 function uams_mra_load_textdomain(): void
 {
+    // Equivalent: when a plugin-relative path is given, load_plugin_textdomain() uses it and
+    // reads the deprecated argument only when the path is absent.
+    // @pest-mutate-ignore:FalseToTrue
     load_plugin_textdomain('uams-mra', false, dirname(plugin_basename(UAMS_MRA_FILE)).'/languages');
 }
 
