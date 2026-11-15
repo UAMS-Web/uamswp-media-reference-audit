@@ -92,21 +92,27 @@ final class AdminRequestsTest extends IntegrationTestCase
         parent::tear_down();
     }
 
+    /**
+     * Remove the archive folder and everything in it, whatever an earlier run left there.
+     */
     private function wipe_archive(): void
     {
         $base = UAMS_MRA_Archive::base_dir();
 
-        UAMS_MRA_Archive::cleanup_all();
-
-        foreach (['/.htaccess', '/index.php'] as $name) {
-            if (is_file($base.$name)) {
-                unlink($base.$name);
-            }
+        if (! is_dir($base)) {
+            return;
         }
 
-        if (is_dir($base)) {
-            rmdir($base);
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($items as $item) {
+            $item->isDir() && ! $item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
+
+        rmdir($base);
     }
 
     /**
@@ -130,7 +136,7 @@ final class AdminRequestsTest extends IntegrationTestCase
      *
      * @param  array<string, mixed>  $post
      * @param  array<string, mixed>  $get
-     * @return array{end: ?AdminEnd, out: string}
+     * @return array{end: ?AdminEnd, out: string, status: ?int}
      */
     private function request(callable $request, array $post = [], array $get = [], bool $ajax = false): array
     {
@@ -145,9 +151,17 @@ final class AdminRequestsTest extends IntegrationTestCase
         });
         $redirect = [$this, 'endRedirect'];
 
+        $statuses = [];
+        $record = static function ($header, $code) use (&$statuses) {
+            $statuses[] = $code;
+
+            return $header;
+        };
+
         add_filter('wp_die_ajax_handler', $die);
         add_filter('wp_die_handler', $die);
         add_filter('wp_redirect', $redirect);
+        add_filter('status_header', $record, 10, 2);
 
         if ($ajax) {
             add_filter('wp_doing_ajax', '__return_true');
@@ -165,10 +179,11 @@ final class AdminRequestsTest extends IntegrationTestCase
             remove_filter('wp_die_ajax_handler', $die);
             remove_filter('wp_die_handler', $die);
             remove_filter('wp_redirect', $redirect);
+            remove_filter('status_header', $record, 10);
             remove_filter('wp_doing_ajax', '__return_true');
         }
 
-        return ['end' => $end, 'out' => $out];
+        return ['end' => $end, 'out' => $out, 'status' => $statuses === [] ? null : end($statuses)];
     }
 
     /**
@@ -203,6 +218,9 @@ final class AdminRequestsTest extends IntegrationTestCase
         $first = preg_split('/(?<=\})(?=\{"success")/', $result['out'])[0];
         $json = json_decode((string) $first, true);
         $this->assertIsArray($json, 'the handler answered something that is not JSON: '.$result['out']);
+
+        // The status the handler asked for, which only reaches WordPress' header filter while no output has been sent.
+        $json['status'] = $result['status'];
 
         return $json;
     }
@@ -272,6 +290,69 @@ final class AdminRequestsTest extends IntegrationTestCase
     /* ---------------------------------------------------------------------
      * handle_requests
      * ------------------------------------------------------------------ */
+
+    public function test_the_screen_url_is_returned_and_never_printed(): void
+    {
+        $this->admin->add_menu();
+
+        ob_start();
+        $url = UAMS_MRA_Admin::url(['action' => 'review']);
+        $printed = (string) ob_get_clean();
+
+        $this->assertSame('', $printed);
+        $this->assertSame(admin_url('upload.php?page=uams-media-audit&action=review'), html_entity_decode($url));
+    }
+
+    public function test_a_parked_notice_is_shown_once_and_forgotten(): void
+    {
+        $this->notice(['message' => 'Archive discarded.', 'type' => 'success']);
+
+        (new ReflectionMethod($this->admin, 'flash_notice'))->invoke($this->admin);
+
+        $this->assertSame([['code' => 'uams_mra_flash', 'message' => 'Archive discarded.', 'type' => 'success']], $this->notices());
+        $this->assertSame('', get_user_meta(get_current_user_id(), '_uams_mra_notice', true));
+
+        $GLOBALS['wp_settings_errors'] = [];
+        (new ReflectionMethod($this->admin, 'flash_notice'))->invoke($this->admin);
+        $this->assertSame([], $this->notices());
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function unusableNoticeProvider(): array
+    {
+        return [
+            'nothing parked' => [''],
+            'not a list' => ['just text'],
+            'no message' => [['type' => 'warning']],
+            'an empty message' => [['message' => '', 'type' => 'warning']],
+        ];
+    }
+
+    /**
+     * @dataProvider unusableNoticeProvider
+     */
+    public function test_a_parked_value_that_is_not_a_notice_shows_nothing(mixed $parked): void
+    {
+        if ($parked !== '') {
+            update_user_meta(get_current_user_id(), '_uams_mra_notice', $parked);
+        }
+
+        (new ReflectionMethod($this->admin, 'flash_notice'))->invoke($this->admin);
+
+        $this->assertSame([], $this->notices());
+    }
+
+    /**
+     * Park a notice the way the handlers do.
+     *
+     * @param  array<string, string>  $notice
+     */
+    private function notice(array $notice): void
+    {
+        update_user_meta(get_current_user_id(), '_uams_mra_notice', $notice);
+    }
 
     public function test_nothing_runs_off_the_plugin_screen(): void
     {
@@ -561,6 +642,39 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame([['code' => 'uams_mra_deleted', 'message' => 'Deleted 0 files and freed 0.0 B.', 'type' => 'success']], $this->notices());
     }
 
+    public function test_an_id_that_is_not_an_attachment_does_not_stop_the_ones_after_it(): void
+    {
+        $post = self::factory()->post->create();
+        $id = $this->attachment('after.pdf');
+        $this->result($id);
+
+        $this->handle(['action' => 'uams_mra_delete', 'ids' => [(string) $post, (string) $id], '_wpnonce' => wp_create_nonce('bulk-media_items')]);
+
+        $this->assertSame('post', get_post_type($post));
+        $this->assertNull(get_post($id));
+    }
+
+    public function test_a_file_is_deleted_for_good_not_trashed(): void
+    {
+        $id = $this->attachment('forced.pdf');
+        $this->result($id);
+        $forced = [];
+        $watch = static function ($delete, $post, $force) use (&$forced) {
+            $forced[] = $force;
+
+            return $delete;
+        };
+        add_filter('pre_delete_attachment', $watch, 10, 3);
+
+        try {
+            $this->handle(['action' => 'uams_mra_delete', 'ids' => [(string) $id], '_wpnonce' => wp_create_nonce('bulk-media_items')]);
+        } finally {
+            remove_filter('pre_delete_attachment', $watch, 10);
+        }
+
+        $this->assertSame([true], $forced);
+    }
+
     public function test_a_file_core_will_not_delete_is_not_counted_and_keeps_its_row(): void
     {
         $id = $this->attachment('refused.pdf');
@@ -704,6 +818,16 @@ final class AdminRequestsTest extends IntegrationTestCase
                 get_user_meta(get_current_user_id(), '_uams_mra_notice', true)
             );
         }
+    }
+
+    public function test_pasted_text_that_matches_nothing_goes_back_to_the_page_it_came_from(): void
+    {
+        $referer = admin_url('upload.php?page=uams-media-audit&view=weak');
+
+        $end = $this->handle(['uams_mra_select_text' => '1', 'pasted' => 'nothing.pdf', '_wpnonce' => wp_create_nonce('uams_mra_select'), '_wp_http_referer' => $referer]);
+
+        $this->assertSame('redirect', $end?->kind);
+        $this->assertSame($referer, $end->detail);
     }
 
     public function test_pasted_text_that_all_matches_stores_the_set_without_a_notice(): void
@@ -998,6 +1122,44 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(100, $method->invoke($this->admin, $job)['percent']);
     }
 
+    public function test_archive_payload_handles_odd_jobs(): void
+    {
+        $method = new ReflectionMethod($this->admin, 'archive_payload');
+        $base = ['ids' => [1], 'cursor' => 0, 'files' => 0, 'bytes' => 0, 'skipped' => [], 'parts' => [], 'done' => false];
+
+        // No ids at all must not divide by zero, and one id is one whole file.
+        $empty = $method->invoke($this->admin, ['ids' => []] + $base);
+        $this->assertSame(0, $empty['percent']);
+        $this->assertSame(0, $empty['total']);
+
+        $one = $method->invoke($this->admin, ['cursor' => 1, 'ids' => [7]] + $base);
+        $this->assertSame(100, $one['percent']);
+
+        // Rounded, not floored: two of three is 67.
+        $this->assertSame(67, $method->invoke($this->admin, ['cursor' => 2, 'ids' => [1, 2, 3]] + $base)['percent']);
+
+        // A job with no parts or no skipped list still shapes.
+        $bare = $method->invoke($this->admin, ['parts' => null, 'skipped' => null] + $base);
+        $this->assertSame([], $bare['parts']);
+        $this->assertSame(0, $bare['skipped']);
+
+        // Stored numbers may come back as strings; the browser is given numbers, and a part with no files is left out wherever it sits.
+        $mixed = $method->invoke($this->admin, [
+            'files' => '4',
+            'parts' => [
+                1 => ['part' => '1', 'name' => 'empty.zip', 'bytes' => '0', 'files' => '0'],
+                2 => ['part' => '2', 'name' => 'full.zip', 'bytes' => '2048', 'files' => '3'],
+            ],
+        ] + $base);
+        $this->assertSame(4, $mixed['files']);
+        $this->assertCount(1, $mixed['parts']);
+        $this->assertSame(2, $mixed['parts'][0]['part']);
+        $this->assertSame(3, $mixed['parts'][0]['files']);
+        $this->assertSame('2.0 KB', $mixed['parts'][0]['size']);
+        $this->assertSame('full.zip', $mixed['parts'][0]['name']);
+        $this->assertSame('2', $this->queryArg((string) $mixed['parts'][0]['url'], 'part'));
+    }
+
     /**
      * Read one query argument out of a URL the page built, as the browser would.
      */
@@ -1056,6 +1218,73 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $_GET = ['part' => 'abc', '_wpnonce' => wp_create_nonce('uams_mra_archive_download')];
         $this->assertSame('That archive is no longer available. Build it again.', $this->request(fn () => $this->admin->download_archive(), [], $_GET)['end']?->detail);
+    }
+
+    /**
+     * Run the download in a forked process, because it ends in exit() and would end this one.
+     *
+     * The child shares this process' database connection, so it is stopped by a kill signal in
+     * a shutdown function, before any destructor can close that connection under the parent.
+     * Headers cannot be read back: output was already sent when the suite started.
+     */
+    public function test_a_download_streams_the_part_whole_and_then_ends_the_request(): void
+    {
+        if (! function_exists('pcntl_fork') || ! function_exists('posix_kill')) {
+            $this->markTestSkipped('Forking a process needs the pcntl and posix extensions.');
+        }
+
+        $id = $this->attachment('stream-me.pdf', str_repeat('stream-me ', 500));
+        UAMS_MRA_Selection::store([$id]);
+        $this->ajax('ajax_archive_start', 'uams_mra_archive');
+        $this->ajax('ajax_archive_step', 'uams_mra_archive');
+
+        $job = UAMS_MRA_Archive::get_job();
+        $this->assertIsArray($job);
+        $path = $job['dir'].'/'.$job['parts'][1]['name'];
+        $this->assertFileExists($path);
+
+        $captured = (string) tempnam(sys_get_temp_dir(), 'mra-download-');
+        $_GET = ['part' => '1', '_wpnonce' => wp_create_nonce('uams_mra_archive_download')];
+        $_REQUEST = $_GET;
+
+        $pid = pcntl_fork();
+
+        if ($pid === 0) {
+            // WordPress flushes every buffer in its own shutdown hook, so the bytes are taken as they are flushed.
+            ob_start(static function (string $chunk) use ($captured): string {
+                file_put_contents($captured, $chunk, FILE_APPEND);
+
+                return '';
+            });
+            register_shutdown_function(static function (): void {
+                posix_kill(posix_getpid(), SIGKILL);
+            });
+            set_error_handler(static fn (): bool => true);
+            $this->admin->download_archive();
+            posix_kill(posix_getpid(), SIGKILL);
+        }
+
+        $this->assertGreaterThan(0, $pid);
+        pcntl_waitpid($pid, $status);
+
+        $streamed = (string) file_get_contents($captured);
+        unlink($captured);
+
+        $this->assertSame((string) file_get_contents($path), $streamed);
+        $this->assertStringStartsWith('PK', $streamed);
+    }
+
+    public function test_a_download_that_names_no_part_does_not_pick_one(): void
+    {
+        $id = $this->attachment('zip-me.pdf');
+        UAMS_MRA_Selection::store([$id]);
+        $this->ajax('ajax_archive_start', 'uams_mra_archive');
+        $this->ajax('ajax_archive_step', 'uams_mra_archive');
+        $this->assertNotEmpty(UAMS_MRA_Archive::get_job()['parts'][1]);
+
+        $end = $this->request(fn () => $this->admin->download_archive(), [], ['_wpnonce' => wp_create_nonce('uams_mra_archive_download')])['end'];
+
+        $this->assertSame('That archive is no longer available. Build it again.', $end?->detail);
     }
 
     public function test_a_download_whose_file_is_gone_says_it_is_missing(): void
@@ -1220,6 +1449,14 @@ final class AdminRequestsTest extends IntegrationTestCase
                 ['step' => 'render', 'render_total' => '4'],
                 ['step' => 'render', 'message' => '', 'processed' => 0, 'detail' => '4 of 4 pages read', 'done' => false],
             ],
+            'the render step with no total' => [
+                ['step' => 'render'],
+                ['step' => 'render', 'message' => '', 'processed' => 0, 'detail' => '0 of 0 pages read', 'done' => false],
+            ],
+            'a queue that is not a list counts as one entry' => [
+                ['step' => 'render', 'render_total' => 5, 'render_queue' => 'queued'],
+                ['step' => 'render', 'message' => '', 'processed' => 0, 'detail' => '4 of 5 pages read', 'done' => false],
+            ],
             'done carries the summary' => [['step' => 'done'], ['step' => 'done', 'message' => '', 'processed' => 0, 'detail' => '', 'done' => true]],
         ];
     }
@@ -1274,6 +1511,25 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $this->assertTrue($answer['success']);
         $this->assertSame($this->payloadOf(get_option(UAMS_MRA_Repoint::STATE_OPTION)), $answer['data']);
+    }
+
+    public function test_a_repoint_request_clears_the_last_fatal_record_before_it_works(): void
+    {
+        update_option(UAMS_MRA_Repoint::FATAL_OPTION, ['message' => 'an earlier fatal']);
+
+        $this->ajax('ajax_repoint_plan', 'uams_mra_repoint');
+
+        $this->assertFalse(get_option(UAMS_MRA_Repoint::FATAL_OPTION));
+    }
+
+    public function test_repoint_apply_passes_the_resized_choice_on(): void
+    {
+        $this->ajax('ajax_repoint_apply', 'uams_mra_repoint', ['resized' => '1']);
+        $this->assertSame(1, get_option(UAMS_MRA_Repoint::STATE_OPTION)['resized']);
+
+        delete_option(UAMS_MRA_Repoint::STATE_OPTION);
+        $this->ajax('ajax_repoint_apply', 'uams_mra_repoint');
+        $this->assertSame(0, get_option(UAMS_MRA_Repoint::STATE_OPTION)['resized']);
     }
 
     public function test_repoint_apply_refuses_a_user_without_unfiltered_html_and_starts_nothing(): void
