@@ -206,6 +206,20 @@ final class ArchiveTest extends IntegrationTestCase
         $this->assertSame(['bytes' => 10, 'files' => 2], UAMS_MRA_Archive::step_budget());
     }
 
+    public function test_a_step_budget_that_a_filter_returns_as_a_single_value_is_still_an_array(): void
+    {
+        add_filter('uams_mra_archive_step_budget', static fn (): string => 'none');
+
+        $this->assertSame(['none'], UAMS_MRA_Archive::step_budget());
+    }
+
+    public function test_every_job_lives_in_a_folder_of_its_own_under_uploads(): void
+    {
+        $uploads = wp_get_upload_dir();
+
+        $this->assertSame(trailingslashit($uploads['basedir']).'uams-mra-archives', UAMS_MRA_Archive::base_dir());
+    }
+
     public function test_part_names_carry_the_host_and_the_part_number(): void
     {
         $host = sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST));
@@ -260,7 +274,7 @@ final class ArchiveTest extends IntegrationTestCase
 
         $this->assertIsArray($job);
         $this->assertSame([5, 7, 9], $job['ids']);
-        $this->assertSame(20, strlen($job['id']));
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{20}$/', $job['id']);
         $this->assertSame(UAMS_MRA_Archive::base_dir().'/'.$job['id'], $job['dir']);
         $this->assertDirectoryExists($job['dir']);
         $this->assertSame(0, $job['cursor']);
@@ -508,6 +522,40 @@ final class ArchiveTest extends IntegrationTestCase
         $this->assertFalse($first['done']);
     }
 
+    public function test_a_step_stops_once_the_bytes_added_reach_the_budget_exactly(): void
+    {
+        $ids = [];
+
+        foreach (['a', 'b'] as $name) {
+            $ids[] = $this->attachment($name.'.txt', str_repeat($name, 400));
+        }
+
+        add_filter('uams_mra_archive_step_budget', static fn (): array => ['bytes' => 400, 'files' => 25]);
+        UAMS_MRA_Archive::start($ids);
+
+        $first = UAMS_MRA_Archive::step();
+
+        $this->assertIsArray($first);
+        $this->assertSame(1, $first['cursor']);
+        $this->assertSame(400, $first['bytes']);
+    }
+
+    public function test_a_missing_file_does_not_end_the_step_that_meets_it(): void
+    {
+        $gone = $this->attachment('gone.txt', 'x');
+        unlink((string) get_attached_file($gone));
+        $present = $this->attachment('present.txt', 'here');
+        UAMS_MRA_Archive::start([$gone, $present]);
+
+        $job = UAMS_MRA_Archive::step();
+
+        $this->assertIsArray($job);
+        $this->assertTrue($job['done']);
+        $this->assertSame(2, $job['cursor']);
+        $this->assertSame([$gone], $job['skipped']);
+        $this->assertSame(1, $job['files']);
+    }
+
     public function test_a_step_of_exactly_the_file_budget_ends_the_job_when_nothing_is_left(): void
     {
         $a = $this->attachment('x.txt', 'x');
@@ -603,6 +651,52 @@ final class ArchiveTest extends IntegrationTestCase
         $this->assertIsArray($third);
         $this->assertSame(2, $third['part']);
         $this->assertTrue($third['done']);
+    }
+
+    public function test_the_parts_of_a_job_are_kept_in_order(): void
+    {
+        $id = $this->attachment('late.txt', 'x');
+        $job = UAMS_MRA_Archive::start([$id]);
+        $this->assertIsArray($job);
+        $job['parts'] = [3 => ['part' => 3, 'name' => 'three', 'bytes' => 0, 'files' => 0]];
+        update_user_meta(get_current_user_id(), UAMS_MRA_Archive::META_KEY, $job);
+
+        $done = UAMS_MRA_Archive::step();
+
+        $this->assertIsArray($done);
+        $this->assertSame([1, 3], array_keys($done['parts']));
+    }
+
+    public function test_no_stream_is_left_open_after_a_step(): void
+    {
+        $id = $this->attachment('leak.txt', 'x');
+        UAMS_MRA_Archive::start([$id]);
+        $before = count(get_resources('stream'));
+
+        UAMS_MRA_Archive::step();
+
+        $this->assertSame($before, count(get_resources('stream')));
+    }
+
+    public function test_the_extension_is_read_in_any_case(): void
+    {
+        $uploads = wp_get_upload_dir();
+        $path = trailingslashit($uploads['basedir']).'SHOUT.JPG';
+        wp_mkdir_p($uploads['basedir']);
+        file_put_contents($path, str_repeat('compress me ', 400));
+        $this->files[] = $path;
+        $id = (int) wp_insert_attachment(['post_title' => 'shout', 'post_status' => 'inherit', 'post_mime_type' => 'image/jpeg']);
+        update_post_meta($id, '_wp_attached_file', 'SHOUT.JPG');
+        UAMS_MRA_Archive::start([$id]);
+
+        $job = $this->finish();
+
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open($job['dir'].'/'.UAMS_MRA_Archive::part_name(1)));
+        $stat = $zip->statName('SHOUT.JPG');
+        $zip->close();
+        $this->assertIsArray($stat);
+        $this->assertSame(ZipArchive::CM_STORE, $stat['comp_method']);
     }
 
     public function test_formats_that_are_already_compressed_are_stored_and_the_rest_are_deflated(): void
@@ -729,15 +823,16 @@ final class ArchiveTest extends IntegrationTestCase
         $this->assertIsArray($job);
         $seed = new ZipArchive;
         $seed->open($job['dir'].'/'.UAMS_MRA_Archive::part_name(1), ZipArchive::CREATE);
-        $seed->addFromString('manifest.csv', "header\r\n\r\n9,seeded\r\n  \r\n");
+        $seed->addFromString('manifest.csv', "header\r\n  \r\n9,seeded\r\n\t\r\n10,more\r\n");
         $seed->close();
 
         $done = $this->finish();
         $rows = $this->manifest($done, 1);
 
         $this->assertSame(['9', 'seeded'], $rows[1]);
-        $this->assertSame(4, count($rows));
-        $this->assertSame(3, $done['parts'][1]['files']);
+        $this->assertSame(['10', 'more'], $rows[2]);
+        $this->assertSame(5, count($rows));
+        $this->assertSame(4, $done['parts'][1]['files']);
     }
 
     public function test_discarding_removes_the_job_its_files_and_its_record(): void

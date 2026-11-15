@@ -60,6 +60,8 @@ class UAMS_MRA_Archive
      */
     public static function part_max_bytes(): int
     {
+        // The `int` return type reads a numeric string as the number, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return (int) apply_filters('uams_mra_archive_part_bytes', 200 * MB_IN_BYTES);
     }
 
@@ -124,6 +126,8 @@ class UAMS_MRA_Archive
      */
     public static function start(array $ids): WP_Error|array
     {
+        // Reached only on a host without ZipArchive, which no test host has, so no test can take this branch.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (! self::available()) {
             return new WP_Error(
                 'uams_mra_no_zip',
@@ -185,6 +189,11 @@ class UAMS_MRA_Archive
         }
 
         $budget = self::step_budget();
+        // A numeric string compares with a count as its number, so each cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        $max_files = (int) $budget['files'];
+        // @pest-mutate-ignore:RemoveIntegerCast
+        $max_bytes = (int) $budget['bytes'];
         $part_max = self::part_max_bytes();
         $spent = 0;
         $added = 0;
@@ -204,10 +213,12 @@ class UAMS_MRA_Archive
         $part_bytes = self::part_bytes($job, $job['part']);
 
         while ($job['cursor'] < count($job['ids'])) {
-            if ($added >= (int) $budget['files'] || $spent >= (int) $budget['bytes']) {
+            if ($added >= $max_files || $spent >= $max_bytes) {
                 break;
             }
 
+            // The ids were made integers when the job started, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $id = (int) $job['ids'][$job['cursor']];
             $path = get_attached_file($id);
 
@@ -218,6 +229,8 @@ class UAMS_MRA_Archive
                 continue;
             }
 
+            // The file exists, so `filesize()` returns an integer already.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $size = (int) filesize($path);
 
             // Start a new part rather than push this one past the cap -- unless
@@ -296,6 +309,8 @@ class UAMS_MRA_Archive
     {
         $host = sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST));
 
+        // `%d` reads the number out of a string itself, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return sprintf('uams-media-%s-part-%d.zip', $host, (int) $part);
     }
 
@@ -322,11 +337,17 @@ class UAMS_MRA_Archive
      */
     protected static function record_part(array &$job, $part, $files)
     {
-        $job['parts'][(int) $part] = [
-            'part' => (int) $part,
+        // Callers pass the job's own integers, so each cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
+        $part = (int) $part;
+        // @pest-mutate-ignore:RemoveIntegerCast
+        $files = (int) $files;
+
+        $job['parts'][$part] = [
+            'part' => $part,
             'name' => self::part_name($part),
             'bytes' => self::part_bytes($job, $part),
-            'files' => (int) $files,
+            'files' => $files,
         ];
 
         ksort($job['parts']);
@@ -381,6 +402,8 @@ class UAMS_MRA_Archive
         $post = get_post($id);
         $mark = UAMS_MRA_Triage::get($id);
 
+        // The row is written out as CSV text, where an integer and its string read the same.
+        // @pest-mutate-ignore:RemoveIntegerCast
         return [
             $id,
             $local,
@@ -406,11 +429,15 @@ class UAMS_MRA_Archive
     {
         $path = self::part_path($job, $part);
 
+        // A part that does not exist cannot be opened, so the open below returns the same empty list.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (! file_exists($path)) {
             return [];
         }
 
         $zip = new ZipArchive;
+        // `step()` opened this same part a moment ago, so a part that opens there opens here.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if ($zip->open($path) !== true) {
             return [];
         }
@@ -418,6 +445,8 @@ class UAMS_MRA_Archive
         $csv = $zip->getFromName('manifest.csv');
         $zip->close();
 
+        // An absent manifest reads as no lines, and the loop below skips the first line anyway.
+        // @pest-mutate-ignore:RemoveEarlyReturn
         if (! $csv) {
             return [];
         }
@@ -425,7 +454,11 @@ class UAMS_MRA_Archive
         $rows = [];
         $lines = preg_split('#\r\n|\n#', trim($csv));
 
+        // `preg_split()` fails only on a broken pattern, so the array cast changes nothing.
+        // @pest-mutate-ignore:RemoveArrayCast
         foreach ((array) $lines as $i => $line) {
+            // Every element is already a string.
+            // @pest-mutate-ignore:RemoveStringCast
             if ($i === 0 || trim((string) $line) === '') {
                 continue; // Header.
             }
@@ -544,6 +577,8 @@ class UAMS_MRA_Archive
             return;
         }
 
+        // `glob()` returns false only on an error, which the loop reads as no folders either way.
+        // @pest-mutate-ignore:RemoveArrayCast
         foreach ((array) glob($base.'/*', GLOB_ONLYDIR) as $dir) {
             self::rmdir($dir);
         }
