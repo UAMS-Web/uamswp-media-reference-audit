@@ -104,6 +104,8 @@ class UAMS_MRA_CLI
         global $wpdb;
 
         $status = $assoc_args['status'] ?? 'orphaned';
+        // $wpdb->prepare() formats the limit with %d, which casts it, so the explicit cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) ($assoc_args['limit'] ?? 100);
         $format = $assoc_args['format'] ?? 'table';
         $where = self::where_for($status);
@@ -178,6 +180,8 @@ class UAMS_MRA_CLI
         global $wpdb;
 
         $status = $assoc_args['status'] ?? 'orphaned';
+        // $wpdb->prepare() formats the limit with %d, which casts it, so the explicit cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) ($assoc_args['limit'] ?? 500);
         $dry_run = isset($assoc_args['dry-run']);
         $where = self::where_for($status);
@@ -255,6 +259,8 @@ class UAMS_MRA_CLI
 
         $out = [];
         foreach ($refs as $ref) {
+            // Comparing the stored string with 2 converts it to a number anyway, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $out[] = [
                 'type' => $ref->source_type,
                 'source' => $ref->source_id,
