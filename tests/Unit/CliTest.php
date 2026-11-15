@@ -205,7 +205,8 @@ beforeEach(function (): void {
     CliStandIn::$decline = false;
     $GLOBALS['cli_format_calls'] = [];
 
-    when('size_format')->alias(static fn ($bytes, $decimals = 0): string => $bytes.'B@'.$decimals);
+    // The real size_format() takes a number; a string byte count left uncast would reach it unchanged.
+    when('size_format')->alias(static fn ($bytes, $decimals = 0): string => is_int($bytes) ? $bytes.'B@'.$decimals : throw new LogicException('size_format() got a '.gettype($bytes)));
     when('wp_list_pluck')->alias(static fn (array $list, string $field): array => array_column($list, $field));
     when('WP_CLI\Utils\format_items')->alias(static function ($format, $items, $fields): void {
         $GLOBALS['cli_format_calls'][] = [$format, $items, $fields];
