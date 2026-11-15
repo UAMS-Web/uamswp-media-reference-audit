@@ -11,7 +11,7 @@
         "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
         "laravel/pint": "^1.13",
         "pestphp/pest": "^5.3",
-        "php-stubs/wordpress-stubs": "^6.9",
+        "php-stubs/wordpress-stubs": "~6.8.0",
         "php-stubs/wp-cli-stubs": "^2.12",
         "phpstan/phpstan": "^2.1",
         "rector/rector": "^2.5",
