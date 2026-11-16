@@ -36,6 +36,12 @@ class UAMS_MRA_CLI
         UAMS_MRA_Store::install();
 
         $state = UAMS_MRA_Scanner::start();
+
+        // start() refuses while a repoint or download is running; the admin screen shows the same message.
+        if (is_wp_error($state)) {
+            WP_CLI::error($state->get_error_message());
+        }
+
         $quiet = isset($assoc_args['quiet']);
 
         $last = '';
