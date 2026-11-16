@@ -6,6 +6,10 @@ defined('ABSPATH') || exit;
 
 /**
  * Wires up the Media Audit screen.
+ *
+ * @phpstan-import-type ArchiveJob from UAMS_MRA_Archive
+ * @phpstan-import-type RepointJob from UAMS_MRA_Repoint
+ * @phpstan-import-type ScanState from UAMS_MRA_Scanner
  */
 class UAMS_MRA_Admin
 {
@@ -150,7 +154,7 @@ class UAMS_MRA_Admin
     /**
      * Save the settings form.
      */
-    protected function maybe_save_settings()
+    protected function maybe_save_settings(): void
     {
         if (! isset($_POST['uams_mra_save_settings'])) {
             return;
@@ -199,7 +203,7 @@ class UAMS_MRA_Admin
     /**
      * Run a bulk delete.
      */
-    protected function maybe_delete()
+    protected function maybe_delete(): void
     {
         // Any text other than the action name takes the same branch as an empty one, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
@@ -236,7 +240,7 @@ class UAMS_MRA_Admin
      * menu: it acts on the marks, not on the ticked checkboxes, and a menu entry
      * that quietly ignores the selection would be a trap.
      */
-    protected function maybe_delete_marked()
+    protected function maybe_delete_marked(): void
     {
         if (! isset($_POST['uams_mra_delete_marked'])) {
             return;
@@ -260,7 +264,8 @@ class UAMS_MRA_Admin
      *
      * @param  array  $ids  Attachment IDs.
      * @param  bool  $force  Delete even when references were recorded.
-     * @return array {deleted, skipped, bytes}
+     * @param  array<int, int|string>  $ids
+     * @return array{deleted: int, skipped: int, bytes: int} {deleted, skipped, bytes}
      */
     protected function delete_ids(array $ids, $force): array
     {
@@ -316,8 +321,9 @@ class UAMS_MRA_Admin
      * Turn a delete run into an admin notice.
      *
      * @param  array  $result  From delete_ids().
+     * @param  array{deleted: int, skipped: int, bytes: int}  $result
      */
-    protected function report_delete(array $result)
+    protected function report_delete(array $result): void
     {
         $message = sprintf(
             /* translators: 1: number of files, 2: disk space freed. */
@@ -349,6 +355,7 @@ class UAMS_MRA_Admin
      * URL of one of this plugin's screens.
      *
      * @param  array  $args  Query args.
+     * @param  array<string, int|string>  $args
      * @return string
      */
     public static function url(array $args = [])
@@ -365,7 +372,7 @@ class UAMS_MRA_Admin
      * @param  string  $message  Message.
      * @param  string  $type  success, warning, or error.
      */
-    protected function notice($message, $type = 'success')
+    protected function notice($message, $type = 'success'): void
     {
         update_user_meta(
             get_current_user_id(),
@@ -380,7 +387,7 @@ class UAMS_MRA_Admin
     /**
      * Show and forget any parked message.
      */
-    protected function flash_notice()
+    protected function flash_notice(): void
     {
         $notice = get_user_meta(get_current_user_id(), '_uams_mra_notice', true);
 
@@ -396,7 +403,7 @@ class UAMS_MRA_Admin
     /**
      * Build a working set from the filter on screen or from pasted text.
      */
-    protected function maybe_build_selection()
+    protected function maybe_build_selection(): void
     {
         $from_filter = isset($_POST['uams_mra_select_filter']);
         $from_text = isset($_POST['uams_mra_select_text']);
@@ -454,7 +461,7 @@ class UAMS_MRA_Admin
     /**
      * Delete the working set.
      */
-    protected function maybe_delete_selection()
+    protected function maybe_delete_selection(): void
     {
         if (! isset($_POST['uams_mra_delete_selection'])) {
             return;
@@ -498,7 +505,7 @@ class UAMS_MRA_Admin
     /**
      * Throw away the built archive.
      */
-    protected function maybe_discard_archive()
+    protected function maybe_discard_archive(): void
     {
         if (! isset($_POST['uams_mra_discard_archive'])) {
             return;
@@ -558,6 +565,8 @@ class UAMS_MRA_Admin
      * Shape a job for the browser.
      *
      * @param  array  $job  Job.
+     * @param  ArchiveJob  $job
+     * @return array<string, mixed>
      */
     protected function archive_payload(array $job): array
     {
@@ -662,7 +671,7 @@ class UAMS_MRA_Admin
     /**
      * The review screen: one list, then archive and delete.
      */
-    protected function render_review()
+    protected function render_review(): void
     {
         $ids = UAMS_MRA_Selection::get();
         $rows = UAMS_MRA_Selection::rows($ids);
@@ -981,6 +990,8 @@ class UAMS_MRA_Admin
      * Shape state for the progress UI.
      *
      * @param  array  $state  Scan state.
+     * @param  ScanState  $state
+     * @return array<string, mixed>
      */
     protected function progress($state): array
     {
@@ -1537,7 +1548,7 @@ class UAMS_MRA_Admin
     /**
      * Guard shared by the repoint endpoints.
      */
-    protected function repoint_guard()
+    protected function repoint_guard(): void
     {
         check_ajax_referer('uams_mra_repoint', 'nonce');
 
@@ -1550,6 +1561,8 @@ class UAMS_MRA_Admin
      * Shape a repoint job for the browser.
      *
      * @param  array  $job  Job.
+     * @param  RepointJob  $job
+     * @return array<string, mixed>
      */
     protected function repoint_payload($job): array
     {
@@ -1576,7 +1589,7 @@ class UAMS_MRA_Admin
      *
      * @param  callable  $work  Returns a job array.
      */
-    protected function repoint_respond(callable $work)
+    protected function repoint_respond(callable $work): void
     {
         $this->repoint_guard();
 
@@ -2021,6 +2034,7 @@ class UAMS_MRA_Admin
      * and get the label alone rather than a link to nowhere.
      *
      * @param  array  $source  Row from offsite_sources().
+     * @param  array<string, mixed>  $source
      * @return string HTML.
      */
     protected function offsite_source_line(array $source)
