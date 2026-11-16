@@ -41,6 +41,54 @@ final class StoreTest extends IntegrationTestCase
     }
 
     /**
+     * The references stored for an attachment, failing the test where the read returns nothing.
+     *
+     * @return array<int, object>
+     */
+    private static function refs(mixed ...$args): array
+    {
+        $refs = UAMS_MRA_Store::get_refs(...$args);
+
+        if ($refs === null) {
+            self::fail('get_refs() returned null.');
+        }
+
+        return $refs;
+    }
+
+    /**
+     * The off-site files listed, failing the test where the read returns nothing.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function offsiteFiles(mixed ...$args): array
+    {
+        $files = UAMS_MRA_Store::offsite_files(...$args);
+
+        if ($files === null) {
+            self::fail('offsite_files() returned null.');
+        }
+
+        return $files;
+    }
+
+    /**
+     * The places one off-site file is stored in, failing the test where the read returns nothing.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function offsiteSources(mixed ...$args): array
+    {
+        $sources = UAMS_MRA_Store::offsite_sources(...$args);
+
+        if ($sources === null) {
+            self::fail('offsite_sources() returned null.');
+        }
+
+        return $sources;
+    }
+
+    /**
      * Run a check against real tables instead of the temporary ones the test case makes.
      *
      * The test case turns CREATE and DROP TABLE into their temporary forms. Two things
@@ -400,9 +448,9 @@ final class StoreTest extends IntegrationTestCase
 
         UAMS_MRA_Store::add_refs($rows);
 
-        $this->assertCount(20, UAMS_MRA_Store::get_refs(1));
-        $this->assertCount(3, UAMS_MRA_Store::get_refs(1, 3));
-        $this->assertCount(25, UAMS_MRA_Store::get_refs(1, 100));
+        $this->assertCount(20, self::refs(1));
+        $this->assertCount(3, self::refs(1, 3));
+        $this->assertCount(25, self::refs(1, 100));
         $this->assertSame([], UAMS_MRA_Store::get_refs(99));
     }
 
@@ -712,7 +760,7 @@ final class StoreTest extends IntegrationTestCase
         $wpdb->insert(UAMS_MRA_Store::index_table(), ['attachment_id' => 12, 'base_norm' => 'a.jpg']);
         $wpdb->insert(UAMS_MRA_Store::index_table(), ['attachment_id' => 10, 'base_norm' => 'a.jpg']);
 
-        $files = UAMS_MRA_Store::offsite_files();
+        $files = self::offsiteFiles();
 
         $this->assertSame(['https://old.example.edu/a.jpg', 'https://cdn.example.net/c.jpg', 'https://old.example.edu/b.jpg'], array_column($files, 'url'));
         $this->assertSame('2', $files[0]['hits']);
@@ -733,12 +781,12 @@ final class StoreTest extends IntegrationTestCase
 
         $this->assertSame(
             ['https://old.example.edu/a.jpg', 'https://old.example.edu/b.jpg', 'https://old.example.edu/c.jpg'],
-            array_column(UAMS_MRA_Store::offsite_files('old.example.edu'), 'url')
+            array_column(self::offsiteFiles('old.example.edu'), 'url')
         );
-        $this->assertSame(['https://old.example.edu/b.jpg'], array_column(UAMS_MRA_Store::offsite_files('old.example.edu', 1, 1), 'url'));
-        $this->assertSame(['https://old.example.edu/c.jpg'], array_column(UAMS_MRA_Store::offsite_files('old.example.edu', self::loose('5'), self::loose('2')), 'url'));
-        $this->assertCount(4, UAMS_MRA_Store::offsite_files());
-        $this->assertCount(2, UAMS_MRA_Store::offsite_files('', 2));
+        $this->assertSame(['https://old.example.edu/b.jpg'], array_column(self::offsiteFiles('old.example.edu', 1, 1), 'url'));
+        $this->assertSame(['https://old.example.edu/c.jpg'], array_column(self::offsiteFiles('old.example.edu', self::loose('5'), self::loose('2')), 'url'));
+        $this->assertCount(4, self::offsiteFiles());
+        $this->assertCount(2, self::offsiteFiles('', 2));
         $this->assertSame([], UAMS_MRA_Store::offsite_files('nowhere.example'));
     }
 
@@ -752,8 +800,8 @@ final class StoreTest extends IntegrationTestCase
 
         UAMS_MRA_Store::add_offsite($rows);
 
-        $this->assertCount(100, UAMS_MRA_Store::offsite_files());
-        $this->assertCount(101, UAMS_MRA_Store::offsite_files('', 200));
+        $this->assertCount(100, self::offsiteFiles());
+        $this->assertCount(101, self::offsiteFiles('', 200));
     }
 
     public function test_the_offsite_file_count_follows_the_host(): void
@@ -784,13 +832,13 @@ final class StoreTest extends IntegrationTestCase
 
         UAMS_MRA_Store::add_offsite($rows);
 
-        $sources = UAMS_MRA_Store::offsite_sources(md5($url));
+        $sources = self::offsiteSources(md5($url));
 
         $this->assertCount(25, $sources);
         $this->assertSame(['source_type' => 'content', 'source_id' => '99', 'source_label' => 'late'], $sources[0]);
         $this->assertSame('1', $sources[1]['source_id']);
         $this->assertSame('24', $sources[24]['source_id']);
-        $this->assertCount(2, UAMS_MRA_Store::offsite_sources(md5($url), 2));
+        $this->assertCount(2, self::offsiteSources(md5($url), 2));
         $this->assertSame([], UAMS_MRA_Store::offsite_sources(md5('unknown')));
     }
 

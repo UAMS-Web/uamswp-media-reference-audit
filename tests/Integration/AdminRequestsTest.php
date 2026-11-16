@@ -1152,6 +1152,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(1, $data['parts'][0]['part']);
         $this->assertSame(UAMS_MRA_Archive::part_name(1), $data['parts'][0]['name']);
         $this->assertSame(2, $data['parts'][0]['files']);
+        /** @var array<string, mixed> $job */
         $job = UAMS_MRA_Archive::get_job();
         $this->assertSame(size_format($this->bytesOf($job['dir'].'/'.UAMS_MRA_Archive::part_name(1)), 1), $data['parts'][0]['size']);
         $url = html_entity_decode((string) $data['parts'][0]['url']);
@@ -1398,7 +1399,9 @@ final class AdminRequestsTest extends IntegrationTestCase
         UAMS_MRA_Selection::store([$id]);
         $this->ajax('ajax_archive_start', 'uams_mra_archive');
         $this->ajax('ajax_archive_step', 'uams_mra_archive');
-        $this->assertNotEmpty(UAMS_MRA_Archive::get_job()['parts'][1]);
+        /** @var array<string, mixed> $job */
+        $job = UAMS_MRA_Archive::get_job();
+        $this->assertNotEmpty($job['parts'][1]);
 
         $end = $this->request(fn () => $this->admin->download_archive(), [], ['_wpnonce' => wp_create_nonce('uams_mra_archive_download')])['end'];
 
@@ -1413,6 +1416,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $job = UAMS_MRA_Archive::get_job();
         $this->assertIsArray($job);
         $this->ajax('ajax_archive_step', 'uams_mra_archive');
+        /** @var array<string, mixed> $job */
         $job = UAMS_MRA_Archive::get_job();
         $path = $job['dir'].'/'.$job['parts'][1]['name'];
         $this->assertFileExists($path);

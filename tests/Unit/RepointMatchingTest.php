@@ -500,6 +500,7 @@ it('asks for the HEAD with a timeout, a redirect limit, ssl verification and an 
 
     repoint_call('remote_size', MATCH_URL);
 
+    /** @var array{url: string, args: array<string, mixed>} $seen */
     expect($seen['url'])->toBe(MATCH_URL)
         ->and($seen['args'])->toBe([
             'timeout' => 15,

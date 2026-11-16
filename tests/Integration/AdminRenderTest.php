@@ -1689,7 +1689,7 @@ final class AdminRenderTest extends IntegrationTestCase
     /**
      * Parse CSV the way the export wrote it: no escape character.
      *
-     * @return list<list<string>>
+     * @return list<list<string|null>>
      */
     private function csv(string $bytes): array
     {
@@ -1994,7 +1994,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $row = $this->exportOffsite()[1];
 
         $this->assertSame('52', $row[3]);
-        $this->assertCount(50, explode(' | ', $row[6]));
+        $this->assertCount(50, explode(' | ', (string) $row[6]));
     }
 
     public function test_the_offsite_export_runs_past_one_batch_of_two_hundred(): void
@@ -2131,7 +2131,7 @@ final class AdminRenderTest extends IntegrationTestCase
             $wpdb->insert(UAMS_MRA_Store::refs_table(), ['attachment_id' => $a, 'source_type' => 'content', 'source_id' => $i, 'source_label' => 'R'.$i]);
         }
 
-        $labels = explode(' | ', $this->exportCsv(['view' => 'all'])[1][12]);
+        $labels = explode(' | ', (string) $this->exportCsv(['view' => 'all'])[1][12]);
 
         $this->assertCount(10, $labels);
         $this->assertSame('content #10 R10', $labels[9]);
