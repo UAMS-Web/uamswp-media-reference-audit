@@ -16,6 +16,25 @@ use function Brain\Monkey\Functions\when;
 
 mutates(UAMS_MRA_CLI::class);
 
+/**
+ * A stand-in for WP_Error, which WordPress defines and the Unit suite does not load.
+ *
+ * Aliased at run time rather than declared as `WP_Error`, so static analysis keeps reading the real class.
+ */
+final class CliFakeError
+{
+    public function __construct(private readonly string $message = '') {}
+
+    public function get_error_message(): string
+    {
+        return $this->message;
+    }
+}
+
+if (! class_exists('WP_Error')) {
+    class_alias(CliFakeError::class, 'WP_Error');
+}
+
 if (! class_exists('WP_CLI')) {
     /**
      * Thrown by the stand-in where the real WP-CLI would end the process.
@@ -265,6 +284,27 @@ describe('scan', function (): void {
         expect($seen)->toBe(['steps' => 3, 'installs' => 1, 'starts' => 1])
             ->and(cli_messages('log'))->toBe(['Posts', 'Meta', 'Finished'])
             ->and(cli_messages('success'))->toBe(['12 media files. 5 unattached, 4 unreferenced, 3 both (2048B@1 reclaimable).']);
+    });
+
+    it('stops with the error message when start() refuses, without stepping or reporting', function (): void {
+        $seen = ['steps' => 0];
+
+        when('is_wp_error')->alias(static fn ($value): bool => $value instanceof WP_Error);
+        cli_redefine('UAMS_MRA_Store::install', static function (): void {});
+        cli_redefine('UAMS_MRA_Scanner::start', static fn (): CliFakeError => new CliFakeError('A repoint is running.'));
+        cli_redefine('UAMS_MRA_Scanner::step', static function () use (&$seen): array {
+            $seen['steps']++;
+
+            return ['step' => 'done', 'message' => ''];
+        });
+        cli_redefine('UAMS_MRA_Store::summary', static function (): array {
+            throw new LogicException('the summary must not be read after a refusal');
+        });
+
+        expect(fn () => (new UAMS_MRA_CLI)->scan([], []))->toThrow(CliHalt::class, 'A repoint is running.')
+            ->and($seen['steps'])->toBe(0)
+            ->and(cli_messages('error'))->toBe(['A repoint is running.'])
+            ->and(cli_messages('success'))->toBe([]);
     });
 
     it('does not step at all when the scan starts out done', function () use ($scan): void {
