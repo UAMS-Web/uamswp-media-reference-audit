@@ -35,7 +35,7 @@ class UAMS_MRA_Selection
     /**
      * Every attachment matching the filter on screen.
      *
-     * @return list<int> Attachment IDs.
+     * @return array<int> Attachment IDs.
      */
     public static function ids_matching_filter(): array
     {
@@ -73,6 +73,7 @@ class UAMS_MRA_Selection
         // Equivalent: preg_split() reads any scalar or Stringable as the same text, and
         // an array or object that cannot be read has no meaning here either way.
         // @pest-mutate-ignore:RemoveStringCast
+        /** @var list<string> $tokens */
         $tokens = preg_split('#[\r\n,;]+#', (string) $text);
         $ids = [];
         $missed = [];
@@ -219,7 +220,7 @@ class UAMS_MRA_Selection
      *
      * @param  array  $ids  Attachment IDs.
      * @param  array<int, int|string>  $ids
-     * @return list<array<string, mixed>> Rows.
+     * @return array<array<string, mixed>> Rows.
      */
     public static function rows(array $ids): array
     {
@@ -248,7 +249,7 @@ class UAMS_MRA_Selection
      * Totals for a set of rows.
      *
      * @param  array  $rows  Results rows.
-     * @param  list<array<string, mixed>>  $rows
+     * @param  array<array<string, mixed>>  $rows
      * @return array{count: int, bytes: int, referenced: int, attached: int, missing: int}
      */
     public static function totals(array $rows): array

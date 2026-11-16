@@ -96,7 +96,7 @@ class UAMS_MRA_Index
      * marks an extra file as referenced, which is safe; under-matching deletes a
      * live one.
      *
-     * @return list<string> Regexes applied to the filename, extension already removed.
+     * @return array<string> Regexes applied to the filename, extension already removed.
      */
     public static function derivative_patterns(): array
     {
