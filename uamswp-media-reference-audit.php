@@ -129,7 +129,9 @@ function uams_mra_new_site_tables($blog_id): void
         return;
     }
 
-    switch_to_blog($blog_id);
+    // Equivalent: switch_to_blog() casts the ID to an integer itself.
+    // @pest-mutate-ignore:RemoveIntegerCast
+    switch_to_blog((int) $blog_id);
     UAMS_MRA_Store::install();
     restore_current_blog();
 }
