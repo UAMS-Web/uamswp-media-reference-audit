@@ -175,6 +175,8 @@ class UAMS_MRA_Selection
     /**
      * Store the working set for this user.
      *
+     * A set longer than MAX keeps its first MAX IDs.
+     *
      * @param  array  $ids  Attachment IDs.
      * @return array The stored IDs.
      */
