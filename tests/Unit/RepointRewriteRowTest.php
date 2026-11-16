@@ -127,7 +127,7 @@ it('skips a row of a type it does not know', function (): void {
 });
 
 it('does not skip a content row whose target differs and is not empty', function (): void {
-    when('get_post')->justReturn(null);
+    when('get_post')->justReturn();
 
     expect(rewrite_row_result([]))->toBe(['status' => 'failed', 'applied' => 3]);
 });
