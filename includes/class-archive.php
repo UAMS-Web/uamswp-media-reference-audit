@@ -23,7 +23,8 @@ defined('ABSPATH') || exit;
 /**
  * Builds, serves, and cleans up zip archives of a working set.
  *
- * @phpstan-type ArchiveJob array<string, mixed>
+ * @phpstan-type ArchivePart array{part: int, name: string, bytes: int, files: int}
+ * @phpstan-type ArchiveJob array{id: string, dir: string, ids: list<int>, cursor: int, part: int, parts: array<int, ArchivePart>, files: int, bytes: int, skipped: list<int>, created: int, done: bool}
  */
 class UAMS_MRA_Archive
 {
@@ -95,7 +96,13 @@ class UAMS_MRA_Archive
     {
         $job = get_user_meta(get_current_user_id(), self::META_KEY, true);
 
-        return is_array($job) && ! empty($job['id']) ? $job : null;
+        if (! is_array($job) || empty($job['id'])) {
+            return null;
+        }
+
+        // The option holds what `put_job()` stored, which is a job.
+        /** @var ArchiveJob $job */
+        return $job;
     }
 
     /**

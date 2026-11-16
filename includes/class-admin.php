@@ -169,6 +169,8 @@ class UAMS_MRA_Admin
             $settings[$key] = isset($_POST[$key]) ? 1 : 0;
         }
 
+        // A posted settings form holds its text and numbers as text.
+        /** @var array<string, string> $_POST */
         $settings['extra_paths'] = isset($_POST['extra_paths'])
             ? sanitize_textarea_field(wp_unslash($_POST['extra_paths']))
             : '';
@@ -205,6 +207,8 @@ class UAMS_MRA_Admin
      */
     protected function maybe_delete(): void
     {
+        // The bulk action names are text, and the selected IDs are a list of text.
+        /** @var array{action?: string, action2?: string, ids?: array<array-key, string>} $_POST */
         // Any text other than the action name takes the same branch as an empty one, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         $action = isset($_POST['action']) ? sanitize_key(wp_unslash($_POST['action'])) : '';
@@ -220,6 +224,8 @@ class UAMS_MRA_Admin
 
         check_admin_referer('bulk-media_items');
 
+        // The selected IDs are a list of text.
+        /** @var array{ids?: array<array-key, string>, uams_mra_force?: string} $_POST */
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- every element is cast to a non-negative integer by `absint()`.
         $ids = isset($_POST['ids']) ? array_map(absint(...), (array) wp_unslash($_POST['ids'])) : [];
         $ids = array_filter($ids);
@@ -397,6 +403,8 @@ class UAMS_MRA_Admin
 
         delete_user_meta(get_current_user_id(), '_uams_mra_notice');
 
+        // The notice was stored by `notice()` with a message and a type.
+        /** @var array{message: string, type: string} $notice */
         add_settings_error('uams-mra', 'uams_mra_flash', $notice['message'], $notice['type']);
     }
 
@@ -428,6 +436,8 @@ class UAMS_MRA_Admin
             exit;
         }
 
+        // The pasted list is text.
+        /** @var array{uams_mra_select_filter?: string, uams_mra_select_text?: string, pasted?: string} $_POST */
         // Pasted text that matches nothing and no text at all end in the same notice and redirect, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         $text = isset($_POST['pasted']) ? sanitize_textarea_field(wp_unslash($_POST['pasted'])) : '';
@@ -539,7 +549,7 @@ class UAMS_MRA_Admin
         }
 
         // send_json_error() ends the request, so only a job reaches this line.
-        /** @var array<string, mixed> $job */
+        /** @var ArchiveJob $job */
         wp_send_json_success($this->archive_payload($job));
     }
 
@@ -561,7 +571,7 @@ class UAMS_MRA_Admin
         }
 
         // send_json_error() ends the request, so only a job reaches this line.
-        /** @var array<string, mixed> $job */
+        /** @var ArchiveJob $job */
         wp_send_json_success($this->archive_payload($job));
     }
 
@@ -633,6 +643,8 @@ class UAMS_MRA_Admin
         check_admin_referer('uams_mra_archive_download');
 
         $job = UAMS_MRA_Archive::get_job();
+        // The part number is text.
+        /** @var array{part?: string} $_GET */
         // A default below the first part number finds no part, exactly like 0, so lowering it changes nothing.
         // @pest-mutate-ignore:DecrementInteger
         $part = isset($_GET['part']) ? absint(wp_unslash($_GET['part'])) : 0;
@@ -842,6 +854,7 @@ class UAMS_MRA_Admin
 				<tbody>
 					<?php
         foreach ($rows as $row) {
+            /** @var array{attachment_id: numeric-string, title: string, file: string, mime: string, bytes: numeric-string, ref_count: numeric-string} $row */
             // The ID is read as a number wherever it is used, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveIntegerCast
             $id = (int) $row['attachment_id'];
@@ -881,7 +894,7 @@ class UAMS_MRA_Admin
 							</td>
 							<td>
 								<?php if ($ref_count > 0) { ?>
-									<span class="uams-mra-badge uams-mra-badge-ok"><?php echo esc_html(number_format_i18n($row['ref_count'])); ?></span>
+									<span class="uams-mra-badge uams-mra-badge-ok"><?php echo esc_html(number_format_i18n($ref_count)); ?></span>
 								<?php } else { ?>
 									<span class="uams-mra-muted"><?php esc_html_e('None', 'uams-mra'); ?></span>
 								<?php } ?>
@@ -932,6 +945,8 @@ class UAMS_MRA_Admin
             $this->send_json_error(['message' => __('You do not have permission to change this.', 'uams-mra')], 403);
         }
 
+        // The file, disposition and note are text.
+        /** @var array{id?: string, d?: string, note?: string} $_POST */
         // A missing ID and any other ID that is not an attachment get the same refusal, so the default changes nothing.
         // @pest-mutate-ignore:DecrementInteger
         // @pest-mutate-ignore:IncrementInteger
@@ -941,6 +956,8 @@ class UAMS_MRA_Admin
             $this->send_json_error(['message' => __('That file no longer exists.', 'uams-mra')], 404);
         }
 
+        // The file, disposition and note are text.
+        /** @var array{id?: string, d?: string, note?: string} $_POST */
         // Any text that is not a disposition is stored as none, exactly like an empty one, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         $disposition = isset($_POST['d']) ? sanitize_key(wp_unslash($_POST['d'])) : '';
@@ -1008,6 +1025,8 @@ class UAMS_MRA_Admin
      */
     protected function progress($state): array
     {
+        // The scan stores its progress as these, numbers possibly as text.
+        /** @var array{step?: string, message?: string, processed?: int|string, render_total?: int|string, render_queue?: array<mixed>, finished?: int|string} $state */
         $done = ('done' === ($state['step'] ?? 'done'));
 
         $detail = '';
@@ -1112,6 +1131,8 @@ class UAMS_MRA_Admin
 
         global $wpdb;
 
+        // The view is text.
+        /** @var array{view?: string} $_GET */
         $view = isset($_GET['view']) ? sanitize_key(wp_unslash($_GET['view'])) : UAMS_MRA_List_Table::default_view();
         $where = [
             'orphaned' => 'ref_count = 0 AND is_attached = 0',
@@ -1241,6 +1262,8 @@ class UAMS_MRA_Admin
     {
         $this->flash_notice();
 
+        // The action is text.
+        /** @var array{action?: string} $_GET */
         // Any text other than the action name shows the main screen, as an empty one does, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -1254,7 +1277,11 @@ class UAMS_MRA_Admin
 
         $state = UAMS_MRA_Scanner::get_state();
         $summary = UAMS_MRA_Store::summary();
+        /** @var array<string, int|string> $settings */
         $settings = uams_mra_settings();
+        // A stored number is printed as the same digits, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $setting_text = static fn (string $key): string => (string) $settings[$key];
         $scanned = ! empty($state['finished']);
         $view = UAMS_MRA_List_Table::current_view();
 
@@ -1279,12 +1306,14 @@ class UAMS_MRA_Admin
 						<p class="uams-mra-muted">
 							<?php
                             if ($scanned) {
+                                /** @var int|string $finished */
+                                $finished = $state['finished'];
                                 printf(
                                     /* translators: %s: human readable time difference. */
                                     esc_html__('Last scanned %s ago.', 'uams-mra'),
                                     // human_time_diff() subtracts the value, which converts stored text to a number the same way, so the cast changes nothing.
                                     // @pest-mutate-ignore:RemoveIntegerCast
-                                    esc_html(human_time_diff((int) $state['finished']))
+                                    esc_html(human_time_diff((int) $finished))
                                 );
                             } else {
                                 esc_html_e('No scan has finished yet.', 'uams-mra');
@@ -1446,6 +1475,8 @@ class UAMS_MRA_Admin
 						<input type="hidden" name="tier" value="<?php echo esc_attr(UAMS_MRA_List_Table::current_tier()); ?>" />
 						<input type="hidden" name="disp" value="<?php echo esc_attr(UAMS_MRA_List_Table::current_disposition()); ?>" />
 						<?php
+				        // The search text is text.
+				        /** @var array{s?: string} $_REQUEST */
 				        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				        $search_term = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
 			    ?>
@@ -1506,11 +1537,11 @@ class UAMS_MRA_Admin
 								<fieldset>
 									<label><input type="checkbox" name="include_render" value="1" <?php checked($settings['include_render']); ?> /> <?php esc_html_e('After the database scan, open the published page each unexplained file is attached to and look for the file in what the page actually renders.', 'uams-mra'); ?></label>
 									<p class="description"><?php esc_html_e('This is the only way to see a file a template lists at render time, a shortcode builds, or a theme file hardcodes -- none of which leave anything in the database to find. It only runs for files that finished the scan with no reference and a published parent, so it is usually a handful of pages. A page that cannot be fetched is reported as unchecked, never as unused.', 'uams-mra'); ?></p>
-									<label><?php esc_html_e('Pages per batch', 'uams-mra'); ?> <input type="number" name="batch_render" value="<?php echo esc_attr($settings['batch_render']); ?>" min="1" max="25" class="small-text" /></label>
-									<label><?php esc_html_e('Most pages per scan', 'uams-mra'); ?> <input type="number" name="render_max_pages" value="<?php echo esc_attr($settings['render_max_pages']); ?>" min="1" max="5000" class="small-text" /></label>
-									<br /><label><?php esc_html_e('Offsite files compared or rewritten per batch', 'uams-mra'); ?> <input type="number" name="batch_repoint" value="<?php echo esc_attr($settings['batch_repoint']); ?>" min="1" max="25" class="small-text" /></label>
-									<label><?php esc_html_e('Files downloaded per batch', 'uams-mra'); ?> <input type="number" name="batch_sideload" value="<?php echo esc_attr($settings['batch_sideload']); ?>" min="1" max="10" class="small-text" /></label>
-									<label><?php esc_html_e('Largest file to pull over (MB)', 'uams-mra'); ?> <input type="number" name="sideload_max_mb" value="<?php echo esc_attr($settings['sideload_max_mb']); ?>" min="1" max="2048" class="small-text" /></label>
+									<label><?php esc_html_e('Pages per batch', 'uams-mra'); ?> <input type="number" name="batch_render" value="<?php echo esc_attr($setting_text('batch_render')); ?>" min="1" max="25" class="small-text" /></label>
+									<label><?php esc_html_e('Most pages per scan', 'uams-mra'); ?> <input type="number" name="render_max_pages" value="<?php echo esc_attr($setting_text('render_max_pages')); ?>" min="1" max="5000" class="small-text" /></label>
+									<br /><label><?php esc_html_e('Offsite files compared or rewritten per batch', 'uams-mra'); ?> <input type="number" name="batch_repoint" value="<?php echo esc_attr($setting_text('batch_repoint')); ?>" min="1" max="25" class="small-text" /></label>
+									<label><?php esc_html_e('Files downloaded per batch', 'uams-mra'); ?> <input type="number" name="batch_sideload" value="<?php echo esc_attr($setting_text('batch_sideload')); ?>" min="1" max="10" class="small-text" /></label>
+									<label><?php esc_html_e('Largest file to pull over (MB)', 'uams-mra'); ?> <input type="number" name="sideload_max_mb" value="<?php echo esc_attr($setting_text('sideload_max_mb')); ?>" min="1" max="2048" class="small-text" /></label>
 								</fieldset>
 							</td>
 						</tr>
@@ -1534,17 +1565,17 @@ class UAMS_MRA_Admin
 						<tr>
 							<th scope="row"><label for="extra_paths"><?php esc_html_e('Extra upload paths', 'uams-mra'); ?></label></th>
 							<td>
-								<textarea id="extra_paths" name="extra_paths" rows="3" class="large-text code"><?php echo esc_textarea($settings['extra_paths']); ?></textarea>
+								<textarea id="extra_paths" name="extra_paths" rows="3" class="large-text code"><?php echo esc_textarea($setting_text('extra_paths')); ?></textarea>
 								<p class="description"><?php esc_html_e('One path per line. Add the path a CDN or offload plugin rewrites media to, for example media/library. The default uploads path is always checked.', 'uams-mra'); ?></p>
 							</td>
 						</tr>
 						<tr>
 							<th scope="row"><?php esc_html_e('Batch sizes', 'uams-mra'); ?></th>
 							<td>
-								<label><?php esc_html_e('Posts', 'uams-mra'); ?> <input type="number" name="batch_posts" value="<?php echo esc_attr($settings['batch_posts']); ?>" min="10" max="10000" class="small-text" /></label>
-								<label><?php esc_html_e('Meta rows', 'uams-mra'); ?> <input type="number" name="batch_meta" value="<?php echo esc_attr($settings['batch_meta']); ?>" min="10" max="10000" class="small-text" /></label>
-								<label><?php esc_html_e('Index', 'uams-mra'); ?> <input type="number" name="batch_index" value="<?php echo esc_attr($settings['batch_index']); ?>" min="10" max="10000" class="small-text" /></label>
-								<label><?php esc_html_e('Results', 'uams-mra'); ?> <input type="number" name="batch_finalize" value="<?php echo esc_attr($settings['batch_finalize']); ?>" min="10" max="10000" class="small-text" /></label>
+								<label><?php esc_html_e('Posts', 'uams-mra'); ?> <input type="number" name="batch_posts" value="<?php echo esc_attr($setting_text('batch_posts')); ?>" min="10" max="10000" class="small-text" /></label>
+								<label><?php esc_html_e('Meta rows', 'uams-mra'); ?> <input type="number" name="batch_meta" value="<?php echo esc_attr($setting_text('batch_meta')); ?>" min="10" max="10000" class="small-text" /></label>
+								<label><?php esc_html_e('Index', 'uams-mra'); ?> <input type="number" name="batch_index" value="<?php echo esc_attr($setting_text('batch_index')); ?>" min="10" max="10000" class="small-text" /></label>
+								<label><?php esc_html_e('Results', 'uams-mra'); ?> <input type="number" name="batch_finalize" value="<?php echo esc_attr($setting_text('batch_finalize')); ?>" min="10" max="10000" class="small-text" /></label>
 								<p class="description"><?php esc_html_e('Lower these if the scan times out on shared hosting.', 'uams-mra'); ?></p>
 							</td>
 						</tr>
@@ -1581,6 +1612,8 @@ class UAMS_MRA_Admin
      */
     protected function repoint_payload($job): array
     {
+        // The job stores its counts as these, numbers possibly as text.
+        /** @var array{phase?: string, message?: string, total?: int|string, done?: int|string, applied?: int|string, skipped?: int|string, failed?: int|string} $job */
         $done = ('done' === ($job['phase'] ?? 'done'));
 
         return [
@@ -1704,6 +1737,8 @@ class UAMS_MRA_Admin
             return;
         }
 
+        // The host and the page number are text.
+        /** @var array{host?: string, paged?: string} $_GET */
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- these two read-only view filters change what a screen shows, never stored data, and the screen is behind the capability check above.
         // Text that names no host is cleared by the check below, as an empty one is, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
@@ -1781,10 +1816,15 @@ class UAMS_MRA_Admin
 
 			<p>
 				<?php foreach ($hosts as $row) { ?>
+					<?php
+			        // number_format_i18n() reads the count as a number either way, so the cast changes nothing.
+			        // @pest-mutate-ignore:RemoveIntegerCast
+			        $host_files = (int) $row['files'];
+				    ?>
 					<a class="button<?php echo $host === $row['host'] ? ' button-primary' : ''; ?>"
 						href="<?php echo esc_url(add_query_arg(['page' => self::SLUG_OFFSITE, 'host' => $host === $row['host'] ? false : $row['host']], admin_url('upload.php'))); ?>">
 						<?php echo esc_html($row['host']); ?>
-						<span class="uams-mra-muted">(<?php echo esc_html(number_format_i18n($row['files'])); ?>)</span>
+						<span class="uams-mra-muted">(<?php echo esc_html(number_format_i18n($host_files)); ?>)</span>
 					</a>
 				<?php } ?>
 
@@ -1795,8 +1835,9 @@ class UAMS_MRA_Admin
 			</p>
 
 			<?php
-			$counts = UAMS_MRA_Repoint::counts();
+            $counts = UAMS_MRA_Repoint::counts();
         $applied = UAMS_MRA_Repoint::applied_counts();
+        /** @var array<string, string> $verdicts */
         $verdicts = UAMS_MRA_Repoint::verdicts();
         $planned = array_sum(wp_list_pluck($counts, 'files'));
         // Freshly pulled files are eligible exactly like a byte-identical
@@ -1831,7 +1872,7 @@ class UAMS_MRA_Admin
 					</span>
 				</h2>
 
-				<?php $fatal = UAMS_MRA_Repoint::last_fatal(); ?>
+				<?php /** @var array{message?: string, file?: string, line?: int|string, context?: string} $fatal */ $fatal = UAMS_MRA_Repoint::last_fatal(); ?>
 
 				<?php if (! empty($fatal['message'])) { ?>
 					<div class="notice notice-error inline">
@@ -1841,10 +1882,10 @@ class UAMS_MRA_Admin
 							<?php
                                 // The stored file name is already text, so the cast changes nothing.
                                 // @pest-mutate-ignore:RemoveStringCast
-                                $fatal_file = basename((string) $fatal['file']);
+                                $fatal_file = basename((string) ($fatal['file'] ?? ''));
 				    // The stored line is joined into text, so the cast changes nothing.
 				    // @pest-mutate-ignore:RemoveIntegerCast
-				    $fatal_line = (int) $fatal['line'];
+				    $fatal_line = (int) ($fatal['line'] ?? 0);
 				    echo esc_html($fatal_file.' line '.$fatal_line);
 				    ?>
 							<?php if (! empty($fatal['context'])) { ?>
@@ -2070,7 +2111,7 @@ class UAMS_MRA_Admin
      * and get the label alone rather than a link to nowhere.
      *
      * @param  array  $source  Row from offsite_sources().
-     * @param  array<string, mixed>  $source
+     * @param  array{source_type: string, source_id: numeric-string, source_label: string}  $source
      * @return string HTML.
      */
     protected function offsite_source_line(array $source)
@@ -2122,7 +2163,7 @@ class UAMS_MRA_Admin
      * A cell that starts with = + - @ or a control character is read as a formula,
      * and a post title (which any author sets) ends up in this report.
      *
-     * @param  mixed  $value  Cell text.
+     * @param  string|int|float|null  $value  Cell text.
      */
     protected static function csv_cell($value): string
     {
@@ -2166,6 +2207,8 @@ class UAMS_MRA_Admin
 
         check_admin_referer('uams_mra_offsite_export');
 
+        // The host is text.
+        /** @var array{host?: string} $_GET */
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
 
         /** @var resource $out */
