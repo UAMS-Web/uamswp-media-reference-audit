@@ -254,11 +254,27 @@ final class RepointJobsTest extends IntegrationTestCase
     }
 
     /**
+     * The stored metadata of an attachment, or the test stops.
+     *
+     * @return array<string, mixed>
+     */
+    private function attachmentMeta(int $id): array
+    {
+        $meta = wp_get_attachment_metadata($id);
+
+        if (! is_array($meta)) {
+            throw new RuntimeException('Attachment '.$id.' has no stored metadata.');
+        }
+
+        return $meta;
+    }
+
+    /**
      * A small JPEG of the given size, as bytes.
      */
     private function jpeg(int $width = 400, int $height = 300): string
     {
-        $image = imagecreatetruecolor($width, $height);
+        $image = imagecreatetruecolor(max(1, $width), max(1, $height));
         ob_start();
         imagejpeg($image);
 
@@ -1165,7 +1181,7 @@ final class RepointJobsTest extends IntegrationTestCase
     public function test_a_group_is_pointed_at_the_attachment_and_a_sized_url_at_its_matching_size(): void
     {
         $id = self::factory()->attachment->create_upload_object($this->writeJpeg('2024/05/grp.jpg', 800, 600));
-        $sizes = wp_get_attachment_metadata($id)['sizes'];
+        $sizes = $this->attachmentMeta($id)['sizes'];
 
         $full = 'https://old.example.edu/u/grp.jpg';
         $thumb = 'https://old.example.edu/u/grp-150x150.jpg';
@@ -1278,8 +1294,8 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('image/jpeg', get_post($attachment)->post_mime_type);
         $this->assertSame('pulled', get_post($attachment)->post_title);
         $this->assertSame(21, (int) get_post($attachment)->post_parent);
-        $this->assertSame(400, wp_get_attachment_metadata($attachment)['width']);
-        $this->assertNotSame([], wp_get_attachment_metadata($attachment)['sizes']);
+        $this->assertSame(400, $this->attachmentMeta($attachment)['width']);
+        $this->assertNotSame([], $this->attachmentMeta($attachment)['sizes']);
         $this->assertFileExists((string) get_attached_file($attachment));
         $this->files[] = (string) get_attached_file($attachment);
     }
@@ -1683,7 +1699,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame(1, $job['applied']);
         $id = (int) $this->stored($this->firstRowId($url))['local_id'];
         $this->files[] = (string) get_attached_file($id);
-        $meta = wp_get_attachment_metadata($id);
+        $meta = $this->attachmentMeta($id);
 
         $this->assertSame(30000, $meta['width']);
         $this->assertSame(20000, $meta['height']);
@@ -1707,7 +1723,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $id = (int) $this->stored($this->firstRowId($url))['local_id'];
         $this->files[] = (string) get_attached_file($id);
 
-        $this->assertArrayHasKey('filesize', wp_get_attachment_metadata($id));
+        $this->assertArrayHasKey('filesize', $this->attachmentMeta($id));
     }
 
     public function test_the_memory_limit_is_raised_before_a_file_is_pulled(): void

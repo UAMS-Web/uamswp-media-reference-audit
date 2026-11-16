@@ -759,7 +759,7 @@ final class ArchiveTest extends IntegrationTestCase
 
     public function test_the_manifest_describes_each_file_for_a_restore(): void
     {
-        $parent = (int) self::factory()->post->create(['post_title' => 'Parent page']);
+        $parent = self::factory()->post->create(['post_title' => 'Parent page']);
         $id = $this->attachment('restore.txt', 'twelve bytes', [
             'post_title' => 'A "quoted", title',
             'post_date' => '2023-02-03 04:05:06',

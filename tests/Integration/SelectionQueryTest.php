@@ -173,7 +173,7 @@ final class SelectionQueryTest extends IntegrationTestCase
     public function test_a_numeric_token_must_be_an_attachment_and_a_url_falls_back_to_its_filename(): void
     {
         $id = $this->attachment('2025/11/hero image.jpg');
-        $post = (int) self::factory()->post->create();
+        $post = self::factory()->post->create();
 
         $out = UAMS_MRA_Selection::resolve_text("{$id}\n{$post}\nhttps://cdn.example.net/media/hero%20image.jpg?v=2");
 

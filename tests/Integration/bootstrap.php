@@ -99,6 +99,7 @@ tests_add_filter('muplugins_loaded', static function (): void {
 
 require $wpPhpunit.'/includes/bootstrap.php';
 
+require_once __DIR__.'/../Support/FixtureFactory.php';
 require_once __DIR__.'/../Support/IntegrationTestCase.php';
 
 // cspell:ignore ABSPATH autoloaded fwrite getenv muplugins preg putenv rtrim

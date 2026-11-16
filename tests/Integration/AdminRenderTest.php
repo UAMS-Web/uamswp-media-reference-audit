@@ -50,6 +50,42 @@ final class AdminRenderTest extends IntegrationTestCase
         $GLOBALS['wp_settings_errors'] = [];
     }
 
+    /**
+     * The groups of a pattern that must match the page, or stop the test naming the pattern.
+     *
+     * @return array<int, string>
+     */
+    private function match(string $pattern, string $subject): array
+    {
+        if (preg_match($pattern, $subject, $matches) !== 1) {
+            throw new RuntimeException('The page did not match '.$pattern);
+        }
+
+        return $matches;
+    }
+
+    /**
+     * The query arguments of a URL, each a plain string or the test stops.
+     *
+     * @return array<string, string>
+     */
+    private function queryOf(string $url): array
+    {
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $plain = [];
+
+        foreach ($query as $name => $value) {
+            if (! is_string($value)) {
+                throw new RuntimeException('The query argument '.$name.' is not a plain string.');
+            }
+
+            $plain[(string) $name] = $value;
+        }
+
+        return $plain;
+    }
+
     private function login(string $role): void
     {
         $id = self::factory()->user->create(['role' => $role]);
@@ -108,7 +144,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function attachment(string $title = 'A file'): int
     {
-        return (int) self::factory()->attachment->create(['post_title' => $title, 'post_mime_type' => 'application/pdf']);
+        return self::factory()->attachment->create(['post_title' => $title, 'post_mime_type' => 'application/pdf']);
     }
 
     /**
@@ -185,7 +221,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function tableRows(string $html): array
     {
-        preg_match('/<tbody>(.*?)<\/tbody>/s', $html, $body);
+        $body = $this->match('/<tbody>(.*?)<\/tbody>/s', $html);
         preg_match_all('/<tr>(.*?)<\/tr>/s', $body[1] ?? '', $rows);
 
         return array_map(function (string $row): array {
@@ -302,7 +338,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $data = $script->extra['data'];
         $this->assertStringContainsString('var UAMSMRA = ', $data);
-        $json = json_decode(substr($data, strpos($data, '{'), strrpos($data, '}') - strpos($data, '{') + 1), true);
+        $json = json_decode($this->match('/\{.*\}/s', $data)[0], true);
 
         $this->assertSame(admin_url('admin-ajax.php'), $json['ajaxUrl']);
         $this->assertSame(1, wp_verify_nonce($json['nonce'], 'uams_mra_scan'));
@@ -633,14 +669,14 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertStringContainsString('<input type="hidden" name="page" value="'.UAMS_MRA_Admin::SLUG.'" />', $html);
         $this->assertStringContainsString('<input type="hidden" name="view" value="all" />', $html);
 
-        preg_match('/<select name="tier".*?<\/select>/s', $html, $tier);
+        $tier = $this->match('/<select name="tier".*?<\/select>/s', $html);
         preg_match_all('/<option value="([^"]*)"\s*(selected=\'selected\')?[^>]*>/', $tier[0], $tierOptions, PREG_SET_ORDER);
         $this->assertSame(
             [['', false], ['verify', false], ['ask', false], ['clear', true]],
             array_map(static fn (array $o): array => [$o[1], isset($o[2])], $tierOptions)
         );
 
-        preg_match('/<select name="disp".*?<\/select>/s', $html, $disp);
+        $disp = $this->match('/<select name="disp".*?<\/select>/s', $html);
         preg_match_all('/<option value="([^"]*)"\s*(selected=\'selected\')?[^>]*>\s*(.*?)\s*<\/option>/s', $disp[0], $dispOptions, PREG_SET_ORDER);
         $this->assertSame(
             [['', false, 'Any decision'], ['none', false, 'Undecided (2)'], ['keep', true, 'Keep (1)'], ['ask', false, 'Ask (0)'], ['delete', false, 'Delete (0)']],
@@ -718,10 +754,10 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $html = $this->main();
 
-        preg_match('/<a class="button" href="([^"]*uams_mra_export[^"]*)">\s*Download this list as CSV/', $html, $m);
+        $m = $this->match('/<a class="button" href="([^"]*uams_mra_export[^"]*)">\s*Download this list as CSV/', $html);
 
         $url = html_entity_decode($m[1]);
-        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $query = $this->queryOf($url);
 
         $this->assertStringStartsWith(admin_url('admin-post.php'), $url);
         $this->assertSame('uams_mra_export', $query['action']);
@@ -765,7 +801,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->library();
         $this->get(['view' => 'all']);
 
-        preg_match('/<form method="post" class="uams-mra-select-card">(.*?)<\/form>/s', $this->main(), $m);
+        $m = $this->match('/<form method="post" class="uams-mra-select-card">(.*?)<\/form>/s', $this->main());
 
         $this->assertStringContainsString('All 3 files currently filtered, not just the ones on this page.', $this->text($m[1]));
     }
@@ -803,7 +839,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $html = $this->main();
 
         foreach (['include_numeric_meta' => false, 'include_revisions' => false, 'include_termmeta' => true, 'include_usermeta' => false, 'include_comments' => true, 'include_render' => false, 'include_offsite' => false] as $name => $checked) {
-            preg_match('/<input type="checkbox" name="'.$name.'" value="1"([^>]*)\/>/', $html, $m);
+            $m = $this->match('/<input type="checkbox" name="'.$name.'" value="1"([^>]*)\/>/', $html);
             $this->assertSame($checked, str_contains($m[1], "checked='checked'"), $name);
         }
 
@@ -985,7 +1021,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
         foreach ([1, 3] as $index => $part) {
             $url = html_entity_decode($m[$index][1]);
-            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $query = $this->queryOf($url);
 
             $this->assertStringStartsWith(admin_url('admin-post.php'), $url);
             $this->assertSame('uams_mra_archive_download', $query['action']);
@@ -1191,10 +1227,10 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->seedOffsite(['url' => 'https://a b.example.edu/one.pdf', 'host' => 'a b.example.edu']);
         $this->get(['host' => 'a b.example.edu']);
 
-        preg_match('/<a class="button" style="float:right"\s+href="([^"]*)">\s*Export CSV/', $this->offsite(), $m);
+        $m = $this->match('/<a class="button" style="float:right"\s+href="([^"]*)">\s*Export CSV/', $this->offsite());
 
         $url = html_entity_decode($m[1]);
-        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $query = $this->queryOf($url);
 
         $this->assertStringStartsWith(admin_url('admin-post.php'), $url);
         $this->assertSame('uams_mra_offsite_export', $query['action']);
@@ -1214,8 +1250,8 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertCount(2, $this->tableRows($html));
         $this->assertStringNotContainsString('button-primary', $html);
 
-        preg_match('/<a class="button" style="float:right"\s+href="([^"]*)">/', $html, $m);
-        parse_str((string) parse_url(html_entity_decode($m[1]), PHP_URL_QUERY), $query);
+        $m = $this->match('/<a class="button" style="float:right"\s+href="([^"]*)">/', $html);
+        $query = $this->queryOf(html_entity_decode($m[1]));
         $this->assertSame('', $query['host'] ?? '');
     }
 
@@ -1416,7 +1452,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertMatchesRegularExpression('/id="uams-mra-repoint-plan">Compare again<\/button>/', $html);
         $this->assertStringNotContainsString('Compare with this library', $html);
 
-        preg_match('/<table class="widefat striped uams-mra-verdicts">(.*?)<\/table>/s', $html, $table);
+        $table = $this->match('/<table class="widefat striped uams-mra-verdicts">(.*?)<\/table>/s', $html);
         preg_match_all('/<tr>(.*?)<\/tr>/s', $table[1], $rows);
 
         $verdicts = \UAMS_MRA_Repoint::verdicts();
@@ -1658,6 +1694,11 @@ final class AdminRenderTest extends IntegrationTestCase
     private function csv(string $bytes): array
     {
         $stream = fopen('php://memory', 'w+');
+
+        if ($stream === false) {
+            throw new RuntimeException('An in-memory stream could not be opened.');
+        }
+
         fwrite($stream, $bytes);
         rewind($stream);
 
@@ -1748,7 +1789,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     public function test_the_results_export_writes_one_row_per_file_with_every_column(): void
     {
-        $parent = (int) self::factory()->post->create(['post_title' => 'Parent page']);
+        $parent = self::factory()->post->create(['post_title' => 'Parent page']);
         $a = $this->attachment('Attached file');
         $this->seedResult($a, [
             'title' => 'Attached file', 'file' => '2024/05/a.pdf', 'mime' => 'application/pdf', 'post_date' => '2024-05-06 07:08:09', 'bytes' => 2048,
@@ -2016,7 +2057,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->library();
         $this->get(['view' => 'referenced']);
 
-        preg_match('/<form method="post" id="uams-mra-results-form">(.*?)<\/form>/s', $this->main(), $m);
+        $m = $this->match('/<form method="post" id="uams-mra-results-form">(.*?)<\/form>/s', $this->main());
 
         $this->assertStringContainsString('<input type="hidden" name="page" value="uams-media-audit" /><input type="hidden" name="view" value="referenced" />', $m[1]);
     }
@@ -2056,7 +2097,13 @@ final class AdminRenderTest extends IntegrationTestCase
         $batches = array_values(array_filter($primed, static fn (array $ids): bool => count($ids) > 1));
 
         $this->assertCount(1, $batches, 'one batched read for every row, apart from the per-file reads of the triage marks');
-        $this->assertEqualsCanonicalizing([$a, $b, $c], array_map(intval(...), $batches[0]));
+        $read = [];
+
+        foreach ($batches[0] as $id) {
+            $read[] = (int) $id;
+        }
+
+        $this->assertEqualsCanonicalizing([$a, $b, $c], $read);
     }
 
     public function test_the_review_of_an_empty_selection_primes_nothing(): void
@@ -2198,7 +2245,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $this->assertStringNotContainsString('page=uams-media-audit', $this->text($html));
 
-        preg_match('/<form[^>]*class="uams-mra-filters"[^>]*>(.*?)<\/form>/s', $html, $form);
+        $form = $this->match('/<form[^>]*class="uams-mra-filters"[^>]*>(.*?)<\/form>/s', $html);
         $filter = $form[1] ?? $html;
 
         $this->assertStringContainsString('<input type="submit" class="button" value="Filter"  />', $filter);
@@ -2212,7 +2259,7 @@ final class AdminRenderTest extends IntegrationTestCase
     {
         $this->library();
 
-        preg_match('/<form method="post" id="uams-mra-results-form">\s*<input type="hidden" id="_wpnonce" name="_wpnonce" value="(\w+)"/', $this->main(), $m);
+        $m = $this->match('/<form method="post" id="uams-mra-results-form">\s*<input type="hidden" id="_wpnonce" name="_wpnonce" value="(\w+)"/', $this->main());
 
         $this->assertSame(1, wp_verify_nonce($m[1], 'bulk-media_items'));
     }
@@ -2248,7 +2295,7 @@ final class AdminRenderTest extends IntegrationTestCase
             $this->assertStringContainsString('<th scope="col">'.$heading.'</th>', $html, $heading);
         }
 
-        preg_match('/<form method="post" class="uams-mra-discard">\s*<input type="hidden" id="_wpnonce" name="_wpnonce" value="(\w+)"/', $html, $m);
+        $m = $this->match('/<form method="post" class="uams-mra-discard">\s*<input type="hidden" id="_wpnonce" name="_wpnonce" value="(\w+)"/', $html);
 
         $this->assertSame(1, wp_verify_nonce($m[1], 'uams_mra_review'));
     }
