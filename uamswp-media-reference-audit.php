@@ -96,7 +96,7 @@ function uams_mra_default_settings(): array
 /**
  * Read merged settings.
  *
- * @return array<string, mixed>
+ * @return array<string, int|string>
  */
 function uams_mra_settings()
 {
