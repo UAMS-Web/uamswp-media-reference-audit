@@ -255,7 +255,11 @@ final class ArchiveTest extends IntegrationTestCase
 
     public function test_starting_with_nothing_selected_is_refused(): void
     {
-        foreach ([[], [0], ['0', '', 'abc'], [0, null]] as $ids) {
+        // A null entry is passed on purpose, to show it is refused like a 0, though the declared parameter type does not admit one.
+        /** @var list<array<int, mixed>> $selections */
+        $selections = [[], [0], ['0', '', 'abc'], [0, null]];
+
+        foreach ($selections as $ids) {
             $job = UAMS_MRA_Archive::start($ids);
 
             $this->assertInstanceOf(WP_Error::class, $job);
