@@ -25,6 +25,8 @@ defined('ABSPATH') || exit;
 
 /**
  * Plans and applies URL repointing.
+ *
+ * @phpstan-type RepointJob array<string, mixed>
  */
 class UAMS_MRA_Repoint
 {
@@ -75,7 +77,8 @@ class UAMS_MRA_Repoint
      *
      * @param  array|null  $error  What `error_get_last()` returned.
      * @param  string  $context  What was being attempted.
-     * @return array|null Message, file, line, context and time.
+     * @param  array<string, mixed>|null  $error
+     * @return array{message: string, file: string, line: int, context: string, when: int}|null Message, file, line, context and time.
      */
     public static function fatal_record($error, $context): ?array
     {
@@ -96,6 +99,8 @@ class UAMS_MRA_Repoint
 
     /**
      * The last captured fatal, if there is one.
+     *
+     * @return array<string, mixed>
      */
     public static function last_fatal(): array
     {
@@ -132,6 +137,7 @@ class UAMS_MRA_Repoint
      * Verdicts a person can act on, weakest last.
      *
      * @param  bool  $include_resized  Also treat a same-name-different-bytes image as eligible.
+     * @return list<string>
      */
     public static function eligible_verdicts($include_resized = false): array
     {
@@ -144,6 +150,8 @@ class UAMS_MRA_Repoint
 
     /**
      * Every verdict the plan can reach, with what it means.
+     *
+     * @return array<string, mixed>
      */
     public static function verdicts(): array
     {
@@ -167,6 +175,8 @@ class UAMS_MRA_Repoint
      * ------------------------------------------------------------------ */
     /**
      * Current job.
+     *
+     * @return RepointJob
      */
     public static function get_job(): array
     {
@@ -179,8 +189,9 @@ class UAMS_MRA_Repoint
      * Persist the job.
      *
      * @param  array  $job  Job.
+     * @param  RepointJob  $job
      */
-    protected static function put_job(array $job)
+    protected static function put_job(array $job): void
     {
         // Stamped on every batch so a job that stopped being driven can be told
         // apart from one still working.
@@ -217,7 +228,7 @@ class UAMS_MRA_Repoint
     /**
      * Begin the read-only planning pass.
      *
-     * @return array Job.
+     * @return RepointJob Job.
      */
     public static function start_plan(): array
     {
@@ -256,7 +267,7 @@ class UAMS_MRA_Repoint
      * Begin the writing pass.
      *
      * @param  bool  $include_resized  Also repoint the weaker "resized" matches.
-     * @return array Job.
+     * @return RepointJob Job.
      */
     public static function start_apply($include_resized = false): array
     {
@@ -320,7 +331,7 @@ class UAMS_MRA_Repoint
     /**
      * A finished job that did nothing, because the report is out of date.
      *
-     * @return array Job.
+     * @return RepointJob Job.
      */
     protected static function stale_job(): array
     {
@@ -342,7 +353,7 @@ class UAMS_MRA_Repoint
     /**
      * Run one batch.
      *
-     * @return array Job.
+     * @return RepointJob Job.
      */
     public static function step()
     {
@@ -386,7 +397,8 @@ class UAMS_MRA_Repoint
      * Compare a batch of offsite URLs with the local library.
      *
      * @param  array  $job  Job.
-     * @return array
+     * @param  RepointJob  $job
+     * @return RepointJob
      */
     protected static function step_plan($job)
     {
@@ -447,7 +459,7 @@ class UAMS_MRA_Repoint
      *
      * @param  string  $url  Offsite URL.
      * @param  string  $base_norm  Normalized filename.
-     * @return array {verdict, local_id, remote_bytes, local_bytes, target_url}
+     * @return array{verdict: string, local_id: int, remote_bytes: int, local_bytes: int, target_url: string} {verdict, local_id, remote_bytes, local_bytes, target_url}
      */
     protected static function classify($url, $base_norm): array
     {
@@ -553,7 +565,7 @@ class UAMS_MRA_Repoint
      * Width and height a URL asks for, or null when it names the original.
      *
      * @param  string  $url  URL.
-     * @return array|null {width, height}
+     * @return array{int, int}|null {width, height}
      */
     protected static function parse_size($url): ?array
     {
@@ -572,7 +584,7 @@ class UAMS_MRA_Repoint
      * @param  int  $attachment_id  Attachment.
      * @param  int  $width  Width.
      * @param  int  $height  Height.
-     * @return array|null {bytes, url}
+     * @return array{bytes: int, url: string}|null {bytes, url}
      */
     protected static function local_size_file($attachment_id, $width, $height): ?array
     {
@@ -679,7 +691,7 @@ class UAMS_MRA_Repoint
      * library for one image. One original comes over, WordPress regenerates the
      * sizes, and all three URLs are pointed at it.
      *
-     * @return array Job.
+     * @return RepointJob Job.
      */
     public static function start_sideload(): array
     {
@@ -773,7 +785,8 @@ class UAMS_MRA_Repoint
      * Download a batch of originals and record where each URL should now point.
      *
      * @param  array  $job  Job.
-     * @return array
+     * @param  RepointJob  $job
+     * @return RepointJob
      */
     protected static function step_sideload($job)
     {
@@ -1031,6 +1044,7 @@ class UAMS_MRA_Repoint
      * still free.
      *
      * @param  array|false  $dimensions  Result of getimagesize(), or false for a non-image.
+     * @param  array<int|string, mixed>|false  $dimensions
      * @return bool True to resize, false to skip it.
      */
     protected static function can_resize($dimensions): bool
@@ -1094,8 +1108,9 @@ class UAMS_MRA_Repoint
      *
      * @param  array  $hashes  URL hashes.
      * @param  int  $attachment_id  New attachment.
+     * @param  list<string>  $hashes
      */
-    protected static function point_group_at(array $hashes, $attachment_id)
+    protected static function point_group_at(array $hashes, $attachment_id): void
     {
         global $wpdb;
 
@@ -1132,8 +1147,9 @@ class UAMS_MRA_Repoint
      * @param  string  $verdict  Verdict.
      * @param  int  $local  Local attachment ID.
      * @param  string  $target  Replacement URL.
+     * @param  list<string>  $hashes
      */
-    protected static function mark_hashes(array $hashes, $verdict, $local, $target)
+    protected static function mark_hashes(array $hashes, $verdict, $local, $target): void
     {
         global $wpdb;
 
@@ -1172,7 +1188,8 @@ class UAMS_MRA_Repoint
      * Rewrite a batch of stored URLs.
      *
      * @param  array  $job  Job.
-     * @return array
+     * @param  RepointJob  $job
+     * @return RepointJob
      */
     protected static function step_apply($job)
     {
@@ -1237,7 +1254,7 @@ class UAMS_MRA_Repoint
      * alone rather than being written from a stale plan.
      *
      * @param  object  $row  Offsite row.
-     * @return array {status, applied}
+     * @return array{status: string, applied: int} {status, applied}
      */
     protected static function rewrite_row($row): array
     {
@@ -1468,6 +1485,7 @@ class UAMS_MRA_Repoint
      * Table, primary key, and cache group for a meta source type.
      *
      * @param  string  $type  Source type.
+     * @return array{table: string, pk: string, cache: string}|null
      */
     protected static function meta_target($type): ?array
     {
@@ -1653,6 +1671,8 @@ class UAMS_MRA_Repoint
      * @param  string  $subject  Text.
      * @param  array  $search  Needles, in the order they must run.
      * @param  array  $replace  Replacements, same order.
+     * @param  list<string>  $search
+     * @param  list<string>  $replace
      */
     protected static function replace_urls_in_string($subject, array $search, array $replace): string
     {
@@ -1677,6 +1697,8 @@ class UAMS_MRA_Repoint
      * @param  array  $search  Needles.
      * @param  array  $replace  Replacements.
      * @param  int  $depth  Recursion guard.
+     * @param  list<string>  $search
+     * @param  list<string>  $replace
      * @return mixed
      */
     protected static function deep_replace($data, $search, $replace, $depth = 0)
@@ -1717,6 +1739,8 @@ class UAMS_MRA_Repoint
      * ------------------------------------------------------------------ */
     /**
      * Files per verdict, plus how many rows each would rewrite.
+     *
+     * @return array<string, array{files: int, rows: int}>
      */
     public static function counts(): array
     {
@@ -1741,6 +1765,8 @@ class UAMS_MRA_Repoint
 
     /**
      * How many rows have already been rewritten.
+     *
+     * @return array<string, int>
      */
     public static function applied_counts(): array
     {
