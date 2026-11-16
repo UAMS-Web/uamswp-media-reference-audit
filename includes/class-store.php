@@ -550,6 +550,7 @@ class UAMS_MRA_Store
         global $wpdb;
 
         if ($rows === null || $wpdb->last_error !== '') {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- the message is never printed as it stands: the screen and the export each pass it through `esc_html()`.
             throw new UAMS_MRA_Offsite_Read_Exception(sprintf('Could not read %s: %s', $what, $wpdb->last_error !== '' ? $wpdb->last_error : 'the query was empty'));
         }
 
