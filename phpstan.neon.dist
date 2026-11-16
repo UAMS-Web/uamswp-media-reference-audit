@@ -60,6 +60,9 @@ parameters:
     excludePaths:
         analyse:
             - tests/Integration/vendor
+            # Declares stand-ins for WordPress and WP-CLI functions in the global namespace,
+            # which would replace the real stubs for every other file.
+            - tests/Support/load-plugin-with-wp-cli.php
 
     # WP-CLI's classes and functions. includes/class-cli.php registers the
     # `uams-media-audit` command, and php-stubs/wordpress-stubs stops at core,

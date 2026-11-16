@@ -15,8 +15,9 @@
  * Mutants this suite cannot kill are annotated in the plugin file with their reasons:
  * the nine `require_once` paths (PHP resolves a relative path against the including
  * file's directory, so dropping the base constant loads the same file), the
- * deprecated argument of `load_plugin_textdomain()` (ignored when a path is given),
- * and the `WP_CLI` block, which only runs when `WP_CLI` is defined at load (#95).
+ * deprecated argument of `load_plugin_textdomain()` (ignored when a path is given).
+ * The `WP_CLI` block runs only when `WP_CLI` is defined at load, so its tests run the
+ * plugin file in a process of their own (tests/Support/load-plugin-with-wp-cli.php).
  *
  * @see uamswp-media-reference-audit.php
  * @see uninstall.php
@@ -507,6 +508,56 @@ final class PluginFileTest extends IntegrationTestCase
             $this->assertSame(get_current_blog_id(), $blog);
             restore_current_blog();
         }
+    }
+
+    /**
+     * Runs the plugin file with WP_CLI defined, from a directory that holds a decoy `includes/class-cli.php`.
+     *
+     * @return array{commands: list<array{string, string}>, files: list<string>, decoy: string}
+     */
+    private function load_with_wp_cli(): array
+    {
+        $directory = sys_get_temp_dir().'/mra-wp-cli-'.bin2hex(random_bytes(6));
+        mkdir($directory.'/includes', 0777, true);
+        file_put_contents($directory.'/includes/class-cli.php', "<?php\n");
+
+        $process = proc_open(
+            [PHP_BINARY, __DIR__.'/../Support/load-plugin-with-wp-cli.php', dirname(__DIR__, 2).'/uamswp-media-reference-audit.php'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+            $directory
+        );
+        $this->assertIsResource($process);
+
+        $output = (string) stream_get_contents($pipes[1]);
+        $errors = (string) stream_get_contents($pipes[2]);
+        $status = proc_close($process);
+
+        $decoy = (string) realpath($directory.'/includes/class-cli.php');
+        unlink($directory.'/includes/class-cli.php');
+        rmdir($directory.'/includes');
+        rmdir($directory);
+
+        $this->assertSame(0, $status, $errors);
+
+        $result = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+        $result['decoy'] = $decoy;
+
+        return $result;
+    }
+
+    public function test_the_wp_cli_block_registers_the_command_under_its_name_and_class(): void
+    {
+        $this->assertSame([['uams-media-audit', 'UAMS_MRA_CLI']], $this->load_with_wp_cli()['commands']);
+    }
+
+    public function test_the_wp_cli_block_requires_the_command_class_from_the_plugin_directory(): void
+    {
+        $loaded = $this->load_with_wp_cli();
+        $real = (string) realpath(dirname(__DIR__, 2).'/includes/class-cli.php');
+
+        $this->assertContains($real, $loaded['files']);
+        $this->assertNotContains($loaded['decoy'], $loaded['files']);
     }
 }
 
