@@ -511,7 +511,7 @@ class UAMS_MRA_Store
     /**
      * Hosts serving offsite media, most references first.
      *
-     * @return array<int, array<string, mixed>>
+     * @return list<array{host: string, hits: numeric-string, files: numeric-string}>
      *
      * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
@@ -529,7 +529,11 @@ class UAMS_MRA_Store
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-        return self::offsite_rows($rows, 'the offsite hosts');
+        // The queries above select exactly these columns.
+        /** @var list<array{host: string, hits: numeric-string, files: numeric-string}> $checked */
+        $checked = self::offsite_rows($rows, 'the offsite hosts');
+
+        return $checked;
     }
 
     /**
@@ -539,9 +543,9 @@ class UAMS_MRA_Store
      * query text is empty (for example when `prepare()` refuses its arguments). Neither can be told from a table with
      * no rows, so the database error is read as well.
      *
-     * @param  array<int, array<string, mixed>>|null  $rows  What `get_results()` returned.
+     * @param  list<array<string, mixed>>|null  $rows  What `get_results()` returned.
      * @param  string  $what  What was being read, for the message.
-     * @return array<int, array<string, mixed>>
+     * @return list<array<string, mixed>>
      *
      * @throws UAMS_MRA_Offsite_Read_Exception When the read failed.
      */
@@ -563,7 +567,7 @@ class UAMS_MRA_Store
      * @param  string  $host  Limit to one host, or '' for all.
      * @param  int  $limit  Rows.
      * @param  int  $offset  Offset.
-     * @return array<int, array<string, mixed>>
+     * @return list<array{url: string, url_hash: string, host: string, base_norm: string, hits: numeric-string, source_types: string, local_ids: string|null}>
      *
      * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
@@ -601,7 +605,11 @@ class UAMS_MRA_Store
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A);
 
-        return self::offsite_rows($rows, 'the offsite files');
+        // The queries above select exactly these columns.
+        /** @var list<array{url: string, url_hash: string, host: string, base_norm: string, hits: numeric-string, source_types: string, local_ids: string|null}> $checked */
+        $checked = self::offsite_rows($rows, 'the offsite files');
+
+        return $checked;
     }
 
     /**
@@ -632,7 +640,7 @@ class UAMS_MRA_Store
      *
      * @param  string  $url_hash  Hash from offsite_files().
      * @param  int  $limit  Rows.
-     * @return array<int, array<string, mixed>>
+     * @return list<array{source_type: string, source_id: numeric-string, source_label: string}>
      *
      * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
@@ -654,7 +662,11 @@ class UAMS_MRA_Store
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-        return self::offsite_rows($rows, 'where an offsite file is stored');
+        // The queries above select exactly these columns.
+        /** @var list<array{source_type: string, source_id: numeric-string, source_label: string}> $checked */
+        $checked = self::offsite_rows($rows, 'where an offsite file is stored');
+
+        return $checked;
     }
 
     /**
