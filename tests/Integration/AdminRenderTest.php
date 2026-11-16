@@ -1155,6 +1155,59 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertSame('', $this->offsite());
     }
 
+    /**
+     * Make every query holding a fragment fail, as a crashed or missing table would.
+     */
+    private function failReadsContaining(string $fragment): void
+    {
+        global $wpdb;
+
+        $wpdb->suppress_errors(true);
+        add_filter('query', static fn (string $sql): string => str_contains($sql, $fragment) ? 'SELECT * FROM mra_missing_table' : $sql);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function failedOffsiteReads(): array
+    {
+        return [
+            'the hosts' => ['GROUP BY host'],
+            'the files' => ['GROUP BY o.url'],
+            'where a file is stored' => ['source_label FROM'],
+        ];
+    }
+
+    /**
+     * @dataProvider failedOffsiteReads
+     */
+    public function test_a_failed_offsite_read_shows_an_error_and_no_report(string $fragment): void
+    {
+        $this->seedOffsite();
+        $this->failReadsContaining($fragment);
+
+        $html = $this->offsite();
+
+        $this->assertStringContainsString('<h1>Offsite Media</h1>', $html);
+        $this->assertStringContainsString('notice notice-error inline', $html);
+        $this->assertStringContainsString('The offsite media report could not be shown because reading it from the database failed.', $this->tidy($html));
+        $this->assertStringContainsString('<code>Could not read ', $html);
+        $this->assertStringContainsString('mra_missing_table', $html);
+        $this->assertStringNotContainsString('uams-mra-cards', $html);
+        $this->assertStringNotContainsString('Export CSV', $html);
+        $this->assertStringNotContainsString('report.pdf', $html);
+    }
+
+    public function test_an_offsite_report_whose_reads_succeed_shows_no_error(): void
+    {
+        $this->seedOffsite();
+
+        $html = $this->offsite();
+
+        $this->assertStringNotContainsString('notice-error', $html);
+        $this->assertStringContainsString('report.pdf', $html);
+    }
+
     public function test_an_empty_offsite_report_says_to_run_a_scan_and_stops(): void
     {
         $html = $this->offsite();
@@ -1946,6 +1999,38 @@ final class AdminRenderTest extends IntegrationTestCase
             ],
             $this->exportOffsite()
         );
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function failedExportReads(): array
+    {
+        return [
+            'the files' => ['GROUP BY o.url', 'Could not read the offsite files'],
+            'where a file is stored' => ['source_label FROM', 'Could not read where an offsite file is stored'],
+        ];
+    }
+
+    /**
+     * @dataProvider failedExportReads
+     */
+    public function test_a_failed_offsite_read_ends_the_export_in_an_error_before_any_header_is_sent(string $fragment, string $message): void
+    {
+        $this->seedOffsite();
+        $log = (string) tempnam(sys_get_temp_dir(), 'mra-headers-');
+        $this->admin = $this->headerSpy($log);
+        $this->failReadsContaining($fragment);
+        $get = ['_wpnonce' => wp_create_nonce('uams_mra_offsite_export')];
+        $this->get($get);
+
+        $refused = $this->refusal(fn () => $this->admin->export_offsite_csv());
+
+        $sent = (string) file_get_contents($log);
+        unlink($log);
+
+        $this->assertStringStartsWith($message, $refused);
+        $this->assertSame('', $sent, 'no download starts when the rows cannot be read');
     }
 
     public function test_the_offsite_export_has_an_empty_local_column_when_nothing_matches(): void

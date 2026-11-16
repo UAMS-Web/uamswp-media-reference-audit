@@ -57,35 +57,23 @@ final class StoreTest extends IntegrationTestCase
     }
 
     /**
-     * The off-site files listed, failing the test where the read returns nothing.
+     * The off-site files listed, returning the rows.
      *
      * @return array<int, array<string, mixed>>
      */
     private static function offsiteFiles(mixed ...$args): array
     {
-        $files = UAMS_MRA_Store::offsite_files(...$args);
-
-        if ($files === null) {
-            self::fail('offsite_files() returned null.');
-        }
-
-        return $files;
+        return UAMS_MRA_Store::offsite_files(...$args);
     }
 
     /**
-     * The places one off-site file is stored in, failing the test where the read returns nothing.
+     * The places one off-site file is stored in, returning the rows.
      *
      * @return array<int, array<string, mixed>>
      */
     private static function offsiteSources(mixed ...$args): array
     {
-        $sources = UAMS_MRA_Store::offsite_sources(...$args);
-
-        if ($sources === null) {
-            self::fail('offsite_sources() returned null.');
-        }
-
-        return $sources;
+        return UAMS_MRA_Store::offsite_sources(...$args);
     }
 
     /**
@@ -874,5 +862,92 @@ final class StoreTest extends IntegrationTestCase
             ['total' => 0, 'total_bytes' => 0, 'unattached' => 0, 'unreferenced' => 0, 'unreferenced_bytes' => 0, 'orphaned' => 0, 'orphaned_bytes' => 0, 'weak_only' => 0],
             UAMS_MRA_Store::summary()
         );
+    }
+
+    /**
+     * Make every query holding a fragment fail, as a crashed or missing table would.
+     */
+    private function failReadsContaining(string $fragment): void
+    {
+        global $wpdb;
+
+        $wpdb->suppress_errors(true);
+        add_filter('query', static fn (string $sql): string => str_contains($sql, $fragment) ? 'SELECT * FROM mra_missing_table' : $sql);
+    }
+
+    public function test_the_offsite_hosts_read_throws_when_the_query_fails(): void
+    {
+        $this->failReadsContaining('GROUP BY host');
+
+        $this->expectException(\UAMS_MRA_Offsite_Read_Exception::class);
+        $this->expectExceptionMessage('Could not read the offsite hosts: ');
+
+        UAMS_MRA_Store::offsite_hosts();
+    }
+
+    public function test_the_offsite_files_read_throws_when_the_query_fails(): void
+    {
+        $this->failReadsContaining('GROUP BY o.url');
+
+        $this->expectException(\UAMS_MRA_Offsite_Read_Exception::class);
+        $this->expectExceptionMessage('Could not read the offsite files: ');
+
+        UAMS_MRA_Store::offsite_files();
+    }
+
+    public function test_the_offsite_sources_read_throws_when_the_query_fails(): void
+    {
+        $this->failReadsContaining('source_label FROM');
+
+        $this->expectException(\UAMS_MRA_Offsite_Read_Exception::class);
+        $this->expectExceptionMessage('Could not read where an offsite file is stored: ');
+
+        UAMS_MRA_Store::offsite_sources(md5('x'));
+    }
+
+    public function test_a_failed_offsite_read_names_the_database_error(): void
+    {
+        $this->failReadsContaining('GROUP BY host');
+
+        try {
+            UAMS_MRA_Store::offsite_hosts();
+            $this->fail('The read should have thrown.');
+        } catch (\UAMS_MRA_Offsite_Read_Exception $uAMSMRAOffsiteReadException) {
+            $this->assertStringContainsString('mra_missing_table', $uAMSMRAOffsiteReadException->getMessage());
+        }
+    }
+
+    public function test_an_offsite_read_the_database_answers_with_no_rows_and_no_error_is_an_empty_list(): void
+    {
+        $this->assertSame([], UAMS_MRA_Store::offsite_hosts());
+    }
+
+    public function test_an_offsite_read_that_returns_null_throws_and_says_the_query_was_empty(): void
+    {
+        global $wpdb;
+
+        $real = $wpdb;
+        $double = $this->getMockBuilder(\wpdb::class)->disableOriginalConstructor()->onlyMethods(['get_results'])->getMock();
+        $double->method('get_results')->willReturn(null);
+        $double->prefix = $real->prefix;
+        $double->base_prefix = $real->base_prefix;
+        $double->last_error = '';
+        $GLOBALS['wpdb'] = $double;
+
+        try {
+            UAMS_MRA_Store::offsite_hosts();
+            $this->fail('The read should have thrown.');
+        } catch (\UAMS_MRA_Offsite_Read_Exception $uAMSMRAOffsiteReadException) {
+            $this->assertSame('Could not read the offsite hosts: the query was empty', $uAMSMRAOffsiteReadException->getMessage());
+        } finally {
+            $GLOBALS['wpdb'] = $real;
+        }
+    }
+
+    public function test_an_offsite_read_that_finds_nothing_returns_an_empty_list_and_does_not_throw(): void
+    {
+        $this->assertSame([], UAMS_MRA_Store::offsite_hosts());
+        $this->assertSame([], UAMS_MRA_Store::offsite_files());
+        $this->assertSame([], UAMS_MRA_Store::offsite_sources(md5('x')));
     }
 }

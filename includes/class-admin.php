@@ -1695,7 +1695,15 @@ class UAMS_MRA_Admin
         }
 
         $summary = UAMS_MRA_Store::offsite_summary();
-        $hosts = UAMS_MRA_Store::offsite_hosts();
+
+        try {
+            $hosts = UAMS_MRA_Store::offsite_hosts();
+        } catch (UAMS_MRA_Offsite_Read_Exception $uAMSMRAOffsiteReadException) {
+            $this->render_offsite_failure($uAMSMRAOffsiteReadException);
+
+            return;
+        }
+
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- these two read-only view filters change what a screen shows, never stored data, and the screen is behind the capability check above.
         // Text that names no host is cleared by the check below, as an empty one is, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
@@ -1710,7 +1718,20 @@ class UAMS_MRA_Admin
         }
 
         $total = UAMS_MRA_Store::offsite_file_count($host);
-        $files = UAMS_MRA_Store::offsite_files($host, $per_page, ($paged - 1) * $per_page);
+
+        // Every read is made before anything is printed, so a failed one leaves the error notice alone on the screen.
+        try {
+            $files = UAMS_MRA_Store::offsite_files($host, $per_page, ($paged - 1) * $per_page);
+            $sources = [];
+            foreach ($files as $file) {
+                $sources[$file['url_hash']] = UAMS_MRA_Store::offsite_sources($file['url_hash'], 6);
+            }
+        } catch (UAMS_MRA_Offsite_Read_Exception $uAMSMRAOffsiteReadException) {
+            $this->render_offsite_failure($uAMSMRAOffsiteReadException);
+
+            return;
+        }
+
         // Paging starts at a count above one, so a lower floor or a float count changes nothing.
         // @pest-mutate-ignore:DecrementInteger,RemoveIntegerCast
         $pages = max(1, (int) ceil($total / $per_page));
@@ -1982,9 +2003,9 @@ class UAMS_MRA_Admin
 						</td>
 						<td>
 							<?php
-				        $sources = UAMS_MRA_Store::offsite_sources($file['url_hash'], 6);
+				        $shown = $sources[$file['url_hash']];
 
-				    foreach ($sources as $index => $source) {
+				    foreach ($shown as $index => $source) {
 				        if ($index) {
 				            echo '<br />';
 				        }
@@ -1993,7 +2014,7 @@ class UAMS_MRA_Admin
 
 				    // Subtracting converts stored text to a number anyway, so the cast changes nothing.
 				    // @pest-mutate-ignore:RemoveIntegerCast
-				    $extra = (int) $file['hits'] - count($sources);
+				    $extra = (int) $file['hits'] - count($shown);
 				    if ($extra > 0) {
 				        echo ' <span class="uams-mra-muted">';
 				        printf(
@@ -2111,7 +2132,31 @@ class UAMS_MRA_Admin
     }
 
     /**
+     * Show that the offsite media could not be read, in place of the report.
+     *
+     * @param  UAMS_MRA_Offsite_Read_Exception  $failure  The failed read.
+     */
+    private function render_offsite_failure(UAMS_MRA_Offsite_Read_Exception $failure): void
+    {
+        ?>
+		<div class="wrap uams-mra">
+			<h1><?php esc_html_e('Offsite Media', 'uams-mra'); ?></h1>
+
+			<div class="notice notice-error inline">
+				<p>
+					<?php esc_html_e('The offsite media report could not be shown because reading it from the database failed. Run the media scan again, or ask whoever maintains the site to check the database.', 'uams-mra'); ?>
+				</p>
+				<p><code><?php echo esc_html($failure->getMessage()); ?></code></p>
+			</div>
+		</div>
+		<?php
+    }
+
+    /**
      * Stream the offsite report as CSV.
+     *
+     * The rows are read into a temporary stream first, so a read that fails ends in an error page rather than in a
+     * download that stops part-way and looks complete.
      */
     public function export_offsite_csv(): void
     {
@@ -2123,10 +2168,8 @@ class UAMS_MRA_Admin
 
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
 
-        $this->send_csv_headers(self::csv_filename('offsite-', ''));
-
         /** @var resource $out */
-        $out = fopen('php://output', 'w');
+        $out = fopen('php://temp', 'w+');
 
         fputcsv(
             $out,
@@ -2138,36 +2181,45 @@ class UAMS_MRA_Admin
 
         $offset = 0;
 
-        do {
-            $files = UAMS_MRA_Store::offsite_files($host, 200, $offset);
+        try {
+            do {
+                $files = UAMS_MRA_Store::offsite_files($host, 200, $offset);
 
-            foreach ($files as $file) {
-                $labels = [];
-                foreach (UAMS_MRA_Store::offsite_sources($file['url_hash'], 50) as $source) {
-                    $labels[] = $source['source_type'].' #'.$source['source_id'].' '.$source['source_label'];
+                foreach ($files as $file) {
+                    $labels = [];
+                    foreach (UAMS_MRA_Store::offsite_sources($file['url_hash'], 50) as $source) {
+                        $labels[] = $source['source_type'].' #'.$source['source_id'].' '.$source['source_label'];
+                    }
+
+                    fputcsv(
+                        $out,
+                        [
+                            self::csv_cell($file['base_norm']),
+                            self::csv_cell($file['url']),
+                            self::csv_cell($file['host']),
+                            $file['hits'],
+                            $file['source_types'],
+                            // fputcsv() writes the stored text as it is, so the cast changes nothing.
+                            // @pest-mutate-ignore:RemoveStringCast
+                            (string) $file['local_ids'],
+                            self::csv_cell(implode(' | ', $labels)),
+                        ],
+                        ',',
+                        '"',
+                        ''
+                    );
                 }
 
-                fputcsv(
-                    $out,
-                    [
-                        self::csv_cell($file['base_norm']),
-                        self::csv_cell($file['url']),
-                        self::csv_cell($file['host']),
-                        $file['hits'],
-                        $file['source_types'],
-                        // fputcsv() writes the stored text as it is, so the cast changes nothing.
-                        // @pest-mutate-ignore:RemoveStringCast
-                        (string) $file['local_ids'],
-                        self::csv_cell(implode(' | ', $labels)),
-                    ],
-                    ',',
-                    '"',
-                    ''
-                );
-            }
+                $offset += 200;
+            } while (count($files) === 200);
+        } catch (UAMS_MRA_Offsite_Read_Exception $uAMSMRAOffsiteReadException) {
+            wp_die(esc_html($uAMSMRAOffsiteReadException->getMessage()), '', ['response' => 500, 'back_link' => true]);
+        }
 
-            $offset += 200;
-        } while (count($files) === 200);
+        $this->send_csv_headers(self::csv_filename('offsite-', ''));
+
+        rewind($out);
+        fpassthru($out);
 
         // PHP closes the stream at exit, so closing it first changes nothing.
         // PHP closes the stream at exit, so no test can see this call go missing.
