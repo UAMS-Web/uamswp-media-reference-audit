@@ -775,7 +775,9 @@ class UAMS_MRA_Repoint
         $parts = explode('/', $url);
         $base = array_pop($parts);
 
-        $base = preg_replace('#-\d{1,5}x\d{1,5}(?:-[a-z]{1,4})?(\.[a-zA-Z0-9]{2,5})$#i', '$1', $base);
+        // preg_replace() returns null only on a regex engine failure, and the next call reads null as the empty string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $base = (string) preg_replace('#-\d{1,5}x\d{1,5}(?:-[a-z]{1,4})?(\.[a-zA-Z0-9]{2,5})$#i', '$1', $base);
         $base = preg_replace('#-scaled(\.[a-zA-Z0-9]{2,5})$#i', '$1', $base);
 
         $parts[] = $base;

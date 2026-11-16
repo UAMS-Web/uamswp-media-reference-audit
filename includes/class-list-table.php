@@ -384,14 +384,16 @@ class UAMS_MRA_List_Table extends WP_List_Table
         $id = (int) $item['attachment_id'];
         $title = $item['title'] !== '' ? $item['title'] : __('(no title)', 'uams-mra');
 
-        $out = '<strong><a href="'.esc_url(get_edit_post_link($id)).'">'.esc_html($title).'</a></strong>';
+        // get_edit_post_link() returns null for an ID it cannot edit, and esc_url() reads null as the empty string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $out = '<strong><a href="'.esc_url((string) get_edit_post_link($id)).'">'.esc_html($title).'</a></strong>';
         $out .= '<div class="uams-mra-file">'.esc_html($item['file']).'</div>';
         $out .= '<div class="uams-mra-meta">ID '.$id.' &middot; '.esc_html($item['mime']).'</div>';
 
-        // Equivalent: esc_url() reads false as the empty string, so the cast changes nothing.
+        // Equivalent: esc_url() reads false and null as the empty string, so the casts change nothing.
         // @pest-mutate-ignore:RemoveStringCast
         $actions = [
-            'edit' => '<a href="'.esc_url(get_edit_post_link($id)).'">'.esc_html__('Edit', 'uams-mra').'</a>',
+            'edit' => '<a href="'.esc_url((string) get_edit_post_link($id)).'">'.esc_html__('Edit', 'uams-mra').'</a>',
             'view' => '<a href="'.esc_url((string) wp_get_attachment_url($id)).'" target="_blank" rel="noopener">'.esc_html__('Open file', 'uams-mra').'</a>',
         ];
 
