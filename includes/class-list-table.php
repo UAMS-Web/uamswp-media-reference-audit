@@ -17,7 +17,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     /**
      * Counts used for the view links.
      *
-     * @var array
+     * @var array<string, int>
      */
     protected $summary = [];
 
@@ -129,6 +129,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * View links.
+     *
+     * @return array<string, string>
      */
     protected function get_views(): array
     {
@@ -172,6 +174,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Columns.
+     *
+     * @return array<string, string>
      */
     public function get_columns(): array
     {
@@ -190,6 +194,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Sortable columns.
+     *
+     * @return array<string, array{string, bool}>
      */
     public function get_sortable_columns(): array
     {
@@ -202,6 +208,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Bulk actions.
+     *
+     * @return array<string, string>
      */
     public function get_bulk_actions(): array
     {
@@ -212,6 +220,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
     /**
      * Load rows.
+     *
+     * @return array{where: string, params: list<string>}
      */
     public static function build_query(): array
     {
@@ -333,6 +343,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Checkbox column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     public function column_cb($item): string
     {
@@ -345,6 +356,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Thumbnail column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      * @return string
      */
     public function column_thumb($item)
@@ -365,6 +377,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * File column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     public function column_title($item): string
     {
@@ -387,6 +400,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Status column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     public function column_status($item): string
     {
@@ -426,6 +440,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * and must never look like the same thing on screen.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     protected function render_badge($item): string
     {
@@ -482,6 +497,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Attached to column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      * @return string
      */
     public function column_attached($item)
@@ -507,6 +523,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * References column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     public function column_refs($item): string
     {
@@ -548,6 +565,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Disk space column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      * @return string
      */
     public function column_bytes($item)
@@ -561,6 +579,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Date column.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      * @return string
      */
     public function column_date($item)
@@ -580,6 +599,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Decision column: the tier the scan derived, and the mark a person set.
      *
      * @param  array  $item  Row.
+     * @param  array<string, mixed>  $item
      */
     public function column_triage($item): string
     {

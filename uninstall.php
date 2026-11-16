@@ -31,6 +31,9 @@ $uams_mra_meta = ['_uams_mra_disposition', '_uams_mra_note'];
  * @param  array  $tables  Table names without the site prefix.
  * @param  array  $options  Option names.
  * @param  array  $meta  Post meta keys.
+ * @param  list<string>  $tables
+ * @param  list<string>  $options
+ * @param  list<string>  $meta
  */
 function uams_mra_uninstall_site(array $tables, array $options, array $meta): void
 {

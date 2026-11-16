@@ -35,7 +35,7 @@ class UAMS_MRA_Selection
     /**
      * Every attachment matching the filter on screen.
      *
-     * @return array Attachment IDs.
+     * @return list<int> Attachment IDs.
      */
     public static function ids_matching_filter(): array
     {
@@ -66,7 +66,7 @@ class UAMS_MRA_Selection
      * silently acting on a shorter list than the person pasted.
      *
      * @param  string  $text  Pasted text.
-     * @return array {ids, unmatched}
+     * @return array{ids: list<int>, unmatched: list<string>} {ids, unmatched}
      */
     public static function resolve_text($text): array
     {
@@ -176,7 +176,8 @@ class UAMS_MRA_Selection
      * Store the working set for this user.
      *
      * @param  array  $ids  Attachment IDs.
-     * @return array The stored IDs.
+     * @param  array<int, mixed>  $ids
+     * @return list<int> The stored IDs.
      */
     public static function store(array $ids): array
     {
@@ -196,7 +197,7 @@ class UAMS_MRA_Selection
     /**
      * Read the working set.
      *
-     * @return array Attachment IDs.
+     * @return array<int, int> Attachment IDs.
      */
     public static function get(): array
     {
@@ -217,7 +218,8 @@ class UAMS_MRA_Selection
      * Results rows for the working set, largest first.
      *
      * @param  array  $ids  Attachment IDs.
-     * @return array Rows.
+     * @param  array<int, int|string>  $ids
+     * @return list<array<string, mixed>> Rows.
      */
     public static function rows(array $ids): array
     {
@@ -246,6 +248,8 @@ class UAMS_MRA_Selection
      * Totals for a set of rows.
      *
      * @param  array  $rows  Results rows.
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{count: int, bytes: int, referenced: int, attached: int, missing: int}
      */
     public static function totals(array $rows): array
     {

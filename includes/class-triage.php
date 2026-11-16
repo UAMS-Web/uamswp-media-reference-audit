@@ -43,6 +43,8 @@ class UAMS_MRA_Triage
 
     /**
      * Tiers, most cautious first.
+     *
+     * @return array<string, array{label: string, desc: string}>
      */
     public static function tiers(): array
     {
@@ -64,6 +66,8 @@ class UAMS_MRA_Triage
 
     /**
      * Dispositions a person can set.
+     *
+     * @return array<string, string>
      */
     public static function dispositions(): array
     {
@@ -80,6 +84,8 @@ class UAMS_MRA_Triage
      * Anything listed here lands in the "ask team" tier when it is unattached,
      * because its absence from the database says very little about whether it
      * is still in circulation.
+     *
+     * @return list<string>
      */
     public static function distributable_mimes(): array
     {
@@ -141,6 +147,7 @@ class UAMS_MRA_Triage
      * Tier for one results row.
      *
      * @param  array  $row  Results row.
+     * @param  array<string, mixed>  $row
      */
     public static function tier($row): string
     {
@@ -195,7 +202,7 @@ class UAMS_MRA_Triage
      * Read one file's triage.
      *
      * @param  int  $attachment_id  Attachment ID.
-     * @return array {d, n}
+     * @return array{d: string, n: string} {d, n}
      */
     public static function get($attachment_id): array
     {
@@ -216,7 +223,7 @@ class UAMS_MRA_Triage
      * @param  int  $attachment_id  Attachment ID.
      * @param  string  $disposition  Disposition key, or '' to clear.
      * @param  string  $note  Note text, or '' to clear.
-     * @return array The stored triage.
+     * @return array{d: string, n: string} The stored triage.
      */
     public static function set($attachment_id, $disposition, $note): array
     {
@@ -260,7 +267,7 @@ class UAMS_MRA_Triage
      * has since been deleted or excluded cannot resurface.
      *
      * @param  string  $disposition  Disposition key.
-     * @return array Attachment IDs.
+     * @return list<int> Attachment IDs.
      */
     public static function ids_marked($disposition): array
     {
@@ -298,6 +305,7 @@ class UAMS_MRA_Triage
      * cannot produce.
      *
      * @param  string  $scope  WHERE fragment limiting the count, or '' for everything.
+     * @return array{tier: array<string, int>, disp: array<string, int>, delete_bytes: int, none: int}
      */
     public static function counts($scope = ''): array
     {

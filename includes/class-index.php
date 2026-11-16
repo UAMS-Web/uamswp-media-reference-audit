@@ -18,7 +18,7 @@ class UAMS_MRA_Index
      * are stacked. Backslashes are read as separators on every platform.
      *
      * @param  mixed  $file  Relative or absolute path or URL fragment; any other value is cast to a string.
-     * @return array {path_norm, base_norm}
+     * @return array{string, string} {path_norm, base_norm}
      */
     public static function normalize($file): array
     {
@@ -96,7 +96,7 @@ class UAMS_MRA_Index
      * marks an extra file as referenced, which is safe; under-matching deletes a
      * live one.
      *
-     * @return array Regexes applied to the filename, extension already removed.
+     * @return list<string> Regexes applied to the filename, extension already removed.
      */
     public static function derivative_patterns(): array
     {
@@ -116,7 +116,7 @@ class UAMS_MRA_Index
      *
      * @param  int  $after  Last attachment ID processed.
      * @param  int  $limit  Batch size.
-     * @return array {count, last_id}
+     * @return array{int, int} {count, last_id}
      */
     public static function build_batch($after, $limit): array
     {
@@ -173,7 +173,8 @@ class UAMS_MRA_Index
      * extra file as referenced is far safer than missing a live one.
      *
      * @param  array  $candidates  Raw path or URL fragments.
-     * @return array Attachment IDs.
+     * @param  array<int, string>  $candidates
+     * @return list<int> Attachment IDs.
      */
     public static function resolve_paths(array $candidates): array
     {
@@ -196,7 +197,8 @@ class UAMS_MRA_Index
      * *where* a file it recognised was being served from.
      *
      * @param  array  $candidates  Raw path or URL fragments.
-     * @return array base_norm => array of attachment IDs.
+     * @param  array<int, string>  $candidates
+     * @return array<string, list<int>> base_norm => array of attachment IDs.
      */
     public static function resolve_map(array $candidates): array
     {
@@ -238,6 +240,8 @@ class UAMS_MRA_Index
      * Filter a list of integers down to those that are real attachment IDs.
      *
      * @param  array  $ids  Candidate IDs.
+     * @param  array<int, mixed>  $ids
+     * @return list<int>
      */
     public static function filter_attachment_ids(array $ids): array
     {

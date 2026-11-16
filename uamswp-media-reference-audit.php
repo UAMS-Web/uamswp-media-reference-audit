@@ -66,6 +66,8 @@ if (defined('WP_CLI') && WP_CLI) {
 
 /**
  * Default settings.
+ *
+ * @return array<string, int|string>
  */
 function uams_mra_default_settings(): array
 {
@@ -94,7 +96,7 @@ function uams_mra_default_settings(): array
 /**
  * Read merged settings.
  *
- * @return array
+ * @return array<string, mixed>
  */
 function uams_mra_settings()
 {
