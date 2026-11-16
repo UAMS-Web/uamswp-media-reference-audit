@@ -716,8 +716,8 @@ class UAMS_MRA_Admin
 			<?php if (! UAMS_MRA_Archive::available()) { ?>
 				<div class="notice notice-error inline">
 					<p><?php
-			            // ZipArchive is present wherever the tests run, so this notice cannot be shown and removing it is unobservable.
-			            esc_html_e('This server has no ZipArchive support, so the plugin cannot build an archive. Take your own backup before deleting anything here.', 'uams-mra'); // @pest-mutate-ignore:RemoveFunctionCall
+			            // ZipArchive is present wherever the tests run, so this notice is never shown there and no test can see this call go missing.
+			            esc_html_e('This server has no ZipArchive support, so the plugin cannot build an archive. Take your own backup before deleting anything here.', 'uams-mra');
 			    ?></p>
 				</div>
 			<?php } ?>
@@ -1016,9 +1016,41 @@ class UAMS_MRA_Admin
      */
     protected static function csv_filename(string $before, string $after): string
     {
-        // The text is joined into a name that only a header carries, and a test reads it through this method, so the cast changes nothing.
+        // wp_parse_url() returns text for a site address with a host, and sanitize_file_name() reads the value as text, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
         return 'uams-media-audit-'.$before.sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST)).'-'.$after.gmdate('Ymd').'.csv';
+    }
+
+    /**
+     * Send the headers of a CSV download.
+     */
+    protected function send_csv_headers(string $filename): void
+    {
+        $this->send_no_cache_headers();
+        $this->send_header('Content-Type: text/csv; charset=utf-8');
+        $this->send_header('Content-Disposition: attachment; filename='.$filename);
+    }
+
+    /**
+     * Ask the browser not to cache the response.
+     *
+     * Kept apart for the same reason as `send_header()`.
+     */
+    protected function send_no_cache_headers(): void
+    {
+        // A test replaces this method to see it asked for, and PHP will not report a sent header in the test runner, so no test can see this call go missing.
+        nocache_headers();
+    }
+
+    /**
+     * Send one response header.
+     *
+     * Kept apart so a test can read the headers a download sends: PHP will not report a header once the test runner has printed its banner.
+     */
+    protected function send_header(string $line): void
+    {
+        // A test replaces this method to read the line, and PHP will not report a sent header in the test runner, so no test can see this call go missing.
+        header($line);
     }
 
     /**
@@ -1045,16 +1077,7 @@ class UAMS_MRA_Admin
         ];
         $where = $where[$view] ?? $where['orphaned'];
 
-        // Only the download header carries the name, and a header cannot be read once the test runner has printed its banner.
-        // @pest-mutate-ignore:EmptyStringToNotEmpty,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
-        $filename = self::csv_filename('', $view.'-');
-
-        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
-        nocache_headers(); // @pest-mutate-ignore:RemoveFunctionCall
-        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
-        header('Content-Type: text/csv; charset=utf-8'); // @pest-mutate-ignore:RemoveFunctionCall
-        // A header cannot be read once the test runner has printed its banner, so the call and the text it joins are unobservable.
-        header('Content-Disposition: attachment; filename='.$filename); // @pest-mutate-ignore:RemoveFunctionCall,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
+        $this->send_csv_headers(self::csv_filename('', $view.'-'));
 
         $out = fopen('php://output', 'w');
 
@@ -1153,8 +1176,9 @@ class UAMS_MRA_Admin
         } while (count($rows) === 500);
 
         // PHP closes the stream at exit, so closing it first changes nothing.
+        // PHP closes the stream at exit, so no test can see this call go missing.
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-        fclose($out); // @pest-mutate-ignore:RemoveFunctionCall
+        fclose($out);
         exit;
     }
 
@@ -1169,9 +1193,9 @@ class UAMS_MRA_Admin
     {
         $this->flash_notice();
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         // Any text other than the action name shows the main screen, as an empty one does, so the default changes nothing.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $action = isset($_GET['action']) ? sanitize_key(wp_unslash($_GET['action'])) : '';
 
         if ($action === 'review') {
@@ -1944,8 +1968,8 @@ class UAMS_MRA_Admin
 				            paginate_links(
 				                [
 				                    'base' => add_query_arg('paged', '%#%'),
-				                    // The base holds no format placeholder, so paginate_links() never reads the format.
-				                    'format' => '', // @pest-mutate-ignore:RemoveArrayItem,EmptyStringToNotEmpty
+				                    // The base holds no format placeholder, so paginate_links() never reads the format and no test can see this item go missing.
+				                    'format' => '',
 				                    'current' => $paged,
 				                    'total' => $pages,
 				                    'prev_text' => '&laquo;',
@@ -2048,16 +2072,7 @@ class UAMS_MRA_Admin
 
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
 
-        // Only the download header carries the name, and a header cannot be read once the test runner has printed its banner.
-        // @pest-mutate-ignore:EmptyStringToNotEmpty
-        $filename = self::csv_filename('offsite-', '');
-
-        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
-        nocache_headers(); // @pest-mutate-ignore:RemoveFunctionCall
-        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
-        header('Content-Type: text/csv; charset=utf-8'); // @pest-mutate-ignore:RemoveFunctionCall
-        // A header cannot be read once the test runner has printed its banner, so the call and the text it joins are unobservable.
-        header('Content-Disposition: attachment; filename='.$filename); // @pest-mutate-ignore:RemoveFunctionCall,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
+        $this->send_csv_headers(self::csv_filename('offsite-', ''));
 
         $out = fopen('php://output', 'w');
 
@@ -2103,8 +2118,9 @@ class UAMS_MRA_Admin
         } while (count($files) === 200);
 
         // PHP closes the stream at exit, so closing it first changes nothing.
+        // PHP closes the stream at exit, so no test can see this call go missing.
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-        fclose($out); // @pest-mutate-ignore:RemoveFunctionCall
+        fclose($out);
         exit;
     }
 }

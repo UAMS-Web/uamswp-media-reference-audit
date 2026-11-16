@@ -2344,4 +2344,72 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertStringContainsString('<th scope="col">File</th>', $html);
         $this->assertStringContainsString('<th scope="col">Stored in</th>', $html);
     }
+
+    /**
+     * An admin that writes each header it is asked to send to a file, so a forked export can be read back.
+     */
+    private function headerSpy(string $log): UAMS_MRA_Admin
+    {
+        return new class($log) extends UAMS_MRA_Admin
+        {
+            public function __construct(private readonly string $log)
+            {
+                parent::__construct();
+            }
+
+            protected function send_no_cache_headers(): void
+            {
+                file_put_contents($this->log, "nocache\n", FILE_APPEND);
+            }
+
+            protected function send_header(string $line): void
+            {
+                file_put_contents($this->log, $line."\n", FILE_APPEND);
+            }
+        };
+    }
+
+    /**
+     * @return list<string> What the export asked for, in order.
+     */
+    private function sentBy(callable $export): array
+    {
+        $log = (string) tempnam(sys_get_temp_dir(), 'mra-headers-');
+        $this->admin = $this->headerSpy($log);
+        $this->streamed($export);
+
+        $sent = array_values(array_filter(explode("\n", (string) file_get_contents($log))));
+        unlink($log);
+
+        return $sent;
+    }
+
+    public function test_the_results_export_sends_no_cache_headers_then_the_csv_type_and_the_file_name(): void
+    {
+        $get = ['view' => 'all', '_wpnonce' => wp_create_nonce('uams_mra_export')];
+        $this->get($get);
+
+        $this->assertSame(
+            [
+                'nocache',
+                'Content-Type: text/csv; charset=utf-8',
+                'Content-Disposition: attachment; filename=uams-media-audit-'.wp_parse_url(home_url(), PHP_URL_HOST).'-all-'.gmdate('Ymd').'.csv',
+            ],
+            $this->sentBy(fn () => $this->admin->export_csv())
+        );
+    }
+
+    public function test_the_offsite_export_sends_no_cache_headers_then_the_csv_type_and_the_file_name(): void
+    {
+        $this->get(['_wpnonce' => wp_create_nonce('uams_mra_offsite_export')]);
+
+        $this->assertSame(
+            [
+                'nocache',
+                'Content-Type: text/csv; charset=utf-8',
+                'Content-Disposition: attachment; filename=uams-media-audit-offsite-'.wp_parse_url(home_url(), PHP_URL_HOST).'-'.gmdate('Ymd').'.csv',
+            ],
+            $this->sentBy(fn () => $this->admin->export_offsite_csv())
+        );
+    }
 }
