@@ -59,13 +59,6 @@ require_once UAMS_MRA_DIR.'includes/class-admin.php';
 // @pest-mutate-ignore:ConcatRemoveLeft
 require_once UAMS_MRA_DIR.'includes/class-list-table.php';
 
-// Not killable here: this block runs only when WP_CLI is defined at load time, which
-// the Integration bootstrap does not do. The class it loads is pinned by the Unit
-// suite's CliTest; the load and the command registration are tracked in #95.
-// @pest-mutate-ignore:ConcatRemoveLeft
-// @pest-mutate-ignore:ConcatRemoveRight
-// @pest-mutate-ignore:ConcatSwitchSides
-// @pest-mutate-ignore:RemoveMethodCall
 if (defined('WP_CLI') && WP_CLI) {
     require_once UAMS_MRA_DIR.'includes/class-cli.php';
     WP_CLI::add_command('uams-media-audit', 'UAMS_MRA_CLI');
