@@ -569,7 +569,9 @@ class UAMS_MRA_Repoint
      */
     protected static function parse_size($url): ?array
     {
-        $base = basename(wp_parse_url($url, PHP_URL_PATH));
+        // A URL with no path makes wp_parse_url() return null or false, which basename() reads as an empty string, so the cast changes nothing but a deprecation notice.
+        // @pest-mutate-ignore:RemoveStringCast
+        $base = basename((string) wp_parse_url($url, PHP_URL_PATH));
 
         if (preg_match('#-(\d{1,5})x(\d{1,5})(?:-[a-z]{1,4})?\.[a-zA-Z0-9]{2,5}$#i', $base, $m)) {
             return [(int) $m[1], (int) $m[2]];
@@ -1144,7 +1146,7 @@ class UAMS_MRA_Repoint
      * Write a verdict against every row sharing these URL hashes.
      *
      * @param  array  $hashes  URL hashes.
-     * @param  string  $verdict  Verdict.
+     * @param  int|string  $verdict  Verdict, or the code of the error that stopped the file.
      * @param  int  $local  Local attachment ID.
      * @param  string  $target  Replacement URL.
      * @param  list<string>  $hashes
@@ -1253,7 +1255,7 @@ class UAMS_MRA_Repoint
      * longer in it, the content changed after the scan and this row is left
      * alone rather than being written from a stale plan.
      *
-     * @param  object  $row  Offsite row.
+     * @param  object{url: string, target_url: string, source_type: string, source_pk: string, source_key: string, source_id: string}  $row  Offsite row.
      * @return array{status: string, applied: int} {status, applied}
      */
     protected static function rewrite_row($row): array
@@ -1323,16 +1325,22 @@ class UAMS_MRA_Repoint
                 ];
             }
 
+            // wp_update_post() expects slashed input and unslashes it, so
+            // unslashed text loses every backslash: the \/ and \" that block
+            // JSON carries would be saved as / and ".
+            // wp_slash() returns the type it is given, and both values are strings here.
+            /** @var string $slashed_content */
+            $slashed_content = wp_slash($content);
+            /** @var string $slashed_excerpt */
+            $slashed_excerpt = wp_slash($excerpt);
+
             // wp_update_post rather than a direct write, so the previous content
             // is kept as a revision and the change can be undone from the editor.
             $updated = wp_update_post(
                 [
                     'ID' => $pk,
-                    // wp_update_post() expects slashed input and unslashes it, so
-                    // unslashed text loses every backslash: the \/ and \" that block
-                    // JSON carries would be saved as / and ".
-                    'post_content' => wp_slash($content),
-                    'post_excerpt' => wp_slash($excerpt),
+                    'post_content' => $slashed_content,
+                    'post_excerpt' => $slashed_excerpt,
                 ],
                 true
             );
@@ -1558,7 +1566,7 @@ class UAMS_MRA_Repoint
      *
      * @param  string  $from  URL to replace.
      * @param  string  $to  Replacement.
-     * @return array{array<int, string>, array<int, string>} Needles and replacements, in the order they must run.
+     * @return array{list<string>, list<string>} Needles and replacements, in the order they must run.
      */
     protected static function variants(string $from, string $to): array
     {

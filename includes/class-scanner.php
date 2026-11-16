@@ -1549,7 +1549,7 @@ class UAMS_MRA_Scanner
     /**
      * Meta keys that describe the attachment itself and must never count as a reference.
      *
-     * @return list<string>
+     * @return array<string, int> Each skipped key mapped to its position, for `isset()` lookups.
      */
     protected static function skipped_meta_keys(): array
     {
@@ -1638,9 +1638,12 @@ class UAMS_MRA_Scanner
         $prefixes = [$base];
 
         $settings = uams_mra_settings();
+        // preg_split() returns false only on a regex error, which this fixed pattern cannot raise.
+        /** @var list<string> $extras */
         // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
-        foreach (preg_split('#[\r\n]+#', (string) $settings['extra_paths']) as $extra) {
+        $extras = preg_split('#[\r\n]+#', (string) $settings['extra_paths']);
+        foreach ($extras as $extra) {
             $extra = trim(trim($extra), '/');
             // array_filter() below drops an empty prefix whether or not this test does.
             // @pest-mutate-ignore:EmptyStringToNotEmpty
@@ -1741,9 +1744,11 @@ class UAMS_MRA_Scanner
         // Shortcode ID lists: [gallery ids="1,2,3"].
         if (preg_match_all('#\bids\s*=\s*["\']([\d,\s]+)["\']#i', $content, $m)) {
             foreach ($m[1] as $list) {
+                /** @var list<string> $parts */
                 // A blank entry becomes 0, which array_filter() removes at the end.
                 // @pest-mutate-ignore:UnwrapTrim
-                $ids = array_merge($ids, preg_split('#[\s,]+#', trim($list)));
+                $parts = preg_split('#[\s,]+#', trim($list));
+                $ids = array_merge($ids, $parts);
             }
         }
 
@@ -1756,9 +1761,11 @@ class UAMS_MRA_Scanner
 
                 if (preg_match_all('#"ids"\s*:\s*\[([\d,\s]*)\]#', $block, $bm)) {
                     foreach ($bm[1] as $list) {
+                        /** @var list<string> $parts */
                         // A blank entry becomes 0, which array_filter() removes at the end.
                         // @pest-mutate-ignore:UnwrapTrim
-                        $ids = array_merge($ids, preg_split('#[\s,]+#', trim($list)));
+                        $parts = preg_split('#[\s,]+#', trim($list));
+                        $ids = array_merge($ids, $parts);
                     }
                 }
             }
@@ -1808,7 +1815,9 @@ class UAMS_MRA_Scanner
 
             if (preg_match_all('#"ids"\s*:\s*\[([\d,\s]*)\]#', $value, $m)) {
                 foreach ($m[1] as $list) {
-                    $json_ids = array_merge($json_ids, preg_split('#[\s,]+#', trim($list)));
+                    /** @var list<string> $parts */
+                    $parts = preg_split('#[\s,]+#', trim($list));
+                    $json_ids = array_merge($json_ids, $parts);
                 }
             }
         }
@@ -1835,7 +1844,9 @@ class UAMS_MRA_Scanner
         if (ctype_digit($trimmed) && strlen($trimmed) < 12) {
             $candidates[] = (int) $trimmed;
         } elseif (preg_match('#^[\d,\s]+$#', $trimmed) && strlen($trimmed) < 500) {
-            $candidates = array_merge($candidates, preg_split('#[\s,]+#', $trimmed));
+            /** @var list<string> $parts */
+            $parts = preg_split('#[\s,]+#', $trimmed);
+            $candidates = array_merge($candidates, $parts);
         } elseif (is_serialized($trimmed)) {
             $data = @unserialize($trimmed); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
             if (is_array($data)) {
