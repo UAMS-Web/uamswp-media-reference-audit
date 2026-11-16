@@ -463,6 +463,7 @@ class UAMS_MRA_Archive
         }
 
         $rows = [];
+        /** @var list<string> $lines */
         $lines = preg_split('#\r\n|\n#', trim($csv));
 
         // `preg_split()` fails only on a broken pattern, so the array cast changes nothing.
@@ -489,6 +490,7 @@ class UAMS_MRA_Archive
      */
     protected static function write_manifest($zip, array $rows): void
     {
+        /** @var resource $out */
         $out = fopen('php://temp', 'r+'); // phpcs:ignore WordPress.WP.AlternativeFunctions
 
         $header = ['attachment_id', 'path_in_zip', 'bytes', 'title', 'mime', 'uploaded', 'parent_id', 'alt_text', 'decision', 'note'];
@@ -561,6 +563,7 @@ class UAMS_MRA_Archive
             return;
         }
 
+        /** @var list<string> $items */
         $items = glob($dir.'/*');
 
         foreach ((array) $items as $item) {
@@ -589,9 +592,12 @@ class UAMS_MRA_Archive
             return;
         }
 
+        /** @var list<string> $dirs */
+        $dirs = glob($base.'/*', GLOB_ONLYDIR);
+
         // `glob()` returns false only on an error, which the loop reads as no folders either way.
         // @pest-mutate-ignore:RemoveArrayCast
-        foreach ((array) glob($base.'/*', GLOB_ONLYDIR) as $dir) {
+        foreach ((array) $dirs as $dir) {
             self::rmdir($dir);
         }
     }
@@ -613,7 +619,10 @@ class UAMS_MRA_Archive
 
         $cutoff = time() - self::TTL;
 
-        foreach ((array) glob($base.'/*', GLOB_ONLYDIR) as $dir) {
+        /** @var list<string> $dirs */
+        $dirs = glob($base.'/*', GLOB_ONLYDIR);
+
+        foreach ((array) $dirs as $dir) {
             if (filemtime($dir) < $cutoff) {
                 self::rmdir($dir);
             }

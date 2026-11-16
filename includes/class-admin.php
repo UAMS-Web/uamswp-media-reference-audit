@@ -538,6 +538,8 @@ class UAMS_MRA_Admin
             $this->send_json_error(['message' => $job->get_error_message()], 400);
         }
 
+        // send_json_error() ends the request, so only a job reaches this line.
+        /** @var array<string, mixed> $job */
         wp_send_json_success($this->archive_payload($job));
     }
 
@@ -558,6 +560,8 @@ class UAMS_MRA_Admin
             $this->send_json_error(['message' => $job->get_error_message()], 400);
         }
 
+        // send_json_error() ends the request, so only a job reaches this line.
+        /** @var array<string, mixed> $job */
         wp_send_json_success($this->archive_payload($job));
     }
 
@@ -698,6 +702,9 @@ class UAMS_MRA_Admin
 				<?php
                 return;
 			}
+
+        /** @var string $total_size */
+        $total_size = size_format($totals['bytes'], 1);
         ?>
 
 			<div class="uams-mra-stats">
@@ -707,7 +714,7 @@ class UAMS_MRA_Admin
 				</div>
 				<div class="uams-mra-stat">
 					<span class="uams-mra-stat-label"><?php esc_html_e('Disk space', 'uams-mra'); ?></span>
-					<strong class="uams-mra-stat-value"><?php echo esc_html(size_format($totals['bytes'], 1)); ?></strong>
+					<strong class="uams-mra-stat-value"><?php echo esc_html($total_size); ?></strong>
 				</div>
 				<div class="uams-mra-stat">
 					<span class="uams-mra-stat-label"><?php esc_html_e('Still referenced', 'uams-mra'); ?></span>
@@ -746,11 +753,13 @@ class UAMS_MRA_Admin
 						<h2><?php esc_html_e('Archive', 'uams-mra'); ?></h2>
 						<p class="uams-mra-muted">
 							<?php
-			    printf(
-			        /* translators: %s: size of one part. */
-			        esc_html__('Original files plus a manifest listing every ID, title, and note. Split into parts of about %s so a failed download costs one part, not the whole set. Generated image sizes are left out; WordPress rebuilds those.', 'uams-mra'),
-			        esc_html(size_format(UAMS_MRA_Archive::part_max_bytes()))
-			    );
+			    /** @var string $part_size */
+			    $part_size = size_format(UAMS_MRA_Archive::part_max_bytes());
+        printf(
+            /* translators: %s: size of one part. */
+            esc_html__('Original files plus a manifest listing every ID, title, and note. Split into parts of about %s so a failed download costs one part, not the whole set. Generated image sizes are left out; WordPress rebuilds those.', 'uams-mra'),
+            esc_html($part_size)
+        );
         ?>
 						</p>
 					</div>
@@ -847,6 +856,8 @@ class UAMS_MRA_Admin
             $ref_count = (int) $row['ref_count'];
             $tier = UAMS_MRA_Triage::tier($row);
             $mark = UAMS_MRA_Triage::get($id);
+            /** @var string $bytes_text */
+            $bytes_text = $row['bytes'] ? size_format($row['bytes'], 1) : __('File missing', 'uams-mra');
             ?>
 						<tr>
 							<td>
@@ -875,7 +886,7 @@ class UAMS_MRA_Admin
 									<span class="uams-mra-muted"><?php esc_html_e('None', 'uams-mra'); ?></span>
 								<?php } ?>
 							</td>
-							<td><?php echo esc_html($row['bytes'] ? size_format($row['bytes'], 1) : __('File missing', 'uams-mra')); ?></td>
+							<td><?php echo esc_html($bytes_text); ?></td>
 						</tr>
 					<?php } ?>
 				</tbody>
@@ -969,6 +980,8 @@ class UAMS_MRA_Admin
             $this->send_json_error(['message' => $state->get_error_message()], 409);
         }
 
+        // send_json_error() ends the request, so only a state reaches this line.
+        /** @var array<string, mixed> $state */
         wp_send_json_success($this->progress($state));
     }
 
@@ -1112,6 +1125,7 @@ class UAMS_MRA_Admin
 
         $this->send_csv_headers(self::csv_filename('', $view.'-'));
 
+        /** @var resource $out */
         $out = fopen('php://output', 'w');
 
         fputcsv(
@@ -1163,6 +1177,7 @@ class UAMS_MRA_Admin
                 $mark = UAMS_MRA_Triage::get((int) $row['attachment_id']);
                 // The ID is read as a number wherever it is used, so the cast changes nothing.
                 // @pest-mutate-ignore:RemoveIntegerCast
+                /** @var list<object{source_type: string, source_id: string, source_label: string}> $refs */
                 $refs = UAMS_MRA_Store::get_refs((int) $row['attachment_id'], 10);
                 $labels = [];
                 foreach ($refs as $ref) {
@@ -2110,6 +2125,7 @@ class UAMS_MRA_Admin
 
         $this->send_csv_headers(self::csv_filename('offsite-', ''));
 
+        /** @var resource $out */
         $out = fopen('php://output', 'w');
 
         fputcsv(
