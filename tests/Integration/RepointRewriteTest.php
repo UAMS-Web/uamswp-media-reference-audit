@@ -17,12 +17,28 @@ namespace UamswpMediaReferenceAudit\Tests\Integration;
 use ReflectionMethod;
 use UAMS_MRA_Repoint;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use WP_Error;
+use WP_Post;
 
 final class RepointRewriteTest extends IntegrationTestCase
 {
     private const OLD_URL = 'https://old.example.edu/sites/x/wp-content/uploads/2020/01/report.pdf';
 
     private const NEW_URL = 'https://new.example.edu/wp-content/uploads/2024/05/report.pdf';
+
+    /**
+     * The ID a factory made, failing the test where WordPress returned an error instead.
+     *
+     * @param  int|WP_Error  $created  What a factory's `create()` returns.
+     */
+    private static function created($created): int
+    {
+        if (is_wp_error($created)) {
+            self::fail($created->get_error_message());
+        }
+
+        return $created;
+    }
 
     /**
      * Sign in a user who holds unfiltered_html: an administrator, or a super administrator on multisite.
@@ -34,7 +50,7 @@ final class RepointRewriteTest extends IntegrationTestCase
     {
         parent::set_up();
 
-        $admin = self::factory()->user->create(['role' => 'administrator']);
+        $admin = self::created(self::factory()->user->create(['role' => 'administrator']));
 
         // On multisite only a super administrator holds unfiltered_html.
         if (is_multisite()) {
@@ -87,7 +103,7 @@ final class RepointRewriteTest extends IntegrationTestCase
         $expected = '<!-- wp:file {"href":"https:\/\/new.example.edu\/wp-content\/uploads\/2024\/05\/report.pdf","title":"A \"quoted\" name"} -->';
 
         // wp_insert_post() unslashes what it is given, so the fixture is slashed on the way in.
-        $post_id = self::factory()->post->create(['post_content' => wp_slash($content)]);
+        $post_id = self::created(self::factory()->post->create(['post_content' => wp_slash($content)]));
 
         // Confirm the starting text is what the test means.
         $this->assertSame($content, get_post($post_id)->post_content);
@@ -102,9 +118,9 @@ final class RepointRewriteTest extends IntegrationTestCase
     {
         $content = 'See <iframe src="'.self::OLD_URL.'"></iframe>';
 
-        $post_id = self::factory()->post->create(['post_content' => $content]);
+        $post_id = self::created(self::factory()->post->create(['post_content' => $content]));
 
-        wp_set_current_user(self::factory()->user->create(['role' => 'author']));
+        wp_set_current_user(self::created(self::factory()->user->create(['role' => 'author'])));
 
         $method = new ReflectionMethod(UAMS_MRA_Repoint::class, 'rewrite_row');
         $result = $method->invoke(null, (object) ['url' => self::OLD_URL, 'target_url' => self::NEW_URL, 'source_key' => '', 'source_type' => 'content', 'source_pk' => $post_id]);
@@ -116,14 +132,16 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_rewritten_post_keeps_the_previous_text_as_a_revision(): void
     {
-        $post_id = self::factory()->post->create(['post_content' => 'See '.self::OLD_URL]);
+        $post_id = self::created(self::factory()->post->create(['post_content' => 'See '.self::OLD_URL]));
 
         // Revisions are only kept when the post type supports them and the post was saved once before.
         wp_update_post(['ID' => $post_id, 'post_content' => 'See '.self::OLD_URL.' now']);
 
         $this->rewrite(['source_type' => 'content', 'source_pk' => $post_id]);
 
-        $texts = array_map(static fn ($revision) => $revision->post_content, wp_get_post_revisions($post_id));
+        /** @var array<int, WP_Post> $revisions */
+        $revisions = wp_get_post_revisions($post_id);
+        $texts = array_map(static fn (WP_Post $revision) => $revision->post_content, $revisions);
 
         $this->assertContains('See '.self::OLD_URL.' now', $texts);
         $this->assertSame('See '.self::NEW_URL.' now', get_post($post_id)->post_content);
@@ -131,7 +149,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_serialized_meta_value_is_rewritten_and_still_unserializes(): void
     {
-        $post_id = self::factory()->post->create();
+        $post_id = self::created(self::factory()->post->create());
         $meta_id = $this->insertRawMeta($post_id, serialize(['url' => self::OLD_URL, 'id' => 7]));
 
         $result = $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $meta_id, 'source_id' => $post_id]);
@@ -142,7 +160,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_serialized_meta_value_that_cannot_be_read_is_left_as_it_was(): void
     {
-        $post_id = self::factory()->post->create();
+        $post_id = self::created(self::factory()->post->create());
         $corrupt = 'a:1:{s:3:"url";s:5:"'.self::OLD_URL.'";}';
         $meta_id = $this->insertRawMeta($post_id, $corrupt);
 
@@ -186,7 +204,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_meta_value_holding_a_class_that_is_not_loaded_is_left_untouched_and_failed(): void
     {
-        $post_id = self::factory()->post->create();
+        $post_id = self::created(self::factory()->post->create());
         $value = 'O:11:"MissingKind":1:{s:3:"url";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";}';
         $meta_id = $this->insertRawMeta($post_id, $value);
 
@@ -198,7 +216,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_meta_value_with_one_url_inside_an_object_and_one_outside_is_not_half_written(): void
     {
-        $post_id = self::factory()->post->create();
+        $post_id = self::created(self::factory()->post->create());
         $inner = 'O:11:"MissingKind":1:{s:3:"url";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";}';
         $value = 'a:2:{s:3:"one";s:'.strlen(self::OLD_URL).':"'.self::OLD_URL.'";s:3:"two";'.$inner.'}';
         $meta_id = $this->insertRawMeta($post_id, $value);
@@ -211,7 +229,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_meta_value_with_no_url_in_it_is_still_skipped(): void
     {
-        $post_id = self::factory()->post->create();
+        $post_id = self::created(self::factory()->post->create());
         $meta_id = $this->insertRawMeta($post_id, serialize(['other' => 'https://elsewhere.example/a.jpg']));
 
         $result = $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $meta_id, 'source_id' => $post_id]);
@@ -221,7 +239,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     public function test_a_revision_is_never_rewritten(): void
     {
-        $post_id = self::factory()->post->create(['post_content' => self::OLD_URL]);
+        $post_id = self::created(self::factory()->post->create(['post_content' => self::OLD_URL]));
 
         $result = $this->rewrite(['source_type' => 'revision', 'source_pk' => $post_id]);
 
