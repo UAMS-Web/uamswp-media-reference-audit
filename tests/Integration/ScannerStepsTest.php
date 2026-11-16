@@ -34,20 +34,6 @@ final class ScannerStepsTest extends IntegrationTestCase
     }
 
     /**
-     * The ID a factory made, failing the test where WordPress returned an error instead.
-     *
-     * @param  int|WP_Error  $created  What a factory's `create()` returns.
-     */
-    private static function created($created): int
-    {
-        if (is_wp_error($created)) {
-            self::fail($created->get_error_message());
-        }
-
-        return $created;
-    }
-
-    /**
      * A scan state at one step, with default settings and any overrides.
      *
      * @param  array<string, mixed>  $settings
@@ -95,7 +81,7 @@ final class ScannerStepsTest extends IntegrationTestCase
             $args['post_title'] = $title;
         }
 
-        $id = self::created(self::factory()->attachment->create($args));
+        $id = self::factory()->attachment->create($args);
 
         update_post_meta($id, '_wp_attached_file', $file);
         UAMS_MRA_Index::build_batch($id - 1, 1);
@@ -367,7 +353,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 0]))['step']);
         $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 1]))['step']);
 
-        $parent = self::created(self::factory()->post->create(['post_status' => 'publish']));
+        $parent = self::factory()->post->create(['post_status' => 'publish']);
         $attachment = $this->attachment('2025/11/a.jpg', $parent);
         $this->putResult($attachment, ['parent_id' => $parent, 'is_attached' => 1]);
 
@@ -394,7 +380,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step'], 'No other site yet.');
 
         $this->setExpectedDeprecated('wpmu_new_blog');
-        $other = self::created(self::factory()->blog->create());
+        $other = self::factory()->blog->create();
         $state = $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]));
 
         $this->same('network', $state['step']);
@@ -448,11 +434,11 @@ final class ScannerStepsTest extends IntegrationTestCase
         $by_path = $this->attachment('2025/11/b.jpg');
         $unused = $this->attachment('2025/11/c.jpg');
 
-        $post = self::created(self::factory()->post->create([
+        $post = self::factory()->post->create([
             'post_title' => 'Alpha',
             'post_status' => 'draft',
             'post_content' => '<img class="wp-image-'.$by_class.'"> <img src="'.$this->url('2025/11/b-300x200.jpg').'">',
-        ]));
+        ]);
         $cursor = $post - 1;
 
         $state = $this->scanStep($this->state('posts', [], ['cursor' => $cursor]));
@@ -478,7 +464,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $attachment = $this->attachment('2025/11/a.jpg');
 
-        $post = self::created(self::factory()->post->create(['post_title' => '', 'post_status' => 'publish', 'post_content' => '', 'post_excerpt' => 'wp-image-'.$attachment]));
+        $post = self::factory()->post->create(['post_title' => '', 'post_status' => 'publish', 'post_content' => '', 'post_excerpt' => 'wp-image-'.$attachment]);
 
         $this->scanStep($this->state('posts', [], ['cursor' => $post - 1]));
 
@@ -488,7 +474,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_posts_step_scans_every_type_but_attachments_and_a_post_is_not_its_own_reference_source(): void
     {
         $attachment = $this->attachment('2025/11/a.jpg');
-        $page = self::created(self::factory()->post->create(['post_type' => 'page', 'post_title' => 'About', 'post_content' => 'wp-image-'.$attachment]));
+        $page = self::factory()->post->create(['post_type' => 'page', 'post_title' => 'About', 'post_content' => 'wp-image-'.$attachment]);
 
         $this->scanStep($this->state('posts', [], ['cursor' => $attachment - 1]));
 
@@ -502,7 +488,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_posts_step_counts_revisions_only_when_asked_and_labels_their_references(): void
     {
         $attachment = $this->attachment('2025/11/a.jpg');
-        $post = self::created(self::factory()->post->create(['post_content' => 'plain']));
+        $post = self::factory()->post->create(['post_content' => 'plain']);
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev', 'post_content' => 'wp-image-'.$attachment]);
 
         $this->scanStep($this->state('posts', ['include_revisions' => 0], ['cursor' => $post - 1]));
@@ -520,7 +506,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_posts_step_records_offsite_urls_for_posts_but_never_for_revisions_or_when_tracking_is_off(): void
     {
-        $post = self::created(self::factory()->post->create(['post_title' => 'Alpha', 'post_content' => 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg']));
+        $post = self::factory()->post->create(['post_title' => 'Alpha', 'post_content' => 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg']);
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev', 'post_content' => 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg']);
 
         $this->scanStep($this->state('posts', ['include_revisions' => 1, 'include_offsite' => 0], ['cursor' => $post - 1]));
@@ -545,8 +531,8 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_posts_step_moves_its_cursor_past_a_post_with_nothing_in_it(): void
     {
         $attachment = $this->attachment('2025/11/a.jpg');
-        $empty = self::created(self::factory()->post->create(['post_content' => '', 'post_excerpt' => '']));
-        $full = self::created(self::factory()->post->create(['post_content' => 'wp-image-'.$attachment]));
+        $empty = self::factory()->post->create(['post_content' => '', 'post_excerpt' => '']);
+        $full = self::factory()->post->create(['post_content' => 'wp-image-'.$attachment]);
 
         $state = $this->scanStep($this->state('posts', [], ['cursor' => $empty - 1, 'processed' => 3]));
 
@@ -572,7 +558,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_posts_step_advances_when_there_is_nothing_after_the_cursor(): void
     {
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
 
         $state = $this->scanStep($this->state('posts', [], ['cursor' => $post + 1000, 'processed' => 4]));
 
@@ -583,9 +569,9 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_posts_step_batches_by_its_setting(): void
     {
-        $a = self::created(self::factory()->post->create());
-        $b = self::created(self::factory()->post->create());
-        $c = self::created(self::factory()->post->create());
+        $a = self::factory()->post->create();
+        $b = self::factory()->post->create();
+        $c = self::factory()->post->create();
 
         $first = $this->scanStep($this->state('posts', ['batch_posts' => 2], ['cursor' => $a - 1]));
 
@@ -608,7 +594,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
-        $post = self::created(self::factory()->post->create(['post_title' => 'Alpha', 'post_status' => 'draft']));
+        $post = self::factory()->post->create(['post_title' => 'Alpha', 'post_status' => 'draft']);
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
 
         add_post_meta($post, 'hero', $this->url('2025/11/a.jpg'));
@@ -630,7 +616,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         global $wpdb;
 
         $attachment = $this->attachment('2025/11/a.jpg');
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
         add_post_meta($post, 'logo', (string) $attachment);
 
@@ -648,7 +634,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         global $wpdb;
 
         $attachment = $this->attachment('2025/11/a.jpg');
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
 
         add_post_meta($post, '_edit_lock', $this->url('2025/11/a.jpg'));
@@ -686,7 +672,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         global $wpdb;
 
         $attachment = $this->attachment('2025/11/a.jpg');
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
         add_metadata('post', $revision, 'hero', $this->url('2025/11/a.jpg'));
@@ -709,7 +695,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         global $wpdb;
 
-        $post = self::created(self::factory()->post->create(['post_title' => 'Alpha']));
+        $post = self::factory()->post->create(['post_title' => 'Alpha']);
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
         $url = 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg';
@@ -739,7 +725,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         global $wpdb;
 
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
         add_post_meta($post, 'a', 'x');
         add_post_meta($post, 'b', 'x');
@@ -898,7 +884,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
-        $term = self::created(self::factory()->term->create());
+        $term = self::factory()->term->create();
         $before = $this->maxId($wpdb->termmeta, 'meta_id');
         add_term_meta($term, 'banner', $this->url('2025/11/a.jpg'));
         add_term_meta($term, 'icon', (string) $by_number);
@@ -920,7 +906,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
-        $user = self::created(self::factory()->user->create());
+        $user = self::factory()->user->create();
         $before = $this->maxId($wpdb->usermeta, 'umeta_id');
         add_user_meta($user, 'avatar_x', (string) $by_number);
         add_user_meta($user, 'banner_x', $this->url('2025/11/a.jpg'));
@@ -940,7 +926,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         global $wpdb;
 
         $attachment = $this->attachment('2025/11/a.jpg');
-        $comment = self::created(self::factory()->comment->create(['comment_post_ID' => self::created(self::factory()->post->create())]));
+        $comment = self::factory()->comment->create(['comment_post_ID' => self::factory()->post->create()]);
         $before = $this->maxId($wpdb->commentmeta, 'meta_id');
         add_comment_meta($comment, 'photo_x', $this->url('2025/11/a.jpg'));
 
@@ -956,7 +942,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         global $wpdb;
 
         $this->attachment('2025/11/a.jpg');
-        $term = self::created(self::factory()->term->create());
+        $term = self::factory()->term->create();
         $before = $this->maxId($wpdb->termmeta, 'meta_id');
         $url = 'https://old.example.edu/x/wp-content/uploads/2020/other-300x200.jpg';
         add_term_meta($term, '_edit_lock', $this->url('2025/11/a.jpg'));
@@ -988,7 +974,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         global $wpdb;
 
-        $term = self::created(self::factory()->term->create());
+        $term = self::factory()->term->create();
         $before = $this->maxId($wpdb->termmeta, 'meta_id');
         add_term_meta($term, 'a_x', 'v');
         add_term_meta($term, 'b_x', 'v');
@@ -1024,9 +1010,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         }
 
         $attachment = $this->attachment('2025/11/a.jpg');
-        $blog = self::created(self::factory()->blog->create());
+        $blog = self::factory()->blog->create();
         switch_to_blog($blog);
-        $post = self::created(self::factory()->post->create(['post_title' => 'Sibling', 'post_status' => 'draft', 'post_content' => 'see wp-content/uploads/2025/11/a-300x200.jpg']));
+        $post = self::factory()->post->create(['post_title' => 'Sibling', 'post_status' => 'draft', 'post_content' => 'see wp-content/uploads/2025/11/a-300x200.jpg']);
         self::factory()->post->create(['post_content' => 'nothing to see']);
         $name = (string) get_bloginfo('name');
         restore_current_blog();
@@ -1056,12 +1042,12 @@ final class ScannerStepsTest extends IntegrationTestCase
             $this->markTestSkipped('Needs a network.');
         }
 
-        $first = self::created(self::factory()->blog->create());
-        $second = self::created(self::factory()->blog->create());
+        $first = self::factory()->blog->create();
+        $second = self::factory()->blog->create();
         switch_to_blog($first);
-        $a = self::created(self::factory()->post->create());
-        $b = self::created(self::factory()->post->create());
-        $c = self::created(self::factory()->post->create());
+        $a = self::factory()->post->create();
+        $b = self::factory()->post->create();
+        $c = self::factory()->post->create();
         restore_current_blog();
 
         $page = $this->scanStep($this->state('network', ['batch_posts' => 2], ['site_queue' => [$first, $second], 'cursor' => $a - 1]));
@@ -1097,8 +1083,8 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_finalize_step_writes_one_result_row_for_each_attachment(): void
     {
-        $live = self::created(self::factory()->post->create(['post_status' => 'publish']));
-        $draft = self::created(self::factory()->post->create(['post_status' => 'draft']));
+        $live = self::factory()->post->create(['post_status' => 'publish']);
+        $draft = self::factory()->post->create(['post_status' => 'draft']);
         $a = $this->attachment('2025/11/a.jpg', $live, 'Alpha');
         $b = $this->attachment('2025/11/b.jpg', $draft);
         $c = $this->attachment('2025/11/c.jpg', 999999);
@@ -1225,7 +1211,7 @@ final class ScannerStepsTest extends IntegrationTestCase
      */
     private function parentWithFiles(int $files, array $post = []): array
     {
-        $parent = self::created(self::factory()->post->create(array_merge(['post_status' => 'publish', 'post_title' => 'Parent'], $post)));
+        $parent = self::factory()->post->create(array_merge(['post_status' => 'publish', 'post_title' => 'Parent'], $post));
         $ids = [];
 
         for ($i = 0; $i < $files; $i++) {
@@ -1881,7 +1867,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->same(7, UAMS_MRA_Scanner::attachment_bytes($id));
 
-        $none = self::created(self::factory()->attachment->create());
+        $none = self::factory()->attachment->create();
         delete_post_meta($none, '_wp_attached_file');
 
         $this->same(0, UAMS_MRA_Scanner::attachment_bytes($none));
@@ -1954,7 +1940,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function smallSite(): array
     {
         $linked = $this->attachment('2025/11/zg-linked.jpg');
-        $parent = self::created(self::factory()->post->create(['post_title' => 'Gallery', 'post_status' => 'publish', 'post_content' => '<img src="'.$this->url('2025/11/zg-linked.jpg').'">']));
+        $parent = self::factory()->post->create(['post_title' => 'Gallery', 'post_status' => 'publish', 'post_content' => '<img src="'.$this->url('2025/11/zg-linked.jpg').'">']);
         $shown = $this->attachment('2025/11/zg-shown.jpg', $parent);
         $unused = $this->attachment('2025/11/zg-unused.jpg');
 
@@ -2027,10 +2013,10 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_posts_step_reads_the_content_before_the_excerpt(): void
     {
-        $post = self::created(self::factory()->post->create([
+        $post = self::factory()->post->create([
             'post_content' => 'https://old.example.edu/wp-content/uploads/2020/01/zh-first.jpg',
             'post_excerpt' => 'https://old.example.edu/wp-content/uploads/2020/01/zh-second.jpg',
-        ]));
+        ]);
 
         $this->scanStep($this->state('posts', [], ['cursor' => $post - 1]));
 
@@ -2040,7 +2026,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_a_skipped_meta_key_does_not_end_the_batch(): void
     {
         $attachment = $this->attachment('2025/11/zi-a.jpg');
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
         add_post_meta($post, '_edit_lock', '1:1');
         add_post_meta($post, 'zi_hero', $this->url('2025/11/zi-a.jpg'));
@@ -2157,7 +2143,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_a_file_with_no_stored_path_counts_no_bytes_even_when_its_metadata_lists_sizes(): void
     {
         $this->putFiles(['zk-size.jpg' => str_repeat('a', 5)]);
-        $id = self::created(self::factory()->attachment->create());
+        $id = self::factory()->attachment->create();
         delete_post_meta($id, '_wp_attached_file');
         wp_update_attachment_metadata($id, ['sizes' => ['thumbnail' => ['file' => 'zk-size.jpg']]]);
 
@@ -2175,7 +2161,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         global $wpdb;
 
-        $blog = self::created(self::factory()->blog->create());
+        $blog = self::factory()->blog->create();
 
         $this->scanStep($this->state('network', [], ['site_queue' => [$blog]]));
 
@@ -2202,7 +2188,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_a_revision_row_and_an_empty_value_do_not_end_the_postmeta_batch(): void
     {
         $attachment = $this->attachment('2025/11/zl-a.jpg');
-        $post = self::created(self::factory()->post->create());
+        $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
         $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
         // add_post_meta() writes a revision's meta to its parent, so the row is inserted directly.
@@ -2224,7 +2210,7 @@ final class ScannerStepsTest extends IntegrationTestCase
             $this->markTestSkipped('Needs a network.');
         }
 
-        $other = self::created(self::factory()->blog->create());
+        $other = self::factory()->blog->create();
         $asked = [];
         add_action('pre_get_sites', static function ($query) use (&$asked): void {
             $asked = $query->query_vars;
