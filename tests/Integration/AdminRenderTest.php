@@ -256,6 +256,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertSame('render_offsite', array_values($offsite)[0]['function'][1]);
     }
 
+    /**
+     * @return array<string, array{string, bool}>
+     */
     public static function screenProvider(): array
     {
         return [
@@ -331,6 +334,10 @@ final class AdminRenderTest extends IntegrationTestCase
      * report_delete
      * ------------------------------------------------------------------ */
 
+    /**
+     * @param  array<string, int>  $result
+     * @return list<array<string, mixed>>
+     */
     private function reported(array $result): array
     {
         $GLOBALS['wp_settings_errors'] = [];
@@ -366,6 +373,9 @@ final class AdminRenderTest extends IntegrationTestCase
         return (string) (new ReflectionMethod(UAMS_MRA_Admin::class, 'csv_cell'))->invoke(null, $value);
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
     public static function formulaProvider(): array
     {
         return [
@@ -386,6 +396,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertSame("'".$value, $this->cell($value));
     }
 
+    /**
+     * @return array<string, array{string|int|null, string}>
+     */
     public static function plainCellProvider(): array
     {
         return [
@@ -414,6 +427,9 @@ final class AdminRenderTest extends IntegrationTestCase
      * offsite_source_line
      * ------------------------------------------------------------------ */
 
+    /**
+     * @param  array<string, mixed>  $source
+     */
     private function sourceLine(array $source): string
     {
         return (string) (new ReflectionMethod($this->admin, 'offsite_source_line'))->invoke($this->admin, $source);
@@ -426,6 +442,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertSame('Widget &amp; &lt;b&gt;x&lt;/b&gt;', $line);
     }
 
+    /**
+     * @return list<array{string}>
+     */
     public static function postTypeProvider(): array
     {
         return [['content'], ['postmeta'], ['revision'], ['revision_meta']];
@@ -1305,6 +1324,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertStringNotContainsString('tablenav', $html);
     }
 
+    /**
+     * @return array<string, array{string, int}>
+     */
     public static function pagedProvider(): array
     {
         return [
@@ -1691,6 +1713,10 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertStringContainsString('The link you followed has expired.', $this->refusal(fn () => $this->admin->export_offsite_csv()));
     }
 
+    /**
+     * @param  array<string, mixed>  $get
+     * @return list<array<int, string|null>>
+     */
     private function exportCsv(array $get): array
     {
         $get['_wpnonce'] = wp_create_nonce('uams_mra_export');
@@ -1699,6 +1725,10 @@ final class AdminRenderTest extends IntegrationTestCase
         return $this->csv($this->streamed(fn () => $this->admin->export_csv()));
     }
 
+    /**
+     * @param  array<string, mixed>  $get
+     * @return list<array<int, string|null>>
+     */
     private function exportOffsite(array $get = []): array
     {
         $get['_wpnonce'] = wp_create_nonce('uams_mra_offsite_export');

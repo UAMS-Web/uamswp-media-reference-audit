@@ -25,12 +25,12 @@ const NEW_URL = 'https://new.example.edu/wp-content/uploads/2024/05/report.pdf';
  * maybe_unserialize() is `@unserialize( trim( $data ) )` when is_serialized() is true,
  * which returns false for a value that does not unserialize (wp-includes/functions.php).
  */
-function wp_like_is_serialized($value): bool
+function wp_like_is_serialized(mixed $value): bool
 {
     return is_string($value) && preg_match('/^(?:N;|[bidsaOCE]:)/', trim($value)) === 1;
 }
 
-function wp_like_maybe_unserialize($value)
+function wp_like_maybe_unserialize(mixed $value): mixed
 {
     if (! wp_like_is_serialized($value)) {
         return $value;
@@ -165,6 +165,7 @@ it('does not mistake a stored false, or an ordinary value, for an unreadable one
  * Run the protected rewrite_row() against a stored row.
  *
  * @param  array<string, mixed>  $row
+ * @return array<string, mixed>
  */
 function rewrite_row(array $row): array
 {
@@ -225,6 +226,10 @@ it('reports a meta value it cannot read as failed and writes nothing', function 
             return $this->value;
         }
 
+        /**
+         * @param  array<string, mixed>  $data
+         * @param  array<string, mixed>  $where
+         */
         public function update(string $table, array $data, array $where): int
         {
             $this->updates++;

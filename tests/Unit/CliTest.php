@@ -104,6 +104,8 @@ function cli_loose(mixed $value): mixed
 
 /**
  * A progress bar that counts its ticks.
+ *
+ * @return object{ticks: int, finished: int}
  */
 function cli_bar(): object
 {
@@ -127,6 +129,8 @@ function cli_bar(): object
 
 /**
  * A $wpdb that records its queries and deletes and answers from a script.
+ *
+ * @return object{queries: list<string>, outputs: list<mixed>, deletes: list<array{string, array<string, int>, array<string>}>}
  */
 function cli_wpdb(mixed $rows = []): object
 {
@@ -316,6 +320,7 @@ describe('list', function (): void {
      *
      * @param  list<array<string, mixed>>|null  $rows
      * @param  array<string, mixed>  $assoc
+     * @return object{queries: list<string>, outputs: list<mixed>, deletes: list<array{string, array<string, int>, array<string>}>}
      */
     $list = static function (?array $rows, array $assoc = []): object {
         $wpdb = cli_wpdb($rows);
@@ -412,7 +417,8 @@ describe('delete', function (): void {
     });
 
     /**
-     * @return array{object, object}
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{object{queries: list<string>, outputs: list<mixed>, deletes: list<array{string, array<string, int>, array<string>}>}, object{ticks: int, finished: int}}
      */
     $setup = static function (array $rows): array {
         $wpdb = cli_wpdb($rows);
