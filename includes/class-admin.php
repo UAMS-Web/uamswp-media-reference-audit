@@ -17,6 +17,11 @@ class UAMS_MRA_Admin
     const SLUG_OFFSITE = 'uams-media-audit-offsite';
 
     /**
+     * Bytes read and sent at a time when an archive part is downloaded.
+     */
+    private const DOWNLOAD_CHUNK_BYTES = MB_IN_BYTES;
+
+    /**
      * Hook everything up.
      */
     public function __construct()
@@ -517,13 +522,13 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_archive', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
         }
 
         $job = UAMS_MRA_Archive::start(UAMS_MRA_Selection::get());
 
         if (is_wp_error($job)) {
-            wp_send_json_error(['message' => $job->get_error_message()], 400);
+            $this->send_json_error(['message' => $job->get_error_message()], 400);
         }
 
         wp_send_json_success($this->archive_payload($job));
@@ -537,13 +542,13 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_archive', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
         }
 
         $job = UAMS_MRA_Archive::step();
 
         if (is_wp_error($job)) {
-            wp_send_json_error(['message' => $job->get_error_message()], 400);
+            $this->send_json_error(['message' => $job->get_error_message()], 400);
         }
 
         wp_send_json_success($this->archive_payload($job));
@@ -619,7 +624,8 @@ class UAMS_MRA_Admin
         // @pest-mutate-ignore:DecrementInteger
         $part = isset($_GET['part']) ? absint(wp_unslash($_GET['part'])) : 0;
 
-        if (! $job || ! $part || empty($job['parts'][$part])) {
+        // A missing job or a part of 0 finds no entry in the list of parts, so this one test refuses all three cases.
+        if (empty($job['parts'][$part])) {
             wp_die(esc_html__('That archive is no longer available. Build it again.', 'uams-mra'));
         }
 
@@ -630,10 +636,10 @@ class UAMS_MRA_Admin
             wp_die(esc_html__('That archive file is missing. Build it again.', 'uams-mra'));
         }
 
-        nocache_headers();
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename='.basename($path));
-        header('Content-Length: '.filesize($path));
+        $this->send_no_cache_headers();
+        $this->send_header('Content-Type: application/zip');
+        $this->send_header('Content-Disposition: attachment; filename='.basename($path));
+        $this->send_header('Content-Length: '.filesize($path));
 
         // Chunked so a large part does not have to fit in memory.
         $handle = fopen($path, 'rb'); // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -641,10 +647,13 @@ class UAMS_MRA_Admin
         if ($handle) {
             while (! feof($handle)) {
                 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.AlternativeFunctions -- the bytes are a zip archive streamed to the browser, which escaping would corrupt.
-                echo fread($handle, 1024 * 1024);
+                echo fread($handle, self::DOWNLOAD_CHUNK_BYTES);
+                // PHP sends the output at exit whether or not it is flushed, so no test can see this call go missing.
                 flush();
             }
-            fclose($handle); // phpcs:ignore WordPress.WP.AlternativeFunctions
+            // PHP closes the file at exit, so no test can see this call go missing.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions
+            fclose($handle);
         }
 
         exit;
@@ -900,7 +909,7 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_triage', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to change this.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to change this.', 'uams-mra')], 403);
         }
 
         // A missing ID and any other ID that is not an attachment get the same refusal, so the default changes nothing.
@@ -909,7 +918,7 @@ class UAMS_MRA_Admin
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
 
         if (! $id || get_post_type($id) !== 'attachment') {
-            wp_send_json_error(['message' => __('That file no longer exists.', 'uams-mra')], 404);
+            $this->send_json_error(['message' => __('That file no longer exists.', 'uams-mra')], 404);
         }
 
         // Any text that is not a disposition is stored as none, exactly like an empty one, so the default changes nothing.
@@ -942,13 +951,13 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_scan', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to run a scan.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to run a scan.', 'uams-mra')], 403);
         }
 
         $state = UAMS_MRA_Scanner::start();
 
         if (is_wp_error($state)) {
-            wp_send_json_error(['message' => $state->get_error_message()], 409);
+            $this->send_json_error(['message' => $state->get_error_message()], 409);
         }
 
         wp_send_json_success($this->progress($state));
@@ -962,7 +971,7 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_scan', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to run a scan.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to run a scan.', 'uams-mra')], 403);
         }
 
         wp_send_json_success($this->progress(UAMS_MRA_Scanner::step()));
@@ -1019,6 +1028,19 @@ class UAMS_MRA_Admin
         // wp_parse_url() returns text for a site address with a host, and sanitize_file_name() reads the value as text, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
         return 'uams-media-audit-'.$before.sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST)).'-'.$after.gmdate('Ymd').'.csv';
+    }
+
+    /**
+     * Answer an AJAX request with an error and stop.
+     *
+     * Kept apart so a test can read the status a handler asked for: WordPress sends the status only while no output has gone out, and the test runner has printed before the first test.
+     *
+     * @param  array<string, mixed>  $data  The error payload.
+     * @param  int  $status  The HTTP status to send.
+     */
+    protected function send_json_error(array $data, int $status): void
+    {
+        wp_send_json_error($data, $status);
     }
 
     /**
@@ -1520,7 +1542,7 @@ class UAMS_MRA_Admin
         check_ajax_referer('uams_mra_repoint', 'nonce');
 
         if (! current_user_can(UAMS_MRA_CAP)) {
-            wp_send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
+            $this->send_json_error(['message' => __('You do not have permission to do this.', 'uams-mra')], 403);
         }
     }
 
@@ -1565,7 +1587,7 @@ class UAMS_MRA_Admin
         try {
             wp_send_json_success($this->repoint_payload($work()));
         } catch (Throwable $throwable) {
-            wp_send_json_error(
+            $this->send_json_error(
                 [
                     'message' => sprintf(
                         /* translators: 1: error message, 2: file, 3: line. */
@@ -1596,11 +1618,11 @@ class UAMS_MRA_Admin
         $resized = ! empty($_POST['resized']); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in repoint_guard().
 
         $this->repoint_respond(
-            static function () use ($resized): array {
+            function () use ($resized): array {
                 // Saving a page as anyone else runs it through the content filters,
                 // which can change what is on it. See UAMS_MRA_Repoint::rewrite_row().
                 if (! current_user_can('unfiltered_html')) {
-                    wp_send_json_error(
+                    $this->send_json_error(
                         ['message' => __('Rewriting pages needs the unfiltered_html capability, because saving a page as anyone else runs it through the content filter and can change what it holds. Ask a user who has it (on multisite, a network administrator).', 'uams-mra')],
                         403
                     );

@@ -41,9 +41,56 @@ final class AdminEnd extends RuntimeException
     }
 }
 
+/**
+ * The admin, noting the HTTP status each error answer asked for.
+ *
+ * WordPress sends a status only while no output has gone out, and the test runner has printed before the first test, so the status never reaches a header or a filter here.
+ */
+final class AdminSpy extends UAMS_MRA_Admin
+{
+    /**
+     * @var list<int>
+     */
+    public array $statuses = [];
+
+    /**
+     * A file that collects the headers a download is asked to send, or null to send none.
+     */
+    public ?string $headerLog = null;
+
+    public function forgetStatuses(): void
+    {
+        $this->statuses = [];
+    }
+
+    protected function send_no_cache_headers(): void
+    {
+        $this->note('nocache');
+    }
+
+    protected function send_header(string $line): void
+    {
+        $this->note($line);
+    }
+
+    private function note(string $line): void
+    {
+        if ($this->headerLog !== null) {
+            file_put_contents($this->headerLog, $line."\n", FILE_APPEND);
+        }
+    }
+
+    protected function send_json_error(array $data, int $status): void
+    {
+        $this->statuses[] = $status;
+
+        parent::send_json_error($data, $status);
+    }
+}
+
 final class AdminRequestsTest extends IntegrationTestCase
 {
-    private UAMS_MRA_Admin $admin;
+    private AdminSpy $admin;
 
     /**
      * Files made on disk by a test, removed again afterwards.
@@ -63,7 +110,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         delete_option(UAMS_MRA_Repoint::FATAL_OPTION);
         $this->wipe_archive();
 
-        $this->admin = new UAMS_MRA_Admin;
+        $this->admin = new AdminSpy;
         $this->login('administrator');
 
         $_GET = [];
@@ -151,17 +198,11 @@ final class AdminRequestsTest extends IntegrationTestCase
         });
         $redirect = [$this, 'endRedirect'];
 
-        $statuses = [];
-        $record = static function ($header, $code) use (&$statuses) {
-            $statuses[] = $code;
-
-            return $header;
-        };
+        $this->admin->forgetStatuses();
 
         add_filter('wp_die_ajax_handler', $die);
         add_filter('wp_die_handler', $die);
         add_filter('wp_redirect', $redirect);
-        add_filter('status_header', $record, 10, 2);
 
         if ($ajax) {
             add_filter('wp_doing_ajax', '__return_true');
@@ -179,11 +220,10 @@ final class AdminRequestsTest extends IntegrationTestCase
             remove_filter('wp_die_ajax_handler', $die);
             remove_filter('wp_die_handler', $die);
             remove_filter('wp_redirect', $redirect);
-            remove_filter('status_header', $record, 10);
             remove_filter('wp_doing_ajax', '__return_true');
         }
 
-        return ['end' => $end, 'out' => $out, 'status' => $statuses === [] ? null : end($statuses)];
+        return ['end' => $end, 'out' => $out, 'status' => $this->admin->statuses[0] ?? null];
     }
 
     /**
@@ -211,7 +251,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertInstanceOf(AdminEnd::class, $result['end'], 'the handler never ended the request');
 
         if ($result['out'] === '') {
-            return ['success' => false, 'data' => ['died' => $result['end']->detail, 'response' => $result['end']->response]];
+            return ['success' => false, 'data' => ['died' => $result['end']->detail, 'response' => $result['end']->response], 'status' => $result['status']];
         }
 
         // A throwable raised by the die stand-in can be caught by the handler's own try block, which answers a second time; the first answer is the one a browser would get.
@@ -219,7 +259,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $json = json_decode((string) $first, true);
         $this->assertIsArray($json, 'the handler answered something that is not JSON: '.$result['out']);
 
-        // The status the handler asked for, which only reaches WordPress' header filter while no output has been sent.
+        // The status of the first answer, which is the one a browser would get.
         $json['status'] = $result['status'];
 
         return $json;
@@ -290,6 +330,37 @@ final class AdminRequestsTest extends IntegrationTestCase
     /* ---------------------------------------------------------------------
      * handle_requests
      * ------------------------------------------------------------------ */
+
+    public static function hookProvider(): array
+    {
+        return [
+            'menu' => ['admin_menu', 'add_menu'],
+            'assets' => ['admin_enqueue_scripts', 'enqueue'],
+            'requests' => ['admin_init', 'handle_requests'],
+            'results export' => ['admin_post_uams_mra_export', 'export_csv'],
+            'offsite export' => ['admin_post_uams_mra_offsite_export', 'export_offsite_csv'],
+            'scan start' => ['wp_ajax_uams_mra_scan_start', 'ajax_start'],
+            'scan step' => ['wp_ajax_uams_mra_scan_step', 'ajax_step'],
+            'triage' => ['wp_ajax_uams_mra_triage', 'ajax_triage'],
+            'archive start' => ['wp_ajax_uams_mra_archive_start', 'ajax_archive_start'],
+            'archive step' => ['wp_ajax_uams_mra_archive_step', 'ajax_archive_step'],
+            'archive download' => ['admin_post_uams_mra_archive_download', 'download_archive'],
+            'repoint plan' => ['wp_ajax_uams_mra_repoint_plan', 'ajax_repoint_plan'],
+            'repoint apply' => ['wp_ajax_uams_mra_repoint_apply', 'ajax_repoint_apply'],
+            'repoint step' => ['wp_ajax_uams_mra_repoint_step', 'ajax_repoint_step'],
+            'repoint sideload' => ['wp_ajax_uams_mra_repoint_sideload', 'ajax_repoint_sideload'],
+        ];
+    }
+
+    /**
+     * @dataProvider hookProvider
+     */
+    public function test_the_constructor_hooks_each_handler_to_its_action(string $hook, string $method): void
+    {
+        $admin = new UAMS_MRA_Admin;
+
+        $this->assertSame(10, has_action($hook, [$admin, $method]));
+    }
 
     public function test_the_screen_url_is_returned_and_never_printed(): void
     {
@@ -1028,6 +1099,7 @@ final class AdminRequestsTest extends IntegrationTestCase
 
             $this->assertFalse($answer['success'], $method);
             $this->assertSame(['message' => $message], $answer['data'], $method);
+            $this->assertSame(403, $answer['status'], $method);
         }
 
         $this->assertNull(UAMS_MRA_Archive::get_job());
@@ -1041,6 +1113,7 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $this->assertFalse($answer['success']);
         $this->assertSame(['message' => 'Nothing is selected, so there is nothing to archive.'], $answer['data']);
+        $this->assertSame(400, $answer['status']);
         $this->assertNull(UAMS_MRA_Archive::get_job());
     }
 
@@ -1087,6 +1160,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertFalse($answer['success']);
         $this->assertIsString($answer['data']['message']);
         $this->assertNotSame('', $answer['data']['message']);
+        $this->assertSame(400, $answer['status']);
     }
 
     public function test_archive_progress_is_a_percentage_of_the_files_handled(): void
@@ -1244,6 +1318,8 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertFileExists($path);
 
         $captured = (string) tempnam(sys_get_temp_dir(), 'mra-download-');
+        $headers = (string) tempnam(sys_get_temp_dir(), 'mra-headers-');
+        $this->admin->headerLog = $headers;
         $_GET = ['part' => '1', '_wpnonce' => wp_create_nonce('uams_mra_archive_download')];
         $_REQUEST = $_GET;
 
@@ -1269,6 +1345,12 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $streamed = (string) file_get_contents($captured);
         unlink($captured);
+
+        $this->assertSame(
+            ['nocache', 'Content-Type: application/zip', 'Content-Disposition: attachment; filename='.basename($path), 'Content-Length: '.filesize($path)],
+            array_values(array_filter(explode("\n", (string) file_get_contents($headers))))
+        );
+        unlink($headers);
 
         $this->assertSame((string) file_get_contents($path), $streamed);
         $this->assertStringStartsWith('PK', $streamed);
@@ -1344,6 +1426,7 @@ final class AdminRequestsTest extends IntegrationTestCase
 
             $this->assertFalse($answer['success']);
             $this->assertSame(['message' => 'That file no longer exists.'], $answer['data']);
+            $this->assertSame(404, $answer['status']);
         }
 
         $this->assertSame('', (string) get_post_meta($post, UAMS_MRA_Triage::META_DISPOSITION, true));
@@ -1424,6 +1507,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $result = $this->request(fn () => $this->admin->ajax_start(), ['nonce' => wp_create_nonce('uams_mra_scan')], [], true);
         $json = json_decode((string) preg_split('/(?<=\})(?=\{"success")/', $result['out'])[0], true);
 
+        $this->assertSame(409, $result['status']);
         $this->assertFalse($json['success']);
         $this->assertSame(['message' => 'A repoint or download is still running on the Offsite Media screen. Let it finish, then scan.'], $json['data']);
         $this->assertFalse(get_option(UAMS_MRA_Scanner::STATE_OPTION));
@@ -1546,6 +1630,7 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $this->assertFalse($answer['success']);
         $this->assertStringStartsWith('Rewriting pages needs the unfiltered_html capability', $answer['data']['message']);
+        $this->assertSame(403, $answer['status']);
         $this->assertFalse(get_option(UAMS_MRA_Repoint::STATE_OPTION));
     }
 
@@ -1569,6 +1654,7 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         $json = json_decode($result['out'], true);
 
+        $this->assertSame(500, $result['status']);
         $this->assertFalse($json['success']);
         $this->assertMatchesRegularExpression('/^Stopped: boom \(AdminRequestsTest\.php line \d+\)$/', $json['data']['message']);
     }
