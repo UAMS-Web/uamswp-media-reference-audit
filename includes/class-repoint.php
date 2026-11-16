@@ -26,7 +26,10 @@ defined('ABSPATH') || exit;
 /**
  * Plans and applies URL repointing.
  *
- * @phpstan-type RepointJob array<string, mixed>
+ * @phpstan-type RepointGroup array{url: string, hashes: list<string>}
+ * @phpstan-type RepointJob array{phase: string, total: int, done: int, applied: int, failed: int, skipped: int, message: string, updated?: int, resized?: int, queue?: list<RepointGroup>}
+ * @phpstan-type RepointApplyJob array{phase: string, total: int, done: int, applied: int, failed: int, skipped: int, message: string, updated?: int, resized: int}
+ * @phpstan-type RepointSideloadJob array{phase: string, total: int, done: int, applied: int, failed: int, skipped: int, message: string, updated?: int, queue: list<RepointGroup>}
  */
 class UAMS_MRA_Repoint
 {
@@ -77,7 +80,7 @@ class UAMS_MRA_Repoint
      *
      * @param  array|null  $error  What `error_get_last()` returned.
      * @param  string  $context  What was being attempted.
-     * @param  array<string, mixed>|null  $error
+     * @param  array{type: int, message: string, file: string, line: int|string}|array{}|null  $error
      * @return array{message: string, file: string, line: int, context: string, when: int}|null Message, file, line, context and time.
      */
     public static function fatal_record($error, $context): ?array
@@ -122,6 +125,7 @@ class UAMS_MRA_Repoint
      */
     public static function next_target(): string
     {
+        /** @var array{phase?: string, queue?: list<array{url?: string}>} $job */
         $job = self::get_job();
 
         if (empty($job['queue'][0]['url'])) {
@@ -130,7 +134,7 @@ class UAMS_MRA_Repoint
             return (string) ($job['phase'] ?? '');
         }
 
-        return $job['phase'].': '.$job['queue'][0]['url'];
+        return ($job['phase'] ?? '').': '.$job['queue'][0]['url'];
     }
 
     /**
@@ -176,7 +180,7 @@ class UAMS_MRA_Repoint
     /**
      * Current job.
      *
-     * @return RepointJob
+     * @return array<string, mixed>
      */
     public static function get_job(): array
     {
@@ -267,14 +271,18 @@ class UAMS_MRA_Repoint
      * Begin the writing pass.
      *
      * @param  bool  $include_resized  Also repoint the weaker "resized" matches.
-     * @return RepointJob Job.
+     * @return RepointApplyJob Job.
      */
     public static function start_apply($include_resized = false): array
     {
         global $wpdb;
 
         if (UAMS_MRA_Store::offsite_needs_rescan()) {
-            return self::stale_job();
+            // A stale job is already done, so no caller reads its `resized` entry.
+            /** @var RepointApplyJob $stale */
+            $stale = self::stale_job();
+
+            return $stale;
         }
 
         $t = UAMS_MRA_Store::offsite_table();
@@ -309,6 +317,7 @@ class UAMS_MRA_Repoint
      */
     public static function is_running(): bool
     {
+        /** @var array{phase?: string, updated?: int|string} $job */
         $job = self::get_job();
 
         if ($job === [] || 'done' === ($job['phase'] ?? 'done')) {
@@ -353,7 +362,7 @@ class UAMS_MRA_Repoint
     /**
      * Run one batch.
      *
-     * @return RepointJob Job.
+     * @return array<string, mixed> Job.
      */
     public static function step()
     {
@@ -363,6 +372,8 @@ class UAMS_MRA_Repoint
             return $job;
         }
 
+        // A stored job that is not empty and not done is a job.
+        /** @var RepointJob $job */
         if ($job['phase'] === 'plan') {
             $job = self::step_plan($job);
         } elseif ($job['phase'] === 'sideload') {
@@ -693,14 +704,18 @@ class UAMS_MRA_Repoint
      * library for one image. One original comes over, WordPress regenerates the
      * sizes, and all three URLs are pointed at it.
      *
-     * @return RepointJob Job.
+     * @return RepointSideloadJob Job.
      */
     public static function start_sideload(): array
     {
         global $wpdb;
 
         if (UAMS_MRA_Store::offsite_needs_rescan()) {
-            return self::stale_job();
+            // A stale job is already done, so no caller reads its `queue` entry.
+            /** @var RepointSideloadJob $stale */
+            $stale = self::stale_job();
+
+            return $stale;
         }
 
         $t = UAMS_MRA_Store::offsite_table();
@@ -792,7 +807,7 @@ class UAMS_MRA_Repoint
      * @param  RepointJob  $job
      * @return RepointJob
      */
-    protected static function step_sideload($job)
+    protected static function step_sideload($job): array
     {
         if (empty($job['queue'])) {
             $job['phase'] = 'done';
@@ -1048,7 +1063,7 @@ class UAMS_MRA_Repoint
      * still free.
      *
      * @param  array|false  $dimensions  Result of getimagesize(), or false for a non-image.
-     * @param  array<int|string, mixed>|false  $dimensions
+     * @param  array<int|string, int|string>|false  $dimensions
      * @return bool True to resize, false to skip it.
      */
     protected static function can_resize($dimensions): bool
@@ -1317,7 +1332,10 @@ class UAMS_MRA_Repoint
                 ];
             }
 
+            // The post fields are text, and the replacement returns the shape it is given.
+            /** @var string $content */
             $content = self::replace_variants($post->post_content, $from, $to);
+            /** @var string $excerpt */
             $excerpt = self::replace_variants($post->post_excerpt, $from, $to);
 
             if ($content === $post->post_content && $excerpt === $post->post_excerpt) {
@@ -1793,6 +1811,7 @@ class UAMS_MRA_Repoint
 			FROM {$t}", ARRAY_A);
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        /** @var array<string, string>|null $row */
         return is_array($row) ? array_map(intval(...), $row) : [];
     }
 }

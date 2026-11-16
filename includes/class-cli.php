@@ -31,7 +31,7 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      * @param  list<string>  $args
-     * @param  array<string, mixed>  $assoc_args
+     * @param  array<string, string>  $assoc_args
      */
     public function scan($args, $assoc_args): void
     {
@@ -55,6 +55,7 @@ class UAMS_MRA_CLI
         while ($state['step'] !== 'done') {
             $state = UAMS_MRA_Scanner::step();
 
+            /** @var array{message: string} $state */
             if (! $quiet && $state['message'] !== $last) {
                 WP_CLI::log($state['message']);
                 $last = $state['message'];
@@ -113,7 +114,7 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      * @param  list<string>  $args
-     * @param  array<string, mixed>  $assoc_args
+     * @param  array<string, string>  $assoc_args
      */
     public function list($args, $assoc_args): void
     {
@@ -191,12 +192,14 @@ class UAMS_MRA_CLI
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
      * @param  list<string>  $args
-     * @param  array<string, mixed>  $assoc_args
+     * @param  array<string, string|bool>  $assoc_args
      */
     public function delete($args, $assoc_args): void
     {
         global $wpdb;
 
+        // The status flag is declared to take a value, so it is text; `yes` and `dry-run` are the flags without one.
+        /** @var string $status */
         $status = $assoc_args['status'] ?? 'orphaned';
         // $wpdb->prepare() formats the limit with %d, which casts it, so the explicit cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
