@@ -22,6 +22,8 @@ defined('ABSPATH') || exit;
 
 /**
  * Builds, serves, and cleans up zip archives of a working set.
+ *
+ * @phpstan-type ArchiveJob array<string, mixed>
  */
 class UAMS_MRA_Archive
 {
@@ -68,7 +70,7 @@ class UAMS_MRA_Archive
     /**
      * Work budget for one AJAX step.
      *
-     * @return array {bytes, files}
+     * @return array<string, int> {bytes, files}
      */
     public static function step_budget(): array
     {
@@ -86,6 +88,8 @@ class UAMS_MRA_Archive
      * ------------------------------------------------------------------ */
     /**
      * Read the current job.
+     *
+     * @return ArchiveJob|null
      */
     public static function get_job(): ?array
     {
@@ -98,8 +102,9 @@ class UAMS_MRA_Archive
      * Store the current job.
      *
      * @param  array  $job  Job.
+     * @param  ArchiveJob  $job
      */
-    protected static function put_job(array $job)
+    protected static function put_job(array $job): void
     {
         update_user_meta(get_current_user_id(), self::META_KEY, $job);
     }
@@ -122,7 +127,8 @@ class UAMS_MRA_Archive
      * Begin a job for a set of attachments.
      *
      * @param  array  $ids  Attachment IDs.
-     * @return array|WP_Error The job.
+     * @param  array<int, int|string>  $ids
+     * @return ArchiveJob|WP_Error The job.
      */
     public static function start(array $ids): WP_Error|array
     {
@@ -174,7 +180,7 @@ class UAMS_MRA_Archive
     /**
      * Add the next batch of files to the archive.
      *
-     * @return array|WP_Error The job.
+     * @return ArchiveJob|WP_Error The job.
      */
     public static function step(): WP_Error|array
     {
@@ -294,6 +300,7 @@ class UAMS_MRA_Archive
      *
      * @param  array  $job  Job.
      * @param  int  $part  Part number.
+     * @param  ArchiveJob  $job
      */
     protected static function part_path(array $job, $part): string
     {
@@ -319,6 +326,7 @@ class UAMS_MRA_Archive
      *
      * @param  array  $job  Job.
      * @param  int  $part  Part number.
+     * @param  ArchiveJob  $job
      * @return int Bytes.
      */
     protected static function part_bytes(array $job, $part): int
@@ -334,8 +342,9 @@ class UAMS_MRA_Archive
      * @param  array  $job  Job, by reference.
      * @param  int  $part  Part number.
      * @param  int  $files  File count.
+     * @param  ArchiveJob  $job
      */
-    protected static function record_part(array &$job, $part, $files)
+    protected static function record_part(array &$job, $part, $files): void
     {
         // Callers pass the job's own integers, so each cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -396,6 +405,7 @@ class UAMS_MRA_Archive
      * @param  int  $id  Attachment ID.
      * @param  string  $local  Path inside the zip.
      * @param  int  $size  Bytes.
+     * @return list<int|string>
      */
     protected static function manifest_row($id, $local, $size): array
     {
@@ -423,7 +433,8 @@ class UAMS_MRA_Archive
      *
      * @param  array  $job  Job.
      * @param  int  $part  Part number.
-     * @return array Rows.
+     * @param  ArchiveJob  $job
+     * @return list<list<string|null>> Rows.
      */
     protected static function read_manifest(array $job, $part): array
     {
@@ -474,8 +485,9 @@ class UAMS_MRA_Archive
      *
      * @param  ZipArchive  $zip  Open archive.
      * @param  array  $rows  Manifest rows.
+     * @param  list<list<int|string>>  $rows
      */
-    protected static function write_manifest($zip, array $rows)
+    protected static function write_manifest($zip, array $rows): void
     {
         $out = fopen('php://temp', 'r+'); // phpcs:ignore WordPress.WP.AlternativeFunctions
 
@@ -522,7 +534,7 @@ class UAMS_MRA_Archive
      *
      * @param  string  $dir  Directory.
      */
-    protected static function protect($dir)
+    protected static function protect($dir): void
     {
         if (! file_exists($dir.'/.htaccess')) {
             // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -540,7 +552,7 @@ class UAMS_MRA_Archive
      *
      * @param  string  $dir  Directory.
      */
-    protected static function rmdir($dir)
+    protected static function rmdir($dir): void
     {
         $base = self::base_dir();
 
