@@ -7,6 +7,8 @@ defined('ABSPATH') || exit;
 
 /**
  * Walks every content source and records which attachments are referenced.
+ *
+ * @phpstan-type ScanState array<string, mixed>
  */
 class UAMS_MRA_Scanner
 {
@@ -15,7 +17,7 @@ class UAMS_MRA_Scanner
     /**
      * Ordered pipeline.
      *
-     * @var array
+     * @var list<string>
      */
     protected static $steps = [
         'index',
@@ -32,6 +34,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Current scan state.
+     *
+     * @return ScanState
      */
     public static function get_state(): array
     {
@@ -44,6 +48,7 @@ class UAMS_MRA_Scanner
      * Persist scan state.
      *
      * @param  array  $state  State.
+     * @param  ScanState  $state
      */
     public static function set_state($state): void
     {
@@ -53,7 +58,7 @@ class UAMS_MRA_Scanner
     /**
      * Start a fresh scan.
      *
-     * @return array State.
+     * @return ScanState|WP_Error State.
      */
     public static function start(): WP_Error|array
     {
@@ -95,7 +100,7 @@ class UAMS_MRA_Scanner
     /**
      * Run one batch and advance state.
      *
-     * @return array State.
+     * @return ScanState State.
      */
     public static function step()
     {
@@ -124,7 +129,8 @@ class UAMS_MRA_Scanner
      * Move to the next step in the pipeline.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function advance($state)
     {
@@ -216,7 +222,8 @@ class UAMS_MRA_Scanner
      * Build the filename index.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_index($state)
     {
@@ -242,7 +249,8 @@ class UAMS_MRA_Scanner
      * Scan post_content across every post type.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_posts($state)
     {
@@ -347,7 +355,8 @@ class UAMS_MRA_Scanner
      * Scan postmeta.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_postmeta($state)
     {
@@ -458,7 +467,8 @@ class UAMS_MRA_Scanner
      * Scan the options table for theme mods, widgets, logos, and icons.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_options($state)
     {
@@ -559,7 +569,8 @@ class UAMS_MRA_Scanner
      * Scan term meta.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_termmeta($state)
     {
@@ -570,7 +581,8 @@ class UAMS_MRA_Scanner
      * Scan user meta.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_usermeta($state)
     {
@@ -581,7 +593,8 @@ class UAMS_MRA_Scanner
      * Scan comment meta.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_commentmeta($state)
     {
@@ -597,7 +610,8 @@ class UAMS_MRA_Scanner
      * @param  string  $object_col  Object ID column.
      * @param  string  $source_type  Source type label.
      * @param  string  $prefix  Human prefix.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function generic_meta_step($state, $table, $pk, $object_col, $source_type, $prefix)
     {
@@ -695,7 +709,8 @@ class UAMS_MRA_Scanner
      * Scan sibling sites in a multisite network for URLs pointing at this site.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_network($state)
     {
@@ -784,7 +799,8 @@ class UAMS_MRA_Scanner
      * Write one batch of final results.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_finalize($state)
     {
@@ -940,7 +956,8 @@ class UAMS_MRA_Scanner
      * ran, instead of leaving a blank that reads like a clean result.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function build_render_queue($state)
     {
@@ -1032,7 +1049,8 @@ class UAMS_MRA_Scanner
      * Files still unexplained, grouped by the parent they hang off.
      *
      * @param  array  $parent_ids  Parent post IDs.
-     * @return array parent_id => array of attachment IDs.
+     * @param  array<int, int|string>  $parent_ids
+     * @return array<int, list<int>> parent_id => array of attachment IDs.
      */
     protected static function pending_attachment_ids(array $parent_ids): array
     {
@@ -1082,7 +1100,8 @@ class UAMS_MRA_Scanner
      * table for the earlier steps to find, and all of them show up here.
      *
      * @param  array  $state  State.
-     * @return array
+     * @param  ScanState  $state
+     * @return ScanState
      */
     protected static function step_render($state)
     {
@@ -1214,7 +1233,8 @@ class UAMS_MRA_Scanner
      * Flip an id => host map into host => ids.
      *
      * @param  array  $offsite  attachment_id => host.
-     * @return array host => array of attachment IDs.
+     * @param  array<int, string>  $offsite
+     * @return array<string, list<int>> host => array of attachment IDs.
      */
     protected static function group_by_host(array $offsite): array
     {
@@ -1245,7 +1265,7 @@ class UAMS_MRA_Scanner
      * a person to decide whether the two files are the same document.
      *
      * @param  string  $body  Rendered HTML.
-     * @return array attachment_id => host serving it.
+     * @return array<int, string> attachment_id => host serving it.
      */
     protected static function extract_offsite_uploads($body): array
     {
@@ -1278,7 +1298,7 @@ class UAMS_MRA_Scanner
      * database those URLs are stored so they can be migrated.
      *
      * @param  string  $content  Content to read.
-     * @return array List of array{url, host, path, base_norm}, deduplicated by URL.
+     * @return list<array{url: string, host: string, path: string, base_norm: string}> List of array{url, host, path, base_norm}, deduplicated by URL.
      */
     public static function extract_foreign_upload_urls($content): array
     {
@@ -1367,7 +1387,9 @@ class UAMS_MRA_Scanner
      * @param  string  $source_type  Where it came from.
      * @param  int  $source_id  Row ID in that source.
      * @param  string  $label  Readable source name.
-     * @return array Rows for UAMS_MRA_Store::add_offsite().
+     * @param  int  $source_pk
+     * @param  string  $source_key
+     * @return list<array<string, mixed>> Rows for UAMS_MRA_Store::add_offsite().
      */
     protected static function collect_offsite($content, $source_type, $source_id, $label, $source_pk = 0, $source_key = ''): array
     {
@@ -1526,6 +1548,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Meta keys that describe the attachment itself and must never count as a reference.
+     *
+     * @return list<string>
      */
     protected static function skipped_meta_keys(): array
     {
@@ -1600,6 +1624,8 @@ class UAMS_MRA_Scanner
 
     /**
      * Upload path prefixes used to spot media URLs.
+     *
+     * @return list<string>
      */
     public static function upload_path_prefixes(): array
     {
@@ -1631,6 +1657,8 @@ class UAMS_MRA_Scanner
      *
      * @param  string  $content  Text to scan.
      * @param  array  $prefixes  Upload path prefixes. Defaults to the current site.
+     * @param  list<string>|null  $prefixes
+     * @return list<string>
      */
     public static function extract_paths($content, $prefixes = null): array
     {
@@ -1684,6 +1712,7 @@ class UAMS_MRA_Scanner
      * Pull attachment IDs out of post content.
      *
      * @param  string  $content  Post content.
+     * @return list<int>
      */
     public static function extract_ids_from_content($content): array
     {
@@ -1744,7 +1773,7 @@ class UAMS_MRA_Scanner
      * @param  string  $key  Meta or option name.
      * @param  string  $value  Raw stored value.
      * @param  bool  $allow_numeric  Treat bare numeric values matching an attachment as a reference.
-     * @return array attachment_id => confidence
+     * @return array<int, int> attachment_id => confidence
      */
     public static function scan_meta_value($key, $value, $allow_numeric = true): array
     {
@@ -1826,6 +1855,8 @@ class UAMS_MRA_Scanner
      *
      * @param  array  $data  Data.
      * @param  int  $depth  Recursion depth.
+     * @param  array<mixed>  $data
+     * @return array<int, int>
      */
     protected static function collect_ids_from_array($data, $depth = 0): array
     {
