@@ -19,6 +19,9 @@ require_once __DIR__.'/../../includes/class-selection.php';
 
 /**
  * A $wpdb answering the filename lookup, and recording what it was asked.
+ *
+ * @param  list<int|string|null>  $answers  What get_var() returns, in order.
+ * @return object{prefix: string, queries: list<string>}
  */
 function selection_wpdb(array $answers = []): object
 {
@@ -29,6 +32,9 @@ function selection_wpdb(array $answers = []): object
         /** @var list<string> */
         public array $queries = [];
 
+        /**
+         * @param  list<int|string|null>  $answers
+         */
         public function __construct(private array $answers) {}
 
         public function esc_like(string $text): string

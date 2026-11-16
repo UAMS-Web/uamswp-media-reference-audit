@@ -46,16 +46,19 @@ function scanner_loose(mixed $value): mixed
  * @param  list<int>  $known  Attachment IDs the index "has".
  * @param  array<string, list<int>>  $paths  Upload path => IDs, for resolve_paths().
  * @param  array<string, list<int>>  $names  Normalized name => IDs, for resolve_map().
- * @return object{filtered: list<array>, resolved: list<array>, mapped: list<array>}
+ * @return object{filtered: list<array<mixed>>, resolved: list<array<mixed>>, mapped: list<array<mixed>>}
  */
 function scanner_index(array $known = [], array $paths = [], array $names = []): object
 {
     $log = new class
     {
+        /** @var list<array<mixed>> */
         public array $filtered = [];
 
+        /** @var list<array<mixed>> */
         public array $resolved = [];
 
+        /** @var list<array<mixed>> */
         public array $mapped = [];
     };
 

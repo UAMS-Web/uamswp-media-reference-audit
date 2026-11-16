@@ -448,6 +448,7 @@ it('does not touch an object it cannot read', function (): void {
  * Stand in for the HEAD request.
  *
  * @param  array<string, mixed>|WP_Error|null  $response  What wp_safe_remote_head() returns.
+ * @param  array<string, mixed>|null  $seen  Set to the URL and the arguments of the request the stand-in saw.
  */
 function repoint_head(mixed $response, ?array &$seen = null): void
 {
@@ -714,6 +715,7 @@ it('keeps looking after a size that does not fit', function (): void {
  *
  * @param  list<int|string>  $candidates  What the index resolves the name to.
  * @param  array<string, mixed>  $opts  remote (?int), meta, original (file contents), url.
+ * @return array{mixed, stdClass} The classification and what the stand-ins recorded.
  */
 function repoint_classify(array $candidates, array $opts = []): array
 {
@@ -905,6 +907,7 @@ it('gives an empty target when WordPress has no URL for the attachment', functio
  *
  * @param  array<int, array<string, mixed>>  $rows  Rows for get_results().
  * @param  array<string, mixed>|null  $row  Row for get_row().
+ * @return object{query: string, format: mixed}
  */
 function repoint_wpdb(array $rows = [], ?array $row = null): object
 {
@@ -914,8 +917,15 @@ function repoint_wpdb(array $rows = [], ?array $row = null): object
 
         public mixed $format = null;
 
+        /**
+         * @param  array<int, array<string, mixed>>  $rows
+         * @param  array<string, mixed>|null  $row
+         */
         public function __construct(private readonly array $rows, private readonly ?array $row) {}
 
+        /**
+         * @return array<int, array<string, mixed>>
+         */
         public function get_results(string $query, mixed $format = null): array
         {
             $this->query = $query;
@@ -924,6 +934,9 @@ function repoint_wpdb(array $rows = [], ?array $row = null): object
             return $this->rows;
         }
 
+        /**
+         * @return array<string, mixed>|null
+         */
         public function get_row(string $query, mixed $format = null): ?array
         {
             $this->query = $query;

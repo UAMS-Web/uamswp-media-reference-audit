@@ -21,6 +21,9 @@ require_once __DIR__.'/../../includes/class-store.php';
 
 /**
  * A $wpdb that records what it is asked and answers from a script.
+ *
+ * @param  list<mixed>  $vars  What get_var() returns, in order.
+ * @return object{prefix: string, postmeta: string, queries: list<string>}
  */
 function triage_wpdb(array $vars = [], mixed $rows = [], mixed $col = []): object
 {
@@ -33,6 +36,9 @@ function triage_wpdb(array $vars = [], mixed $rows = [], mixed $col = []): objec
         /** @var list<string> */
         public array $queries = [];
 
+        /**
+         * @param  list<mixed>  $vars
+         */
         public function __construct(private array $vars, private mixed $rows, private mixed $col) {}
 
         public function prepare(string $query, mixed ...$args): string
@@ -47,7 +53,7 @@ function triage_wpdb(array $vars = [], mixed $rows = [], mixed $col = []): objec
             return array_shift($this->vars);
         }
 
-        public function get_results(string $query, $output = null): mixed
+        public function get_results(string $query, mixed $output = null): mixed
         {
             $this->queries[] = $query;
 
@@ -349,10 +355,11 @@ it('lists the attachments marked with a disposition as integers', function (): v
 });
 
 it('returns nothing, and asks the database nothing, for a disposition that does not exist', function (): void {
-    $GLOBALS['wpdb'] = triage_wpdb(col: ['4']);
+    $wpdb = triage_wpdb(col: ['4']);
+    $GLOBALS['wpdb'] = $wpdb;
 
     expect(UAMS_MRA_Triage::ids_marked('purge'))->toBe([])
-        ->and($GLOBALS['wpdb']->queries)->toBe([]);
+        ->and($wpdb->queries)->toBe([]);
 });
 
 it('counts each tier inside the scope it was given', function (): void {

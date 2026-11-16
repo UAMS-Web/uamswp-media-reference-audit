@@ -1231,6 +1231,7 @@ final class RepointJobsTest extends IntegrationTestCase
     /**
      * A queued group for one URL, with its rows stored.
      *
+     * @param  array<string, mixed>  $over
      * @return array{url: string, hashes: list<string>}
      */
     private function group(string $url, array $over = []): array
@@ -1327,6 +1328,8 @@ final class RepointJobsTest extends IntegrationTestCase
     }
 
     /**
+     * @param  array{int, int|null}  $head  The status and content length the HEAD request answers with.
+     *
      * @dataProvider failedDownloads
      */
     public function test_a_file_that_cannot_be_pulled_is_marked_with_why_and_leaves_nothing_behind(string $name, array $head, mixed $get, string $verdict): void

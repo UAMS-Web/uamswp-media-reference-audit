@@ -318,6 +318,9 @@ final class AdminRequestsTest extends IntegrationTestCase
         $wpdb->insert(UAMS_MRA_Store::results_table(), array_merge(['attachment_id' => $id, 'file' => '2024/05/'.$id.'.pdf', 'bytes' => 100, 'ref_count' => 0], $row));
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function resultRow(int $id): ?array
     {
         global $wpdb;
@@ -331,6 +334,9 @@ final class AdminRequestsTest extends IntegrationTestCase
      * handle_requests
      * ------------------------------------------------------------------ */
 
+    /**
+     * @return array<string, array{string, string}>
+     */
     public static function hookProvider(): array
     {
         return [

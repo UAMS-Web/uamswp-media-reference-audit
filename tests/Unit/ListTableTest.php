@@ -116,6 +116,8 @@ function lt_table(array $summary = []): UAMS_MRA_List_Table
 
 /**
  * A $wpdb that records every query and answers from a script.
+ *
+ * @return object{queries: list<string>}
  */
 function lt_wpdb(int $count = 0, mixed $rows = []): object
 {
