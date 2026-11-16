@@ -28,6 +28,8 @@ class UAMS_MRA_CLI
      *
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
+     * @param  list<string>  $args
+     * @param  array<string, mixed>  $assoc_args
      */
     public function scan($args, $assoc_args): void
     {
@@ -98,6 +100,8 @@ class UAMS_MRA_CLI
      *
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
+     * @param  list<string>  $args
+     * @param  array<string, mixed>  $assoc_args
      */
     public function list($args, $assoc_args): void
     {
@@ -174,6 +178,8 @@ class UAMS_MRA_CLI
      *
      * @param  array  $args  Positional args.
      * @param  array  $assoc_args  Flags.
+     * @param  list<string>  $args
+     * @param  array<string, mixed>  $assoc_args
      */
     public function delete($args, $assoc_args): void
     {
@@ -245,6 +251,7 @@ class UAMS_MRA_CLI
      * : Attachment ID.
      *
      * @param  array  $args  Positional args.
+     * @param  list<string>  $args
      */
     public function why($args): void
     {

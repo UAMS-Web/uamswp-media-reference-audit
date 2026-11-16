@@ -20,7 +20,7 @@ class UAMS_MRA_Store
     /**
      * Request-lifetime cache for summary().
      *
-     * @var array|null
+     * @var array<string, int>|null
      */
     protected static $summary_cache;
 
@@ -186,7 +186,7 @@ class UAMS_MRA_Store
      * silently drop the second and later URLs found in different meta rows of
      * the same post.
      */
-    protected static function drop_stale_indexes()
+    protected static function drop_stale_indexes(): void
     {
         global $wpdb;
 
@@ -237,6 +237,7 @@ class UAMS_MRA_Store
      * Insert reference rows, ignoring duplicates.
      *
      * @param  array  $rows  Each row: attachment_id, source_type, source_id, source_label, site_id, confidence.
+     * @param  list<array<string, mixed>>  $rows
      */
     public static function add_refs(array $rows): void
     {
@@ -279,7 +280,7 @@ class UAMS_MRA_Store
      *
      * @param  int  $attachment_id  Attachment ID.
      * @param  int  $limit  Max rows.
-     * @return array
+     * @return array<int, object>|null
      */
     public static function get_refs($attachment_id, $limit = 20)
     {
@@ -306,6 +307,7 @@ class UAMS_MRA_Store
      * read as unreferenced.
      *
      * @param  array  $ids  Attachment IDs.
+     * @param  array<int, int|string>  $ids
      */
     public static function recount_refs(array $ids): void
     {
@@ -337,6 +339,7 @@ class UAMS_MRA_Store
      * @param  string  $state  One of found, offsite, absent, error, skipped.
      * @param  string  $url  URL that was checked, if any.
      * @param  string  $note  Extra detail, such as the host an offsite copy came from.
+     * @param  array<int, int|string>  $ids
      */
     public static function set_render_state(array $ids, $state, $url = '', $note = ''): void
     {
@@ -371,7 +374,7 @@ class UAMS_MRA_Store
     /**
      * How the render step landed, for the dashboard.
      *
-     * @return array state => count
+     * @return array<string, int> state => count
      */
     public static function render_counts(): array
     {
@@ -393,6 +396,7 @@ class UAMS_MRA_Store
      * Insert offsite media hits, ignoring duplicates.
      *
      * @param  array  $rows  Each row: url, host, base_norm, source_type, source_id, source_label.
+     * @param  list<array<string, mixed>>  $rows
      */
     public static function add_offsite(array $rows): void
     {
@@ -459,6 +463,8 @@ class UAMS_MRA_Store
 
     /**
      * Headline counts for the offsite report.
+     *
+     * @return array<string, int>
      */
     public static function offsite_summary(): array
     {
@@ -500,7 +506,7 @@ class UAMS_MRA_Store
     /**
      * Hosts serving offsite media, most references first.
      *
-     * @return array
+     * @return array<int, array<string, mixed>>|null
      */
     public static function offsite_hosts()
     {
@@ -523,7 +529,7 @@ class UAMS_MRA_Store
      * @param  string  $host  Limit to one host, or '' for all.
      * @param  int  $limit  Rows.
      * @param  int  $offset  Offset.
-     * @return array
+     * @return array<int, array<string, mixed>>|null
      */
     public static function offsite_files($host = '', $limit = 100, $offset = 0)
     {
@@ -588,7 +594,7 @@ class UAMS_MRA_Store
      *
      * @param  string  $url_hash  Hash from offsite_files().
      * @param  int  $limit  Rows.
-     * @return array
+     * @return array<int, array<string, mixed>>|null
      */
     public static function offsite_sources($url_hash, $limit = 25)
     {
@@ -612,7 +618,7 @@ class UAMS_MRA_Store
     /**
      * Summary counts for the dashboard.
      *
-     * @return array
+     * @return array<string, int>
      */
     public static function summary()
     {
