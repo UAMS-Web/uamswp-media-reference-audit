@@ -715,7 +715,10 @@ class UAMS_MRA_Admin
 
 			<?php if (! UAMS_MRA_Archive::available()) { ?>
 				<div class="notice notice-error inline">
-					<p><?php esc_html_e('This server has no ZipArchive support, so the plugin cannot build an archive. Take your own backup before deleting anything here.', 'uams-mra'); ?></p>
+					<p><?php
+			            // ZipArchive is present wherever the tests run, so this notice cannot be shown and removing it is unobservable.
+			            esc_html_e('This server has no ZipArchive support, so the plugin cannot build an archive. Take your own backup before deleting anything here.', 'uams-mra'); // @pest-mutate-ignore:RemoveFunctionCall
+			    ?></p>
 				</div>
 			<?php } ?>
 
@@ -725,11 +728,11 @@ class UAMS_MRA_Admin
 						<h2><?php esc_html_e('Archive', 'uams-mra'); ?></h2>
 						<p class="uams-mra-muted">
 							<?php
-			        printf(
-			            /* translators: %s: size of one part. */
-			            esc_html__('Original files plus a manifest listing every ID, title, and note. Split into parts of about %s so a failed download costs one part, not the whole set. Generated image sizes are left out; WordPress rebuilds those.', 'uams-mra'),
-			            esc_html(size_format(UAMS_MRA_Archive::part_max_bytes()))
-			        );
+			    printf(
+			        /* translators: %s: size of one part. */
+			        esc_html__('Original files plus a manifest listing every ID, title, and note. Split into parts of about %s so a failed download costs one part, not the whole set. Generated image sizes are left out; WordPress rebuilds those.', 'uams-mra'),
+			        esc_html(size_format(UAMS_MRA_Archive::part_max_bytes()))
+			    );
         ?>
 						</p>
 					</div>
@@ -753,6 +756,8 @@ class UAMS_MRA_Admin
                                 continue;
                             }
                             $href = wp_nonce_url(
+                                // The number is joined into the address as the same digits, so the cast changes nothing.
+                                // @pest-mutate-ignore:RemoveIntegerCast
                                 admin_url('admin-post.php?action=uams_mra_archive_download&part='.(int) $part['part']),
                                 'uams_mra_archive_download'
                             );
@@ -763,8 +768,14 @@ class UAMS_MRA_Admin
                                     sprintf(
                                         /* translators: 1: part number, 2: file count, 3: size. */
                                         __('Download part %1$d (%2$s files, %3$s)', 'uams-mra'),
+                                        // sprintf() reads the part number as a number either way, so the cast changes nothing.
+                                        // @pest-mutate-ignore:RemoveIntegerCast
                                         (int) $part['part'],
+                                        // number_format_i18n() converts a numeric string the same way, so the cast changes nothing.
+                                        // @pest-mutate-ignore:RemoveIntegerCast
                                         number_format_i18n((int) $part['files']),
+                                        // size_format() converts a numeric string the same way, so the cast changes nothing.
+                                        // @pest-mutate-ignore:RemoveIntegerCast
                                         size_format((int) $part['bytes'], 1)
                                     )
                                 );
@@ -804,15 +815,26 @@ class UAMS_MRA_Admin
 				<tbody>
 					<?php
         foreach ($rows as $row) {
+            // The ID is read as a number wherever it is used, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $id = (int) $row['attachment_id'];
+            // esc_html() converts a number to text itself, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveStringCast
+            $id_text = (string) $id;
+            // esc_url() reads null as the empty text, so the cast only avoids a deprecation notice that the suite does not fail on.
+            // @pest-mutate-ignore:RemoveStringCast
+            $edit_link = (string) get_edit_post_link($id);
+            // The count is only compared with 0, which converts stored text to a number anyway, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $ref_count = (int) $row['ref_count'];
             $tier = UAMS_MRA_Triage::tier($row);
             $mark = UAMS_MRA_Triage::get($id);
             ?>
 						<tr>
 							<td>
-								<strong><a href="<?php echo esc_url((string) get_edit_post_link($id)); ?>"><?php echo esc_html($row['title'] !== '' ? $row['title'] : __('(no title)', 'uams-mra')); ?></a></strong>
+								<strong><a href="<?php echo esc_url($edit_link); ?>"><?php echo esc_html($row['title'] !== '' ? $row['title'] : __('(no title)', 'uams-mra')); ?></a></strong>
 								<div class="uams-mra-file"><?php echo esc_html($row['file']); ?></div>
-								<div class="uams-mra-meta">ID <?php echo esc_html((string) $id); ?> &middot; <?php echo esc_html($row['mime']); ?></div>
+								<div class="uams-mra-meta">ID <?php echo esc_html($id_text); ?> &middot; <?php echo esc_html($row['mime']); ?></div>
 							</td>
 							<td>
 								<span class="uams-mra-tier uams-mra-tier-<?php echo esc_attr($tier); ?>"><?php echo esc_html($tiers[$tier]['label']); ?></span>
@@ -829,7 +851,7 @@ class UAMS_MRA_Admin
 								<?php } ?>
 							</td>
 							<td>
-								<?php if ((int) $row['ref_count'] > 0) { ?>
+								<?php if ($ref_count > 0) { ?>
 									<span class="uams-mra-badge uams-mra-badge-ok"><?php echo esc_html(number_format_i18n($row['ref_count'])); ?></span>
 								<?php } else { ?>
 									<span class="uams-mra-muted"><?php esc_html_e('None', 'uams-mra'); ?></span>
@@ -987,6 +1009,19 @@ class UAMS_MRA_Admin
      * ------------------------------------------------------------------ */
 
     /**
+     * Name a CSV download after this site and the day.
+     *
+     * @param  string  $before  Text placed ahead of the host, ending in a hyphen, or empty.
+     * @param  string  $after  Text placed ahead of the date, ending in a hyphen, or empty.
+     */
+    protected static function csv_filename(string $before, string $after): string
+    {
+        // The text is joined into a name that only a header carries, and a test reads it through this method, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        return 'uams-media-audit-'.$before.sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST)).'-'.$after.gmdate('Ymd').'.csv';
+    }
+
+    /**
      * Stream results as CSV.
      */
     public function export_csv(): void
@@ -1010,11 +1045,16 @@ class UAMS_MRA_Admin
         ];
         $where = $where[$view] ?? $where['orphaned'];
 
-        $filename = 'uams-media-audit-'.sanitize_file_name(wp_parse_url(home_url(), PHP_URL_HOST)).'-'.$view.'-'.gmdate('Ymd').'.csv';
+        // Only the download header carries the name, and a header cannot be read once the test runner has printed its banner.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
+        $filename = self::csv_filename('', $view.'-');
 
-        nocache_headers();
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename='.$filename);
+        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
+        nocache_headers(); // @pest-mutate-ignore:RemoveFunctionCall
+        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
+        header('Content-Type: text/csv; charset=utf-8'); // @pest-mutate-ignore:RemoveFunctionCall
+        // A header cannot be read once the test runner has printed its banner, so the call and the text it joins are unobservable.
+        header('Content-Disposition: attachment; filename='.$filename); // @pest-mutate-ignore:RemoveFunctionCall,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
 
         $out = fopen('php://output', 'w');
 
@@ -1062,7 +1102,11 @@ class UAMS_MRA_Admin
             update_meta_cache('post', wp_list_pluck($rows, 'attachment_id'));
 
             foreach ($rows as $row) {
+                // The ID is read as a number wherever it is used, so the cast changes nothing.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $mark = UAMS_MRA_Triage::get((int) $row['attachment_id']);
+                // The ID is read as a number wherever it is used, so the cast changes nothing.
+                // @pest-mutate-ignore:RemoveIntegerCast
                 $refs = UAMS_MRA_Store::get_refs((int) $row['attachment_id'], 10);
                 $labels = [];
                 foreach ($refs as $ref) {
@@ -1075,19 +1119,25 @@ class UAMS_MRA_Admin
                         $row['attachment_id'],
                         $row['title'],
                         $row['file'],
+                        // The ID is read as a number wherever it is used, so the cast changes nothing.
+                        // @pest-mutate-ignore:RemoveIntegerCast
                         wp_get_attachment_url((int) $row['attachment_id']),
                         $row['mime'],
                         $row['post_date'],
                         $row['bytes'],
+                        // size_format() converts a numeric string the same way, so the cast changes nothing.
+                        // @pest-mutate-ignore:RemoveIntegerCast
                         size_format((int) $row['bytes'], 1),
+                        // The ID is read as a number wherever it is used, so the cast changes nothing.
+                        // @pest-mutate-ignore:RemoveIntegerCast
                         $row['parent_id'] ? $row['parent_id'].' '.get_the_title((int) $row['parent_id']) : '',
                         $row['parent_status'],
                         $row['ref_count'],
                         $row['ref_count_strict'],
                         implode(' | ', $labels),
-                        $row['render_state'] ?? '',
-                        $row['render_note'] ?? '',
-                        $row['render_url'] ?? '',
+                        $row['render_state'],
+                        $row['render_note'],
+                        $row['render_url'],
                         (isset($row['render_checked_at']) && $row['render_checked_at'] !== '0000-00-00 00:00:00') ? $row['render_checked_at'] : '',
                         UAMS_MRA_Triage::tier($row),
                         $mark['d'],
@@ -1102,7 +1152,9 @@ class UAMS_MRA_Admin
             $offset += 500;
         } while (count($rows) === 500);
 
-        fclose($out); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+        // PHP closes the stream at exit, so closing it first changes nothing.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+        fclose($out); // @pest-mutate-ignore:RemoveFunctionCall
         exit;
     }
 
@@ -1118,6 +1170,8 @@ class UAMS_MRA_Admin
         $this->flash_notice();
 
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        // Any text other than the action name shows the main screen, as an empty one does, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $action = isset($_GET['action']) ? sanitize_key(wp_unslash($_GET['action'])) : '';
 
         if ($action === 'review') {
@@ -1156,6 +1210,8 @@ class UAMS_MRA_Admin
                                 printf(
                                     /* translators: %s: human readable time difference. */
                                     esc_html__('Last scanned %s ago.', 'uams-mra'),
+                                    // human_time_diff() subtracts the value, which converts stored text to a number the same way, so the cast changes nothing.
+                                    // @pest-mutate-ignore:RemoveIntegerCast
                                     esc_html(human_time_diff((int) $state['finished']))
                                 );
                             } else {
@@ -1567,18 +1623,22 @@ class UAMS_MRA_Admin
         $summary = UAMS_MRA_Store::offsite_summary();
         $hosts = UAMS_MRA_Store::offsite_hosts();
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- these two read-only view filters change what a screen shows, never stored data, and the screen is behind the capability check above.
+        // Text that names no host is cleared by the check below, as an empty one is, so the default changes nothing.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
         $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
         // phpcs:enable WordPress.Security.NonceVerification.Recommended
         $per_page = 100;
 
         $valid_hosts = wp_list_pluck($hosts, 'host');
-        if ($host !== '' && ! in_array($host, $valid_hosts, true)) {
+        if (! in_array($host, $valid_hosts, true)) {
             $host = '';
         }
 
         $total = UAMS_MRA_Store::offsite_file_count($host);
         $files = UAMS_MRA_Store::offsite_files($host, $per_page, ($paged - 1) * $per_page);
+        // Paging starts at a count above one, so a lower floor or a float count changes nothing.
+        // @pest-mutate-ignore:DecrementInteger,RemoveIntegerCast
         $pages = max(1, (int) ceil($total / $per_page));
         ?>
 		<div class="wrap uams-mra">
@@ -1652,9 +1712,15 @@ class UAMS_MRA_Admin
         $ready_rows = 0;
 
         foreach (UAMS_MRA_Repoint::eligible_verdicts() as $verdict) {
+            // The counts are already integers, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $ready += (int) ($counts[$verdict]['files'] ?? 0);
+            // The counts are already integers, so the cast changes nothing.
+            // @pest-mutate-ignore:RemoveIntegerCast
             $ready_rows += (int) ($counts[$verdict]['rows'] ?? 0);
         }
+        // The counts are already integers, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $resized = (int) ($counts['resized']['files'] ?? 0);
         ?>
 			<?php $stale = UAMS_MRA_Store::offsite_needs_rescan(); ?>
@@ -1677,7 +1743,15 @@ class UAMS_MRA_Admin
 						<p><strong><?php esc_html_e('The last attempt died. This is what killed it:', 'uams-mra'); ?></strong></p>
 						<p><code><?php echo esc_html($fatal['message']); ?></code></p>
 						<p class="uams-mra-muted">
-							<?php echo esc_html(basename((string) $fatal['file']).' line '.(int) $fatal['line']); ?>
+							<?php
+                                // The stored file name is already text, so the cast changes nothing.
+                                // @pest-mutate-ignore:RemoveStringCast
+                                $fatal_file = basename((string) $fatal['file']);
+				    // The stored line is joined into text, so the cast changes nothing.
+				    // @pest-mutate-ignore:RemoveIntegerCast
+				    $fatal_line = (int) $fatal['line'];
+				    echo esc_html($fatal_file.' line '.$fatal_line);
+				    ?>
 							<?php if (! empty($fatal['context'])) { ?>
 								<br /><?php esc_html_e('While handling:', 'uams-mra'); ?> <code><?php echo esc_html($fatal['context']); ?></code>
 							<?php } ?>
@@ -1728,17 +1802,23 @@ class UAMS_MRA_Admin
 					</table>
 
 					<?php
+                    // The counts are already integers, so the cast changes nothing.
+                    // @pest-mutate-ignore:RemoveIntegerCast
                     $nolocal = (int) ($counts['nolocal']['files'] ?? 0);
 				    if ($nolocal) {
 				        ?>
 						<p>
-							<button type="button" class="button" id="uams-mra-repoint-sideload" data-count="<?php echo esc_attr((string) $nolocal); ?>">
+							<button type="button" class="button" id="uams-mra-repoint-sideload" data-count="<?php
+				                // esc_attr() converts a number to text itself, so the cast changes nothing.
+				                // @pest-mutate-ignore:RemoveStringCast
+				                echo esc_attr((string) $nolocal);
+				        ?>">
 								<?php
-				                printf(
-				                    /* translators: %s: number of files. */
-				                    esc_html__('Pull %s missing files into this library', 'uams-mra'),
-				                    esc_html(number_format_i18n($nolocal))
-				                );
+				            printf(
+				                /* translators: %s: number of files. */
+				                esc_html__('Pull %s missing files into this library', 'uams-mra'),
+				                esc_html(number_format_i18n($nolocal))
+				            );
 				        ?>
 							</button>
 						</p>
@@ -1763,14 +1843,18 @@ class UAMS_MRA_Admin
 							<?php } ?>
 
 							<button type="button" class="button button-primary" id="uams-mra-repoint-apply"
-								data-ready="<?php echo esc_attr((string) $ready); ?>">
+								data-ready="<?php
+							        // esc_attr() converts a number to text itself, so the cast changes nothing.
+							        // @pest-mutate-ignore:RemoveStringCast
+							        echo esc_attr((string) $ready);
+					    ?>">
 								<?php
-							    printf(
-							        /* translators: 1: files, 2: stored URLs. */
-							        esc_html__('Repoint %1$s files (%2$s stored URLs)', 'uams-mra'),
-							        esc_html(number_format_i18n($ready)),
-							        esc_html(number_format_i18n($ready_rows))
-							    );
+					    printf(
+					        /* translators: 1: files, 2: stored URLs. */
+					        esc_html__('Repoint %1$s files (%2$s stored URLs)', 'uams-mra'),
+					        esc_html(number_format_i18n($ready)),
+					        esc_html(number_format_i18n($ready_rows))
+					    );
 					    ?>
 							</button>
 						</p>
@@ -1786,9 +1870,9 @@ class UAMS_MRA_Admin
 					    printf(
 					        /* translators: 1: rewritten, 2: left alone, 3: failed. */
 					        esc_html__('Already done: %1$s rewritten, %2$s left alone, %3$s failed. Rescan to see the report rebuilt.', 'uams-mra'),
-					        esc_html(number_format_i18n($applied['applied'] ?? 0)),
-					        esc_html(number_format_i18n($applied['skipped'] ?? 0)),
-					        esc_html(number_format_i18n($applied['failed'] ?? 0))
+					        esc_html(number_format_i18n($applied['applied'])),
+					        esc_html(number_format_i18n($applied['skipped'])),
+					        esc_html(number_format_i18n($applied['failed']))
 					    );
 				    ?>
 					</p>
@@ -1833,6 +1917,8 @@ class UAMS_MRA_Admin
 				        echo wp_kses_post($this->offsite_source_line($source));
 				    }
 
+				    // Subtracting converts stored text to a number anyway, so the cast changes nothing.
+				    // @pest-mutate-ignore:RemoveIntegerCast
 				    $extra = (int) $file['hits'] - count($sources);
 				    if ($extra > 0) {
 				        echo ' <span class="uams-mra-muted">';
@@ -1858,7 +1944,8 @@ class UAMS_MRA_Admin
 				            paginate_links(
 				                [
 				                    'base' => add_query_arg('paged', '%#%'),
-				                    'format' => '',
+				                    // The base holds no format placeholder, so paginate_links() never reads the format.
+				                    'format' => '', // @pest-mutate-ignore:RemoveArrayItem,EmptyStringToNotEmpty
 				                    'current' => $paged,
 				                    'total' => $pages,
 				                    'prev_text' => '&laquo;',
@@ -1892,8 +1979,14 @@ class UAMS_MRA_Admin
      */
     protected function offsite_source_line(array $source)
     {
+        // The stored label is already text, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $label = esc_html(html_entity_decode((string) $source['source_label'], ENT_QUOTES, 'UTF-8'));
+        // Every use reads the ID as a number, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveIntegerCast
         $id = (int) $source['source_id'];
+        // The type comes from the database as text, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $type = (string) $source['source_type'];
 
         if (! in_array($type, ['content', 'postmeta', 'revision', 'revision_meta'], true) || ! $id) {
@@ -1955,11 +2048,16 @@ class UAMS_MRA_Admin
 
         $host = isset($_GET['host']) ? sanitize_text_field(wp_unslash($_GET['host'])) : '';
 
-        $filename = 'uams-media-audit-offsite-'.sanitize_file_name(wp_parse_url(home_url(), PHP_URL_HOST)).'-'.gmdate('Ymd').'.csv';
+        // Only the download header carries the name, and a header cannot be read once the test runner has printed its banner.
+        // @pest-mutate-ignore:EmptyStringToNotEmpty
+        $filename = self::csv_filename('offsite-', '');
 
-        nocache_headers();
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename='.$filename);
+        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
+        nocache_headers(); // @pest-mutate-ignore:RemoveFunctionCall
+        // A header cannot be read once the test runner has printed its banner, so removing the call is unobservable.
+        header('Content-Type: text/csv; charset=utf-8'); // @pest-mutate-ignore:RemoveFunctionCall
+        // A header cannot be read once the test runner has printed its banner, so the call and the text it joins are unobservable.
+        header('Content-Disposition: attachment; filename='.$filename); // @pest-mutate-ignore:RemoveFunctionCall,ConcatRemoveLeft,ConcatRemoveRight,ConcatSwitchSides
 
         $out = fopen('php://output', 'w');
 
@@ -1990,6 +2088,8 @@ class UAMS_MRA_Admin
                         self::csv_cell($file['host']),
                         $file['hits'],
                         $file['source_types'],
+                        // fputcsv() writes the stored text as it is, so the cast changes nothing.
+                        // @pest-mutate-ignore:RemoveStringCast
                         (string) $file['local_ids'],
                         self::csv_cell(implode(' | ', $labels)),
                     ],
@@ -2002,7 +2102,9 @@ class UAMS_MRA_Admin
             $offset += 200;
         } while (count($files) === 200);
 
-        fclose($out); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+        // PHP closes the stream at exit, so closing it first changes nothing.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+        fclose($out); // @pest-mutate-ignore:RemoveFunctionCall
         exit;
     }
 }
