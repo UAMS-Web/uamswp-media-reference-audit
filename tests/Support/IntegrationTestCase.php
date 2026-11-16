@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace UamswpMediaReferenceAudit\Tests\Support;
 
-use WP_UnitTest_Factory;
 use WP_UnitTestCase;
 
 /**
@@ -25,11 +24,15 @@ use WP_UnitTestCase;
 abstract class IntegrationTestCase extends WP_UnitTestCase
 {
     /**
-     * The fixture factory, with a named return type for static analysis.
+     * The fixture factory, returning IDs where core's returns `int|WP_Error`.
+     *
+     * A failed insert stops the test at the fixture (see `FixtureFactory`).
      */
-    protected static function factory(): WP_UnitTest_Factory
+    protected static function factory(): FixtureFactories
     {
-        return parent::factory();
+        static $typed = null;
+
+        return $typed ??= new FixtureFactories(parent::factory());
     }
 }
 

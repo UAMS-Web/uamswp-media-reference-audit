@@ -95,7 +95,7 @@ final class IndexTest extends IntegrationTestCase
 
     public function test_an_attachment_with_no_stored_file_is_indexed_with_empty_names(): void
     {
-        $id = (int) self::factory()->attachment->create();
+        $id = self::factory()->attachment->create();
 
         UAMS_MRA_Index::build_batch($id - 1, 10);
 

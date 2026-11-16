@@ -255,8 +255,8 @@ final class AdminRequestsTest extends IntegrationTestCase
         }
 
         // A throwable raised by the die stand-in can be caught by the handler's own try block, which answers a second time; the first answer is the one a browser would get.
-        $first = preg_split('/(?<=\})(?=\{"success")/', $result['out'])[0];
-        $json = json_decode((string) $first, true);
+        $first = $this->firstAnswer($result['out']);
+        $json = json_decode($first, true);
         $this->assertIsArray($json, 'the handler answered something that is not JSON: '.$result['out']);
 
         // The status of the first answer, which is the one a browser would get.
@@ -1153,7 +1153,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(UAMS_MRA_Archive::part_name(1), $data['parts'][0]['name']);
         $this->assertSame(2, $data['parts'][0]['files']);
         $job = UAMS_MRA_Archive::get_job();
-        $this->assertSame(size_format(filesize($job['dir'].'/'.UAMS_MRA_Archive::part_name(1)), 1), $data['parts'][0]['size']);
+        $this->assertSame(size_format($this->bytesOf($job['dir'].'/'.UAMS_MRA_Archive::part_name(1)), 1), $data['parts'][0]['size']);
         $url = html_entity_decode((string) $data['parts'][0]['url']);
         $this->assertStringStartsWith(admin_url('admin-post.php?action=uams_mra_archive_download&part=1&_wpnonce='), $url);
         $this->assertSame(1, wp_verify_nonce($this->queryArg($url, '_wpnonce'), 'uams_mra_archive_download'));
@@ -1243,11 +1243,41 @@ final class AdminRequestsTest extends IntegrationTestCase
     /**
      * Read one query argument out of a URL the page built, as the browser would.
      */
+    /**
+     * The first answer of a handler that may answer twice, or the test stops.
+     */
+    private function firstAnswer(string $out): string
+    {
+        $parts = preg_split('/(?<=\})(?=\{"success")/', $out);
+
+        if ($parts === false) {
+            throw new RuntimeException('The handler output could not be split into answers.');
+        }
+
+        return $parts[0];
+    }
+
+    /**
+     * The size of a file on disk, or the test stops.
+     */
+    private function bytesOf(string $path): int
+    {
+        $bytes = filesize($path);
+
+        if ($bytes === false) {
+            throw new RuntimeException('The size of '.$path.' could not be read.');
+        }
+
+        return $bytes;
+    }
+
     private function queryArg(string $url, string $name): string
     {
         parse_str((string) parse_url(html_entity_decode($url), PHP_URL_QUERY), $args);
 
-        return (string) ($args[$name] ?? '');
+        $value = $args[$name] ?? '';
+
+        return is_string($value) ? $value : '';
     }
 
     /* ---------------------------------------------------------------------
@@ -1511,7 +1541,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertTrue(UAMS_MRA_Repoint::is_running());
 
         $result = $this->request(fn () => $this->admin->ajax_start(), ['nonce' => wp_create_nonce('uams_mra_scan')], [], true);
-        $json = json_decode((string) preg_split('/(?<=\})(?=\{"success")/', $result['out'])[0], true);
+        $json = json_decode($this->firstAnswer($result['out']), true);
 
         $this->assertSame(409, $result['status']);
         $this->assertFalse($json['success']);
