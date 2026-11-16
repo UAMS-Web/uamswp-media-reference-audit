@@ -8,7 +8,8 @@ defined('ABSPATH') || exit;
 /**
  * Walks every content source and records which attachments are referenced.
  *
- * @phpstan-type ScanState array<string, mixed>
+ * @phpstan-type RenderStats array{pages: int, found: int, absent: int, error: int, offsite: int}
+ * @phpstan-type ScanState array{step: string, cursor: int, processed: int, attachments: int, started: int, finished: int, site_queue: array<int, int>, render_queue: list<int>, settings: array<string, int|string>, counts: array<mixed>, message: string, render_total?: int, render_skipped?: int, render_capped?: int, render_stats?: RenderStats, render_token?: string}
  */
 class UAMS_MRA_Scanner
 {
@@ -35,20 +36,26 @@ class UAMS_MRA_Scanner
     /**
      * Current scan state.
      *
-     * @return ScanState
+     * @return array<string, mixed>
      */
     public static function get_state(): array
     {
         $state = get_option(self::STATE_OPTION, []);
 
-        return is_array($state) ? $state : [];
+        if (! is_array($state)) {
+            return [];
+        }
+
+        // The option holds what `set_state()` stored, which is a scan state.
+        /** @var ScanState $state */
+        return $state;
     }
 
     /**
      * Persist scan state.
      *
      * @param  array  $state  State.
-     * @param  ScanState  $state
+     * @param  array<string, mixed>  $state
      */
     public static function set_state($state): void
     {
@@ -100,7 +107,7 @@ class UAMS_MRA_Scanner
     /**
      * Run one batch and advance state.
      *
-     * @return ScanState State.
+     * @return array<string, mixed> State.
      */
     public static function step()
     {
@@ -112,6 +119,8 @@ class UAMS_MRA_Scanner
             return $state;
         }
 
+        // A stored state that is not empty and not done is a scan state.
+        /** @var ScanState $state */
         $method = 'step_'.$state['step'];
 
         if (! method_exists(self::class, $method)) {
@@ -574,7 +583,9 @@ class UAMS_MRA_Scanner
      */
     protected static function step_termmeta($state)
     {
-        return self::generic_meta_step($state, $GLOBALS['wpdb']->termmeta, 'meta_id', 'term_id', 'termmeta', 'Term');
+        global $wpdb;
+
+        return self::generic_meta_step($state, $wpdb->termmeta, 'meta_id', 'term_id', 'termmeta', 'Term');
     }
 
     /**
@@ -586,7 +597,9 @@ class UAMS_MRA_Scanner
      */
     protected static function step_usermeta($state)
     {
-        return self::generic_meta_step($state, $GLOBALS['wpdb']->usermeta, 'umeta_id', 'user_id', 'usermeta', 'User');
+        global $wpdb;
+
+        return self::generic_meta_step($state, $wpdb->usermeta, 'umeta_id', 'user_id', 'usermeta', 'User');
     }
 
     /**
@@ -598,7 +611,9 @@ class UAMS_MRA_Scanner
      */
     protected static function step_commentmeta($state)
     {
-        return self::generic_meta_step($state, $GLOBALS['wpdb']->commentmeta, 'meta_id', 'comment_id', 'commentmeta', 'Comment');
+        global $wpdb;
+
+        return self::generic_meta_step($state, $wpdb->commentmeta, 'meta_id', 'comment_id', 'commentmeta', 'Comment');
     }
 
     /**
@@ -894,9 +909,11 @@ class UAMS_MRA_Scanner
             // An array key reads a numeric string as the same integer.
             // @pest-mutate-ignore:RemoveIntegerCast
             $count = $counts[(int) $row->ID] ?? [0, 0];
+            /** @var scalar|null $stored_file */
+            $stored_file = get_post_meta($row->ID, '_wp_attached_file', true);
             // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveStringCast
-            $file = (string) get_post_meta($row->ID, '_wp_attached_file', true);
+            $file = (string) $stored_file;
 
             $values[] = '(%d,%d,%s,%d,%d,%d,%d,%s,%s,%s,%s,%s)';
             // The ID reaches a %d placeholder, which reads a numeric string as the same integer.
@@ -1941,9 +1958,11 @@ class UAMS_MRA_Scanner
         $basedir = trailingslashit($uploads['basedir']);
 
         if ($file === '') {
+            /** @var scalar|null $stored_file */
+            $stored_file = get_post_meta($attachment_id, '_wp_attached_file', true);
             // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveStringCast
-            $file = (string) get_post_meta($attachment_id, '_wp_attached_file', true);
+            $file = (string) $stored_file;
         }
 
         if ($file === '') {
@@ -1966,7 +1985,10 @@ class UAMS_MRA_Scanner
             }
 
             if (! empty($meta['sizes']) && is_array($meta['sizes'])) {
-                foreach ($meta['sizes'] as $size) {
+                /** @var array<array{file?: string}> $sizes */
+                $sizes = $meta['sizes'];
+
+                foreach ($sizes as $size) {
                     if (! empty($size['file'])) {
                         $targets[] = $subdir.$size['file'];
                     }

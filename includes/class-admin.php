@@ -9,7 +9,6 @@ defined('ABSPATH') || exit;
  *
  * @phpstan-import-type ArchiveJob from UAMS_MRA_Archive
  * @phpstan-import-type RepointJob from UAMS_MRA_Repoint
- * @phpstan-import-type ScanState from UAMS_MRA_Scanner
  */
 class UAMS_MRA_Admin
 {
@@ -1020,7 +1019,7 @@ class UAMS_MRA_Admin
      * Shape state for the progress UI.
      *
      * @param  array  $state  Scan state.
-     * @param  ScanState  $state
+     * @param  array<string, mixed>  $state
      * @return array<string, mixed>
      */
     protected function progress($state): array
