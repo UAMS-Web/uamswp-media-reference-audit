@@ -91,9 +91,10 @@ it('cuts a set that is over the limit to the first IDs, and keeps one exactly at
     $exact = range(1, 5000);
     $over = range(1, 5001);
 
-    expect(UAMS_MRA_Selection::store($exact))->toBe($exact)
-        ->and(UAMS_MRA_Selection::store($over))->toBe($exact)
-        ->and(UAMS_MRA_Selection::store(range(1, 6000)))->toBe($exact);
+    // Compared as booleans: a failed `toBe()` on 5000-item arrays builds a diff slow enough to time out a mutation run.
+    expect(UAMS_MRA_Selection::store($exact) === $exact)->toBeTrue()
+        ->and(UAMS_MRA_Selection::store($over) === $exact)->toBeTrue()
+        ->and(UAMS_MRA_Selection::store(range(1, 6000)) === $exact)->toBeTrue();
 });
 
 it('counts the limit after repeats and zeros are gone', function (): void {
@@ -102,7 +103,7 @@ it('counts the limit after repeats and zeros are gone', function (): void {
 
     $ids = array_merge(range(1, 5000), range(1, 5000), [0, 0]);
 
-    expect(UAMS_MRA_Selection::store($ids))->toBe(range(1, 5000));
+    expect(UAMS_MRA_Selection::store($ids) === range(1, 5000))->toBeTrue();
 });
 
 it('reads the stored set back as integers', function (): void {

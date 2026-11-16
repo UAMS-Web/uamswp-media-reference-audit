@@ -45,6 +45,10 @@
             "@test:integration"
         ],
         "test:unit": "pest",
+        "mutate": [
+            "Composer\\Config::disableProcessTimeout",
+            "pest tests/Unit/*Test.php --mutate --covered-only --path=includes"
+        ],
         "test:integration": "@php tests/Integration/vendor/bin/phpunit --configuration tests/Integration/phpunit.xml",
         "test:phpcs": "phpcs",
         "lint:floor": "@php scripts/lint-floor.php"
@@ -54,6 +58,7 @@
         "setup:integration": "Install the Integration suite's own Composer setup (PHPUnit 9.6, wp-phpunit, the polyfills).",
         "test": "Run both suites, each in its own process, so the Unit suite never sees WordPress.",
         "test:unit": "Run the Pest suite that needs no WordPress and no database.",
+        "mutate": "Mutate the lines of includes/ that the Unit suite covers. The test files are named so each mutant child skips the directory scan that Patchwork's stream wrapper cannot do.",
         "test:integration": "Run the PHPUnit 9.6 suite that boots WordPress through wp-phpunit against the test database.",
         "lint:floor": "Parse every shipped PHP file with the PHP named in LINT_PHP (default: php), the supported floor."
     }
