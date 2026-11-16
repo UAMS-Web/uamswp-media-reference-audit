@@ -46,6 +46,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
     {
         $allowed = ['all', 'orphaned', 'unreferenced', 'unattached', 'weak', 'referenced'];
 
+        // The request holds its values as text.
+        /** @var array<string, string> $_REQUEST */
         // An absent name is not a view either, so it takes the same default as an unknown one.
         // A different fallback string would not be in the list, so it reads the same.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
@@ -230,6 +232,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
         $where = self::where_for_view(self::current_view());
         $params = [];
 
+        // The request holds its values as text.
+        /** @var array<string, string> $_REQUEST */
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $search = isset($_REQUEST['s']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['s']))) : '';
         if ($search !== '') {
@@ -273,6 +277,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
         // 'bytes' is the fallback below, so it needs no entry of its own.
         $orderby_allowed = ['title', 'post_date', 'attachment_id'];
+        // The request holds its values as text.
+        /** @var array<string, string> $_REQUEST */
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $orderby = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'bytes';
         $orderby = in_array($orderby, $orderby_allowed, true) ? $orderby : 'bytes';
@@ -312,6 +318,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public static function current_tier()
     {
+        // The request holds its values as text.
+        /** @var array<string, string> $_REQUEST */
         // A different fallback string is not a tier, so it reads as no tier.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -327,6 +335,8 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public static function current_disposition()
     {
+        // The request holds its values as text.
+        /** @var array<string, string> $_REQUEST */
         // A different fallback string is not a disposition, so it reads as any.
         // @pest-mutate-ignore:EmptyStringToNotEmpty
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -343,7 +353,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Checkbox column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     public function column_cb($item): string
     {
@@ -356,7 +366,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Thumbnail column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      * @return string
      */
     public function column_thumb($item)
@@ -377,7 +387,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * File column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     public function column_title($item): string
     {
@@ -404,7 +414,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Status column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     public function column_status($item): string
     {
@@ -444,7 +454,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * and must never look like the same thing on screen.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     protected function render_badge($item): string
     {
@@ -501,7 +511,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Attached to column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      * @return string
      */
     public function column_attached($item)
@@ -527,7 +537,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * References column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     public function column_refs($item): string
     {
@@ -570,7 +580,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Disk space column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      * @return string
      */
     public function column_bytes($item)
@@ -586,14 +596,18 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Date column.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      * @return string
      */
     public function column_date($item)
     {
+        // The option is a date format, which is text.
+        /** @var string $format */
+        $format = get_option('date_format');
+
         // Equivalent: esc_html() reads false as the empty string, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
-        return esc_html((string) mysql2date(get_option('date_format'), $item['post_date']));
+        return esc_html((string) mysql2date($format, $item['post_date']));
     }
 
     /**
@@ -608,7 +622,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
      * Decision column: the tier the scan derived, and the mark a person set.
      *
      * @param  array  $item  Row.
-     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $item
      */
     public function column_triage($item): string
     {

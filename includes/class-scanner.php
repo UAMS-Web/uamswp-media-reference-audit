@@ -1406,7 +1406,7 @@ class UAMS_MRA_Scanner
      * @param  string  $label  Readable source name.
      * @param  int  $source_pk
      * @param  string  $source_key
-     * @return list<array<string, mixed>> Rows for UAMS_MRA_Store::add_offsite().
+     * @return list<array<string, int|string>> Rows for UAMS_MRA_Store::add_offsite().
      */
     protected static function collect_offsite($content, $source_type, $source_id, $label, $source_pk = 0, $source_key = ''): array
     {
