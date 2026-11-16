@@ -405,7 +405,7 @@ class UAMS_MRA_Archive
      * @param  int  $id  Attachment ID.
      * @param  string  $local  Path inside the zip.
      * @param  int  $size  Bytes.
-     * @return list<int|string>
+     * @return list<int|string|null>
      */
     protected static function manifest_row($id, $local, $size): array
     {
@@ -486,7 +486,7 @@ class UAMS_MRA_Archive
      *
      * @param  ZipArchive  $zip  Open archive.
      * @param  array  $rows  Manifest rows.
-     * @param  list<list<int|string>>  $rows
+     * @param  list<list<int|string|null>>  $rows
      */
     protected static function write_manifest($zip, array $rows): void
     {

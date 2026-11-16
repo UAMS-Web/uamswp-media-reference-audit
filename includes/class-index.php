@@ -23,7 +23,9 @@ class UAMS_MRA_Index
     public static function normalize($file): array
     {
         $file = (string) $file;
-        $file = preg_replace('#[?\#].*$#', '', $file);
+        // preg_replace() returns null only on a regex engine failure, and rawurldecode() reads null as the empty string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        $file = (string) preg_replace('#[?\#].*$#', '', $file);
         $file = rawurldecode($file);
 
         // One separator, whatever the source wrote: dirname() and basename() read a
