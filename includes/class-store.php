@@ -6,6 +6,11 @@
 defined('ABSPATH') || exit;
 
 /**
+ * A read of the offsite media table failed.
+ */
+class UAMS_MRA_Offsite_Read_Exception extends RuntimeException {}
+
+/**
  * Storage layer.
  */
 class UAMS_MRA_Store
@@ -506,21 +511,49 @@ class UAMS_MRA_Store
     /**
      * Hosts serving offsite media, most references first.
      *
-     * @return array<int, array<string, mixed>>|null
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
-    public static function offsite_hosts()
+    public static function offsite_hosts(): array
     {
         global $wpdb;
         $t = self::offsite_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        return $wpdb->get_results(
+        $rows = $wpdb->get_results(
             "SELECT host, COUNT(*) AS hits, COUNT(DISTINCT url_hash) AS files
 			 FROM {$t} GROUP BY host ORDER BY hits DESC",
             ARRAY_A
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        return self::offsite_rows($rows, 'the offsite hosts');
+    }
+
+    /**
+     * Pass a successful read through, or stop on a failed one.
+     *
+     * With `ARRAY_A`, `$wpdb->get_results()` returns an empty list when the query fails, and null only when the
+     * query text is empty (for example when `prepare()` refuses its arguments). Neither can be told from a table with
+     * no rows, so the database error is read as well.
+     *
+     * @param  array<int, array<string, mixed>>|null  $rows  What `get_results()` returned.
+     * @param  string  $what  What was being read, for the message.
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws UAMS_MRA_Offsite_Read_Exception When the read failed.
+     */
+    private static function offsite_rows($rows, string $what): array
+    {
+        global $wpdb;
+
+        if ($rows === null || $wpdb->last_error !== '') {
+            throw new UAMS_MRA_Offsite_Read_Exception(sprintf('Could not read %s: %s', $what, $wpdb->last_error !== '' ? $wpdb->last_error : 'the query was empty'));
+        }
+
+        return $rows;
     }
 
     /**
@@ -529,9 +562,11 @@ class UAMS_MRA_Store
      * @param  string  $host  Limit to one host, or '' for all.
      * @param  int  $limit  Rows.
      * @param  int  $offset  Offset.
-     * @return array<int, array<string, mixed>>|null
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
-    public static function offsite_files($host = '', $limit = 100, $offset = 0)
+    public static function offsite_files($host = '', $limit = 100, $offset = 0): array
     {
         global $wpdb;
 
@@ -563,7 +598,9 @@ class UAMS_MRA_Store
 				LIMIT %d OFFSET %d";
 
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        return $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A);
+        $rows = $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A);
+
+        return self::offsite_rows($rows, 'the offsite files');
     }
 
     /**
@@ -594,16 +631,18 @@ class UAMS_MRA_Store
      *
      * @param  string  $url_hash  Hash from offsite_files().
      * @param  int  $limit  Rows.
-     * @return array<int, array<string, mixed>>|null
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws UAMS_MRA_Offsite_Read_Exception When the read fails.
      */
-    public static function offsite_sources($url_hash, $limit = 25)
+    public static function offsite_sources($url_hash, $limit = 25): array
     {
         global $wpdb;
         $t = self::offsite_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        return $wpdb->get_results(
+        $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT source_type, source_id, source_label FROM {$t}
 				 WHERE url_hash = %s ORDER BY source_type ASC, source_id ASC LIMIT %d",
@@ -613,6 +652,8 @@ class UAMS_MRA_Store
             ARRAY_A
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        return self::offsite_rows($rows, 'where an offsite file is stored');
     }
 
     /**
