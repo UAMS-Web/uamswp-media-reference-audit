@@ -599,6 +599,8 @@ describe('why', function (): void {
             return $refs;
         });
 
+        // Every caller passes the positional arguments as a list of strings.
+        /** @var list<string> $args */
         (new UAMS_MRA_CLI)->why($args);
 
         return $asked;

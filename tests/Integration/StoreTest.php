@@ -310,6 +310,7 @@ final class StoreTest extends IntegrationTestCase
             ['attachment_id' => 4, 'source_type' => 'meta', 'source_id' => 9, 'source_label' => 'Meta', 'site_id' => 3, 'confidence' => 2],
         ]);
 
+        /** @var list<object{source_type: string, site_id: string, confidence: string, source_label: string}> $refs */
         $refs = UAMS_MRA_Store::get_refs(4);
 
         $this->assertCount(2, $refs);
@@ -346,7 +347,9 @@ final class StoreTest extends IntegrationTestCase
             ['attachment_id' => 1, 'source_type' => 'b', 'source_id' => 1, 'source_label' => str_repeat('é', 251)],
         ]);
 
-        $labels = array_map(static fn (object $ref): string => $ref->source_label, UAMS_MRA_Store::get_refs(1));
+        /** @var list<object{source_label: string}> $refs */
+        $refs = UAMS_MRA_Store::get_refs(1);
+        $labels = array_map(static fn (object $ref): string => $ref->source_label, $refs);
 
         $this->assertSame([str_repeat('é', 250), str_repeat('é', 250)], $labels);
     }
@@ -380,7 +383,9 @@ final class StoreTest extends IntegrationTestCase
             ['attachment_id' => 2, 'source_type' => 'other', 'source_id' => 4, 'source_label' => '', 'confidence' => 2],
         ]);
 
-        $types = array_map(static fn (object $ref): string => $ref->source_type, UAMS_MRA_Store::get_refs(1));
+        /** @var list<object{source_type: string}> $refs */
+        $refs = UAMS_MRA_Store::get_refs(1);
+        $types = array_map(static fn (object $ref): string => $ref->source_type, $refs);
 
         $this->assertSame(['strong-first', 'strong-second', 'weak-first'], $types);
     }

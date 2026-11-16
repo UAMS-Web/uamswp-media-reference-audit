@@ -50,7 +50,7 @@ final class TriageTierSqlTest extends IntegrationTestCase
     /**
      * Attachment IDs the results table selects under a WHERE fragment.
      *
-     * @return list<int>
+     * @return array<int, int>
      */
     private function selected(string $where): array
     {

@@ -208,7 +208,12 @@ it('reads the scheme of a URL in either case, and not one that only mentions it'
 
 it('falls back to the filename of a URL the site does not recognize', function (): void {
     when('attachment_url_to_postid')->justReturn(0);
-    when('wp_parse_url')->alias(static fn (string $url, int $component): string|int|null|false => parse_url($url, $component));
+    when('wp_parse_url')->alias(static function (string $url, int $component): string|int|null|false {
+        /** @var string|int|null|false $part */
+        $part = parse_url($url, $component);
+
+        return $part;
+    });
     $GLOBALS['wpdb'] = selection_wpdb(['31']);
 
     $out = UAMS_MRA_Selection::resolve_text('https://cdn.example.net/media/2025/hero%20image.jpg?v=2');
