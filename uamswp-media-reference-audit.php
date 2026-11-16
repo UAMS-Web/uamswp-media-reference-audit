@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Plugin Name:       UAMS Media Reference Audit
+ * Plugin Name:       UAMSWP Media Reference Audit
  * Plugin URI:        https://github.com/UAMS-Web/uamswp-media-reference-audit
  * Description:       Finds media that is not attached to any post and media that is not referenced anywhere in your content, meta, options, or menus. Report first, delete second.
  * Version:           1.11.0

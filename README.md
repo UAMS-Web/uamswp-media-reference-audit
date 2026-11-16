@@ -1,4 +1,4 @@
-# UAMS Media Reference Audit
+# UAMSWP Media Reference Audit
 
 Finds media that is not attached to any post, and media that nothing in your site actually references. Reports first. Deletes only when you tell it to.
 

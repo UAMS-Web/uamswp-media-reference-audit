@@ -32,7 +32,7 @@ $table_prefix = 'wptests_';
 
 define('WP_TESTS_DOMAIN', 'example.org');
 define('WP_TESTS_EMAIL', 'admin@example.org');
-define('WP_TESTS_TITLE', 'UAMS Media Reference Audit Tests');
+define('WP_TESTS_TITLE', 'UAMSWP Media Reference Audit Tests');
 define('WP_PHP_BINARY', 'php');
 
 /*
