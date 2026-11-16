@@ -194,6 +194,7 @@ it('passes slashed text to wp_update_post so block JSON keeps its backslashes', 
     // is the intended text with every backslash doubled.
     $intended = '<!-- wp:image {"url":"https:\\/\\/new.example.edu\\/wp-content\\/uploads\\/2024\\/05\\/report.pdf"} -->';
 
+    /** @var array<string, mixed> $captured */
     expect($result['status'])->toBe('applied')
         ->and(stripslashes($captured['post_content']))->toBe($intended)
         ->and($captured['post_content'])->toBe(addslashes($intended));

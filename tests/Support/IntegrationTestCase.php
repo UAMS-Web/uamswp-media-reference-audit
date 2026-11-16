@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace UamswpMediaReferenceAudit\Tests\Support;
 
+use WP_Post;
 use WP_UnitTestCase;
 
 /**
@@ -33,6 +34,22 @@ abstract class IntegrationTestCase extends WP_UnitTestCase
         static $typed = null;
 
         return $typed ??= new FixtureFactories(parent::factory());
+    }
+
+    /**
+     * A post the test has just made, read back, so its fields can be read without a null check.
+     *
+     * Where the post is missing the test fails here, naming the ID, instead of reading a property of `null`.
+     */
+    protected static function existingPost(int $id): WP_Post
+    {
+        $post = get_post($id);
+
+        if (! $post instanceof WP_Post) {
+            self::fail("Post {$id} does not exist.");
+        }
+
+        return $post;
     }
 }
 

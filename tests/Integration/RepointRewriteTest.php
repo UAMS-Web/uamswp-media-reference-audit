@@ -91,12 +91,12 @@ final class RepointRewriteTest extends IntegrationTestCase
         $post_id = self::factory()->post->create(['post_content' => wp_slash($content)]);
 
         // Confirm the starting text is what the test means.
-        $this->assertSame($content, get_post($post_id)->post_content);
+        $this->assertSame($content, self::existingPost($post_id)->post_content);
 
         $result = $this->rewrite(['source_type' => 'content', 'source_pk' => $post_id]);
 
         $this->assertSame('applied', $result['status']);
-        $this->assertSame($expected, get_post($post_id)->post_content);
+        $this->assertSame($expected, self::existingPost($post_id)->post_content);
     }
 
     public function test_a_page_is_left_alone_when_the_user_cannot_save_unfiltered_html(): void
@@ -112,7 +112,7 @@ final class RepointRewriteTest extends IntegrationTestCase
 
         $this->assertIsArray($result);
         $this->assertSame('failed', $result['status']);
-        $this->assertSame($content, get_post($post_id)->post_content);
+        $this->assertSame($content, self::existingPost($post_id)->post_content);
     }
 
     public function test_a_rewritten_post_keeps_the_previous_text_as_a_revision(): void
@@ -129,7 +129,7 @@ final class RepointRewriteTest extends IntegrationTestCase
         $texts = array_map(static fn (WP_Post $revision) => $revision->post_content, $revisions);
 
         $this->assertContains('See '.self::OLD_URL.' now', $texts);
-        $this->assertSame('See '.self::NEW_URL.' now', get_post($post_id)->post_content);
+        $this->assertSame('See '.self::NEW_URL.' now', self::existingPost($post_id)->post_content);
     }
 
     public function test_a_serialized_meta_value_is_rewritten_and_still_unserializes(): void
@@ -229,7 +229,7 @@ final class RepointRewriteTest extends IntegrationTestCase
         $result = $this->rewrite(['source_type' => 'revision', 'source_pk' => $post_id]);
 
         $this->assertSame('skipped', $result['status']);
-        $this->assertSame(self::OLD_URL, get_post($post_id)->post_content);
+        $this->assertSame(self::OLD_URL, self::existingPost($post_id)->post_content);
     }
 }
 

@@ -302,6 +302,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_fatal_is_recorded_with_its_message_place_and_context(): void
     {
+        /** @var array<string, mixed> $result */
         $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal('while testing'); trigger_a_fatal_error();");
 
         $this->assertSame('while testing', $result['context']);
@@ -325,6 +326,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_user_error_is_recorded_as_a_fatal(): void
     {
+        /** @var array<string, mixed> $result */
         $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal('user'); trigger_error('stop here', E_USER_ERROR);");
 
         $this->assertSame('stop here', $result['message']);
@@ -333,6 +335,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_fatal_with_no_context_given_is_recorded_with_an_empty_one(): void
     {
+        /** @var array<string, mixed> $result */
         $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal(); trigger_error('stop', E_USER_ERROR);");
 
         $this->assertSame('', $result['context']);
@@ -849,7 +852,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('0', $this->stored($other)['applied']);
         $this->assertSame('0', $this->stored($blank)['applied']);
         $this->assertSame('1', $this->stored($closed)['applied']);
-        $this->assertSame('See '.self::NEW, get_post($ok)->post_content);
+        $this->assertSame('See '.self::NEW, self::existingPost($ok)->post_content);
 
         $job = UAMS_MRA_Repoint::step();
         $this->assertSame('apply', $job['phase']);
@@ -901,7 +904,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $this->assertSame(['status' => 'skipped', 'applied' => 2], $this->rewrite(['source_type' => 'content', 'source_pk' => $post, 'target_url' => '']));
         $this->assertSame(['status' => 'skipped', 'applied' => 2], $this->rewrite(['source_type' => 'content', 'source_pk' => $post, 'target_url' => self::OLD]));
-        $this->assertSame('See '.self::OLD, get_post($post)->post_content);
+        $this->assertSame('See '.self::OLD, self::existingPost($post)->post_content);
     }
 
     public function test_a_row_of_a_type_it_does_not_know_is_skipped(): void
@@ -916,8 +919,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $this->assertSame(['status' => 'applied', 'applied' => 1], $this->rewrite(['source_type' => 'content', 'source_pk' => $post]));
 
-        $this->assertSame('Body '.self::NEW, get_post($post)->post_content);
-        $this->assertSame('Short '.self::NEW, get_post($post)->post_excerpt);
+        $this->assertSame('Body '.self::NEW, self::existingPost($post)->post_content);
+        $this->assertSame('Short '.self::NEW, self::existingPost($post)->post_excerpt);
     }
 
     public function test_a_post_with_the_url_only_in_its_excerpt_or_only_in_its_content_is_still_rewritten(): void
@@ -928,19 +931,19 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('applied', $this->rewrite(['source_type' => 'content', 'source_pk' => $excerpt])['status']);
         $this->assertSame('applied', $this->rewrite(['source_type' => 'content', 'source_pk' => $content])['status']);
 
-        $this->assertSame('Short '.self::NEW, get_post($excerpt)->post_excerpt);
-        $this->assertSame('Plain', get_post($excerpt)->post_content);
-        $this->assertSame('Body '.self::NEW, get_post($content)->post_content);
-        $this->assertSame('Plain', get_post($content)->post_excerpt);
+        $this->assertSame('Short '.self::NEW, self::existingPost($excerpt)->post_excerpt);
+        $this->assertSame('Plain', self::existingPost($excerpt)->post_content);
+        $this->assertSame('Body '.self::NEW, self::existingPost($content)->post_content);
+        $this->assertSame('Plain', self::existingPost($content)->post_excerpt);
     }
 
     public function test_a_post_that_no_longer_holds_the_url_is_skipped_and_left_as_it_is(): void
     {
         $post = self::factory()->post->create(['post_content' => 'Edited since the scan', 'post_excerpt' => 'Plain']);
-        $before = get_post($post)->post_modified;
+        $before = self::existingPost($post)->post_modified;
 
         $this->assertSame(['status' => 'skipped', 'applied' => 2], $this->rewrite(['source_type' => 'content', 'source_pk' => $post]));
-        $this->assertSame($before, get_post($post)->post_modified);
+        $this->assertSame($before, self::existingPost($post)->post_modified);
         $this->assertSame([], wp_get_post_revisions($post));
     }
 
@@ -956,7 +959,7 @@ final class RepointJobsTest extends IntegrationTestCase
         wp_set_current_user(self::factory()->user->create(['role' => 'author']));
 
         $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'content', 'source_pk' => $post]));
-        $this->assertSame('See '.self::OLD, get_post($post)->post_content);
+        $this->assertSame('See '.self::OLD, self::existingPost($post)->post_content);
     }
 
     public function test_a_post_whose_save_core_refuses_fails(): void
@@ -966,7 +969,7 @@ final class RepointJobsTest extends IntegrationTestCase
         add_filter('wp_insert_post_empty_content', '__return_true');
 
         $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'content', 'source_pk' => $post]));
-        $this->assertSame('See '.self::OLD, get_post($post)->post_content);
+        $this->assertSame('See '.self::OLD, self::existingPost($post)->post_content);
     }
 
     public function test_an_option_is_rewritten_unserialized_and_saved_once(): void
@@ -1290,10 +1293,10 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('sideloaded', $row['verdict']);
         $this->assertGreaterThan(0, $attachment);
         $this->assertSame((string) wp_get_attachment_url($attachment), $row['target_url']);
-        $this->assertSame('inherit', get_post($attachment)->post_status);
-        $this->assertSame('image/jpeg', get_post($attachment)->post_mime_type);
-        $this->assertSame('pulled', get_post($attachment)->post_title);
-        $this->assertSame(21, (int) get_post($attachment)->post_parent);
+        $this->assertSame('inherit', self::existingPost($attachment)->post_status);
+        $this->assertSame('image/jpeg', self::existingPost($attachment)->post_mime_type);
+        $this->assertSame('pulled', self::existingPost($attachment)->post_title);
+        $this->assertSame(21, (int) self::existingPost($attachment)->post_parent);
         $this->assertSame(400, $this->attachmentMeta($attachment)['width']);
         $this->assertNotSame([], $this->attachmentMeta($attachment)['sizes']);
         $this->assertFileExists((string) get_attached_file($attachment));
@@ -1551,9 +1554,9 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->files[] = (string) get_attached_file($attachment);
 
         $this->assertSame(1, $job['applied']);
-        $this->assertSame('application/pdf', get_post($attachment)->post_mime_type);
-        $this->assertSame('notes', get_post($attachment)->post_title);
-        $this->assertSame(0, (int) get_post($attachment)->post_parent);
+        $this->assertSame('application/pdf', self::existingPost($attachment)->post_mime_type);
+        $this->assertSame('notes', self::existingPost($attachment)->post_title);
+        $this->assertSame(0, (int) self::existingPost($attachment)->post_parent);
     }
 
     /**
@@ -1773,8 +1776,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $id = $this->call('sideload_one', $url);
         $this->assertIsInt($id);
-        $this->assertSame('direct', get_post($id)->post_title);
-        $this->assertSame('', get_post($id)->post_content);
+        $this->assertSame('direct', self::existingPost($id)->post_title);
+        $this->assertSame('', self::existingPost($id)->post_content);
         $this->files[] = (string) get_attached_file($id);
         $this->assertSame(60, $this->lastGet()[2]['timeout']);
 

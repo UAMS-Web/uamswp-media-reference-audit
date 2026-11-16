@@ -1112,7 +1112,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same('1', $row['ref_count_strict']);
         $this->same('0', $row['bytes']);
         $this->same('image/jpeg', $row['mime']);
-        $this->same(get_post($a)->post_date, $row['post_date']);
+        $this->same(self::existingPost($a)->post_date, $row['post_date']);
         $this->same('Alpha', $row['title']);
         $this->same('2025/11/a.jpg', $row['file']);
         $this->assertGreaterThanOrEqual($before - 2, strtotime($row['scanned_at'].' UTC'));
@@ -1399,7 +1399,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         [$parent, $files] = $this->parentWithFiles(1, ['post_title' => 'Showcase']);
         [$other, $other_files] = $this->parentWithFiles(1);
-        $own = (string) get_post($files[0])->ID;
+        $own = (string) self::existingPost($files[0])->ID;
         $served = $this->url('2025/11/f'.$parent.'-0.jpg');
         $elsewhere = $this->url('2025/11/f'.$other.'-0.jpg');
 
@@ -1408,7 +1408,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $state = $this->scanStep($this->renderState([$parent]));
 
         $this->assertCount(1, $log);
-        $this->same(add_query_arg('uams-mra-check', 'tok12345', (string) get_permalink($parent)), $log[0]['url']);
+        $this->same(add_query_arg('uams-mra-check', 'tok12345', (string) get_permalink($parent)), $log->getArrayCopy()[0]['url']);
         $this->same([
             ['attachment_id' => $own, 'source_type' => 'render', 'source_id' => (string) $parent, 'source_label' => 'Rendered page: Showcase', 'site_id' => '0', 'confidence' => '2'],
             ['attachment_id' => (string) $other_files[0], 'source_type' => 'render', 'source_id' => (string) $parent, 'source_label' => 'Rendered page: Showcase', 'site_id' => '0', 'confidence' => '2'],
@@ -1611,13 +1611,13 @@ final class ScannerStepsTest extends IntegrationTestCase
         $log = $this->serve(fn (): string => '<p>ok</p>');
 
         $this->same('<p>ok</p>', $this->fetch('https://site.example.edu/page/'));
-        $this->same('https://site.example.edu/page/?uams-mra-check=tok12345', $log[0]['url']);
+        $this->same('https://site.example.edu/page/?uams-mra-check=tok12345', $log->getArrayCopy()[0]['url']);
 
         $this->fetch('https://site.example.edu/page/?a=1');
-        $this->same('https://site.example.edu/page/?a=1&uams-mra-check=tok12345', $log[1]['url']);
+        $this->same('https://site.example.edu/page/?a=1&uams-mra-check=tok12345', $log->getArrayCopy()[1]['url']);
 
         $this->fetch('https://site.example.edu/page/', '');
-        $this->same('https://site.example.edu/page/', $log[2]['url']);
+        $this->same('https://site.example.edu/page/', $log->getArrayCopy()[2]['url']);
     }
 
     public function test_the_cache_bust_can_be_turned_off_per_page(): void
@@ -1633,7 +1633,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->fetch('https://site.example.edu/page/');
 
         $this->same([[true, 'https://site.example.edu/page/']], $seen);
-        $this->same('https://site.example.edu/page/', $log[0]['url']);
+        $this->same('https://site.example.edu/page/', $log->getArrayCopy()[0]['url']);
     }
 
     public function test_the_filter_is_not_asked_when_there_is_no_token(): void
@@ -1657,7 +1657,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->fetch();
 
-        $args = $log[0]['args'];
+        $args = $log->getArrayCopy()[0]['args'];
 
         $this->same(15, $args['timeout']);
         $this->same(3, $args['redirection']);
@@ -1682,8 +1682,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->fetch('https://site.example.edu/page/');
 
         $this->same([false, 'https://site.example.edu/page/'], $given);
-        $this->same(99, $log[0]['args']['timeout']);
-        $this->assertFalse($log[0]['args']['sslverify']);
+        $this->same(99, $log->getArrayCopy()[0]['args']['timeout']);
+        $this->assertFalse($log->getArrayCopy()[0]['args']['sslverify']);
     }
 
     public function test_a_fetch_that_fails_or_answers_with_anything_but_a_page_returns_nothing(): void
@@ -2182,7 +2182,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->scanStep($state);
 
-        $this->same((string) get_permalink($parent), $log[0]['url']);
+        $this->same((string) get_permalink($parent), $log->getArrayCopy()[0]['url']);
     }
 
     public function test_a_revision_row_and_an_empty_value_do_not_end_the_postmeta_batch(): void
