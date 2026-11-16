@@ -7,8 +7,9 @@ name: CI
 # the chain's defaults of Linux, Windows and macOS legs. The chain's own header lists every
 # input and its default.
 #
-# Left off, each for a stated reason:
-# - `mutate`: mutation testing is a separate ticket (UAMS-Web/uamswp-media-reference-audit#31).
+# The `mutate` job runs `composer mutate` on `ubuntu-latest` with PCOV. It mutates the lines of `includes/`
+# that the Unit suite covers: code reachable only from the Integration suite (PHPUnit 9.6, which Pest cannot
+# run) is pinned there and is not in the job's population.
 #
 # `integration` stays here as a plain job beside the call, because its MySQL service and the
 # WordPress download are not part of the chain. It runs the Integration suite on a real WordPress
@@ -52,12 +53,10 @@ jobs:
     # Pinned to a release tag, never a branch. To take a newer chain, move the pin to the next tag.
     uses: UAMS-Web/uams-ci-workflows/.github/workflows/ci.yml@v0.13.0
     with:
-      mutate: false
-      # With `mutate` off the chain skips `mutate-ignore`, and the `legs` check at this pin does
-      # not read that skip as intended, so it fails. Keeping the annotation audit on, over the
-      # plugin source, passes it and audits annotations ahead of UAMS-Web/uamswp-media-reference-audit#31.
-      # Remove both lines once a chain release carries UAMS-Web/uams-ci-workflows#53.
-      mutate-ignore: true
+      mutate: true
+      # A pull request or a push mutates the changed files under these paths; a manual run mutates
+      # everything `composer mutate` covers.
+      mutate-paths: includes uamswp-media-reference-audit.php
       mutate-ignore-paths: includes
       floor-lint: true
       floor-lint-php: '8.2'
