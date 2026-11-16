@@ -37,6 +37,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Weekly, Monday 07:17 UTC (about 01:17 Central). A scheduled run mutates everything `composer mutate`
+  # covers, under the chain's `mutate-full-timeout-minutes` (default 180), so it catches decay no pull
+  # request touches. A pull request keeps the 45-minute `mutate-timeout-minutes` cap. A schedule runs on
+  # the default branch, and GitHub disables it after 60 days without repository activity.
+  schedule:
+    - cron: '17 7 * * 1'
 
 # A new push to a pull request cancels that pull request's stale run. Every other run gets a
 # group of its own, keyed on the commit, so a later push never cancels it.
