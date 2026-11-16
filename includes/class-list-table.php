@@ -388,9 +388,11 @@ class UAMS_MRA_List_Table extends WP_List_Table
         $out .= '<div class="uams-mra-file">'.esc_html($item['file']).'</div>';
         $out .= '<div class="uams-mra-meta">ID '.$id.' &middot; '.esc_html($item['mime']).'</div>';
 
+        // Equivalent: esc_url() reads false as the empty string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         $actions = [
             'edit' => '<a href="'.esc_url(get_edit_post_link($id)).'">'.esc_html__('Edit', 'uams-mra').'</a>',
-            'view' => '<a href="'.esc_url(wp_get_attachment_url($id)).'" target="_blank" rel="noopener">'.esc_html__('Open file', 'uams-mra').'</a>',
+            'view' => '<a href="'.esc_url((string) wp_get_attachment_url($id)).'" target="_blank" rel="noopener">'.esc_html__('Open file', 'uams-mra').'</a>',
         ];
 
         return $out.$this->row_actions($actions);
@@ -533,6 +535,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
             return '<span class="uams-mra-muted">'.esc_html__('None found', 'uams-mra').'</span>';
         }
 
+        /** @var array<int, object{source_type: string, source_id: string, source_label: string, confidence: string, site_id: string}> $refs */
         $refs = UAMS_MRA_Store::get_refs((int) $item['attachment_id'], 5);
         $list = [];
 
@@ -572,7 +575,9 @@ class UAMS_MRA_List_Table extends WP_List_Table
     {
         $bytes = (int) $item['bytes'];
 
-        return $bytes ? esc_html(size_format($bytes, 1)) : '<span class="uams-mra-muted">'.esc_html__('File missing', 'uams-mra').'</span>';
+        // Equivalent: esc_html() reads false as the empty string, and size_format() returns false only for a negative size, which the cast above cannot produce.
+        // @pest-mutate-ignore:RemoveStringCast
+        return $bytes ? esc_html((string) size_format($bytes, 1)) : '<span class="uams-mra-muted">'.esc_html__('File missing', 'uams-mra').'</span>';
     }
 
     /**
@@ -584,7 +589,9 @@ class UAMS_MRA_List_Table extends WP_List_Table
      */
     public function column_date($item)
     {
-        return esc_html(mysql2date(get_option('date_format'), $item['post_date']));
+        // Equivalent: esc_html() reads false as the empty string, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        return esc_html((string) mysql2date(get_option('date_format'), $item['post_date']));
     }
 
     /**

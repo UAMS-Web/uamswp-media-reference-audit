@@ -1,5 +1,7 @@
 <?php
 
+use cli\progress\Bar;
+
 use function WP_CLI\Utils\format_items;
 use function WP_CLI\Utils\make_progress_bar;
 
@@ -35,12 +37,16 @@ class UAMS_MRA_CLI
     {
         UAMS_MRA_Store::install();
 
-        $state = UAMS_MRA_Scanner::start();
+        $started = UAMS_MRA_Scanner::start();
 
         // start() refuses while a repoint or download is running; the admin screen shows the same message.
-        if (is_wp_error($state)) {
-            WP_CLI::error($state->get_error_message());
+        if (is_wp_error($started)) {
+            WP_CLI::error($started->get_error_message());
         }
+
+        // WP_CLI::error() ends the process, so a refusal never reaches here.
+        /** @var array<string, mixed> $state */
+        $state = $started;
 
         $quiet = isset($assoc_args['quiet']);
 
@@ -232,6 +238,8 @@ class UAMS_MRA_CLI
         WP_CLI::confirm(sprintf('Permanently delete %d files and free %s?', count($rows), size_format($bytes, 1)), $assoc_args);
 
         $deleted = 0;
+        // make_progress_bar() hands back a no-op object when the bar is hidden; it answers these two calls and ignores them.
+        /** @var Bar $progress */
         $progress = make_progress_bar('Deleting', count($rows));
 
         foreach ($rows as $row) {
@@ -262,6 +270,7 @@ class UAMS_MRA_CLI
     public function why($args): void
     {
         $id = (int) $args[0];
+        /** @var array<int, object{source_type: string, source_id: string, source_label: string, confidence: string, site_id: string}> $refs */
         $refs = UAMS_MRA_Store::get_refs($id, 100);
 
         if (empty($refs)) {

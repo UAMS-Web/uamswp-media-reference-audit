@@ -85,7 +85,7 @@ class UAMS_MRA_Triage
      * because its absence from the database says very little about whether it
      * is still in circulation.
      *
-     * @return list<string>
+     * @return array<string>
      */
     public static function distributable_mimes(): array
     {
@@ -267,7 +267,7 @@ class UAMS_MRA_Triage
      * has since been deleted or excluded cannot resurface.
      *
      * @param  string  $disposition  Disposition key.
-     * @return list<int> Attachment IDs.
+     * @return array<int> Attachment IDs.
      */
     public static function ids_marked($disposition): array
     {
