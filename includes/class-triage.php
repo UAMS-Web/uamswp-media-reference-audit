@@ -285,26 +285,20 @@ class UAMS_MRA_Triage
             return [];
         }
 
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
-        /** @var literal-string $postmeta_table */
-        $postmeta_table = $wpdb->postmeta;
-
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         /** @var list<string> $ids */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $ids = $wpdb->get_col(
             $wpdb->prepare(
-                "SELECT r.attachment_id
-				 FROM {$table} r
-				 INNER JOIN {$postmeta_table} pm
+                'SELECT r.attachment_id
+				 FROM %i r
+				 INNER JOIN %i pm
 				         ON pm.post_id = r.attachment_id AND pm.meta_key = %s
-				 WHERE pm.meta_value = %s",
+				 WHERE pm.meta_value = %s',
+                UAMS_MRA_Store::results_table(),
+                $wpdb->postmeta,
                 self::META_DISPOSITION,
                 $disposition
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return array_map(intval(...), (array) $ids);
     }
@@ -323,10 +317,7 @@ class UAMS_MRA_Triage
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
-        /** @var literal-string $postmeta_table */
-        $postmeta_table = $wpdb->postmeta;
         /** @var literal-string $scope */
         $scope = $scope === '' ? '1=1' : $scope;
 
@@ -341,26 +332,27 @@ class UAMS_MRA_Triage
         ];
 
         foreach (array_keys(self::tiers()) as $tier) {
+            /** @var literal-string $where */
             $where = self::tier_where($tier);
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $out['tier'][$tier] = (int) $wpdb->get_var(
-                "SELECT COUNT(*) FROM {$table} WHERE ( {$scope} ) AND ( {$where} )"
+                $wpdb->prepare("SELECT COUNT(*) FROM %i WHERE ( {$scope} ) AND ( {$where} )", $table)
             );
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         }
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the scope is assembled from literals, and the table names and every value are bound through `prepare()`.
         /** @var list<array{d: string, n: string, b: string}>|null $rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT pm.meta_value AS d, COUNT(*) AS n, SUM(r.bytes) AS b
-				 FROM {$table} r
-				 INNER JOIN {$postmeta_table} pm
+				 FROM %i r
+				 INNER JOIN %i pm
 				         ON pm.post_id = r.attachment_id AND pm.meta_key = %s
 				 WHERE pm.meta_value <> '' AND ( {$scope} )
 				 GROUP BY pm.meta_value",
+                $table,
+                $wpdb->postmeta,
                 self::META_DISPOSITION
             ),
             ARRAY_A
@@ -387,12 +379,11 @@ class UAMS_MRA_Triage
             }
         }
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the scope is assembled from literals, and the table name is bound through `prepare()`.
         // Equivalent: the total is only subtracted from, and a numeric string or a null
         // subtracts the same as the integer.
         // @pest-mutate-ignore:RemoveIntegerCast
-        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE ( {$scope} )");
+        $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %i WHERE ( {$scope} )", $table));
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $out['none'] = max(0, $total - $marked);
 

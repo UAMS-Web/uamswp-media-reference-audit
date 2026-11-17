@@ -47,7 +47,7 @@ function selection_wpdb(array $answers = []): object
             /** @var list<bool|float|int|string|null> $values */
             $values = $args;
 
-            return vsprintf(str_replace('%s', "'%s'", $query), $values);
+            return vsprintf(str_replace('%i', '%s', str_replace('%s', "'%s'", $query)), $values);
         }
 
         public function get_var(string $query): mixed

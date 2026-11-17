@@ -41,23 +41,17 @@ class UAMS_MRA_Selection
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
         $query = UAMS_MRA_List_Table::build_query();
         /** @var literal-string $where */
         $where = $query['where'];
 
         /** @var literal-string $limit */
         $limit = (string) (self::MAX + 1);
-        $sql = "SELECT attachment_id FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT ".$limit;
+        $sql = "SELECT attachment_id FROM %i WHERE {$where} ORDER BY bytes DESC LIMIT {$limit}";
 
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds fixed fragments, and the table name and every value are bound through `prepare()`.
         /** @var list<string> $ids */
-        $ids = $query['params']
-            ? $wpdb->get_col($wpdb->prepare($sql, $query['params']))
-            : $wpdb->get_col($sql);
+        $ids = $wpdb->get_col($wpdb->prepare($sql, UAMS_MRA_Store::results_table(), ...$query['params']));
         // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
         return array_map(intval(...), (array) $ids);
@@ -163,19 +157,14 @@ class UAMS_MRA_Selection
             return 0;
         }
 
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
-
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $id = $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT attachment_id FROM {$table} WHERE file = %s OR file LIKE %s ORDER BY attachment_id ASC LIMIT 1",
+                'SELECT attachment_id FROM %i WHERE file = %s OR file LIKE %s ORDER BY attachment_id ASC LIMIT 1',
+                UAMS_MRA_Store::results_table(),
                 $filename,
                 '%/'.$wpdb->esc_like($filename)
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return (int) $id;
     }
@@ -238,18 +227,17 @@ class UAMS_MRA_Selection
             return [];
         }
 
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
         $ids = array_map(intval(...), $ids);
-        $in = implode(',', $ids);
+        /** @var literal-string $placeholders */
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds one `%d` per ID, and the table name and every ID are bound through `prepare()`.
+        /** @var string $statement */
+        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- one `%d` per ID, plus the table name.
+        $statement = $wpdb->prepare("SELECT * FROM %i WHERE attachment_id IN ( {$placeholders} ) ORDER BY bytes DESC", UAMS_MRA_Store::results_table(), ...$ids);
         /** @var list<array<string, int|string>>|null $rows */
-        $rows = $wpdb->get_results(
-            "SELECT * FROM {$table} WHERE attachment_id IN ( {$in} ) ORDER BY bytes DESC",
-            ARRAY_A
-        );
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- the statement was built by `prepare()` on the line above.
+        $rows = $wpdb->get_results($statement, ARRAY_A);
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return (array) $rows;

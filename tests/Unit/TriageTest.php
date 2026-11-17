@@ -46,7 +46,7 @@ function triage_wpdb(array $vars = [], mixed $rows = [], mixed $col = []): objec
             /** @var list<bool|float|int|string|null> $values */
             $values = $args;
 
-            return vsprintf(str_replace('%s', "'%s'", $query), $values);
+            return vsprintf(str_replace('%i', '%s', str_replace('%s', "'%s'", $query)), $values);
         }
 
         public function get_var(string $query): mixed

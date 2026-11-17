@@ -71,8 +71,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
 
         // A scan empties the offsite table. Doing that under a running repoint
         // or download leaves that job writing verdicts into rows the scan has
@@ -86,8 +84,7 @@ class UAMS_MRA_Scanner
 
         UAMS_MRA_Store::reset();
 
-        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is a `$wpdb` property.
-        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$posts_table} WHERE post_type = 'attachment'");
+        $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %i WHERE post_type = 'attachment'", $wpdb->posts));
 
         $state = [
             'step' => 'index',
@@ -270,8 +267,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -286,13 +281,13 @@ class UAMS_MRA_Scanner
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the fragment is one of two literals chosen from the scan settings.
         /** @var list<object{ID: string, post_type: string, post_title: string, post_status: string, post_content: string, post_excerpt: string}> $rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_type, post_title, post_status, post_content, post_excerpt
-				 FROM {$posts_table}
+				 FROM %i
 				 WHERE ID > %d AND post_type != 'attachment' {$exclude_revisions}
 				 ORDER BY ID ASC LIMIT %d",
+                $wpdb->posts,
                 $cursor,
                 $limit
             )
@@ -380,10 +375,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
-        /** @var literal-string $postmeta_table */
-        $postmeta_table = $wpdb->postmeta;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -392,20 +383,20 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
         /** @var list<object{meta_id: string, post_id: string, meta_key: string, meta_value: string, post_type: string|null, post_title: string|null, post_status: string|null}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value, p.post_type, p.post_title, p.post_status
-				 FROM {$postmeta_table} pm
-				 LEFT JOIN {$posts_table} p ON p.ID = pm.post_id
+                'SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value, p.post_type, p.post_title, p.post_status
+				 FROM %i pm
+				 LEFT JOIN %i p ON p.ID = pm.post_id
 				 WHERE pm.meta_id > %d
-				 ORDER BY pm.meta_id ASC LIMIT %d",
+				 ORDER BY pm.meta_id ASC LIMIT %d',
+                $wpdb->postmeta,
+                $wpdb->posts,
                 $cursor,
                 $limit
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
         // @pest-mutate-ignore:RemoveEarlyReturn
@@ -500,8 +491,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $options_table */
-        $options_table = $wpdb->options;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -510,17 +499,18 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
-        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
+        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
         /** @var list<object{option_id: string, option_name: string, option_value: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT option_id, option_name, option_value
-				 FROM {$options_table}
+				 FROM %i
 				 WHERE option_id > %d
 				   AND option_name NOT LIKE '\_transient\_%%'
 				   AND option_name NOT LIKE '\_site\_transient\_%%'
 				   AND option_name NOT LIKE 'uams_mra\_%%'
 				 ORDER BY option_id ASC LIMIT %d",
+                $wpdb->options,
                 $cursor,
                 $limit
             )
@@ -666,11 +656,11 @@ class UAMS_MRA_Scanner
 
         /** @var literal-string $sql */
         $sql = "SELECT {$pk} AS pk, {$object_col} AS object_id, meta_key, meta_value
-				FROM {$table} WHERE {$pk} > %d ORDER BY {$pk} ASC LIMIT %d";
+				FROM %i WHERE {$pk} > %d ORDER BY {$pk} ASC LIMIT %d";
 
         /** @var list<object{pk: string, object_id: string, meta_key: string, meta_value: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $rows = $wpdb->get_results($wpdb->prepare($sql, $cursor, $limit));
+        $rows = $wpdb->get_results($wpdb->prepare($sql, $table, $cursor, $limit));
 
         // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
         // @pest-mutate-ignore:RemoveEarlyReturn
@@ -779,22 +769,18 @@ class UAMS_MRA_Scanner
         UAMS_MRA_Store::set_prefix_override($target_prefix);
 
         // The table name is read after switch_to_blog(), which points `$wpdb->posts` at the sibling site.
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
-
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
         /** @var list<object{ID: string, post_type: string, post_title: string, post_status: string, post_content: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_type, post_title, post_status, post_content
-				 FROM {$posts_table}
+				 FROM %i
 				 WHERE ID > %d AND post_type NOT IN ('attachment','revision')
 				 ORDER BY ID ASC LIMIT %d",
+                $wpdb->posts,
                 $cursor,
                 $limit
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $refs = [];
 
@@ -855,8 +841,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -865,19 +849,18 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
         /** @var list<object{ID: string, post_parent: string, post_mime_type: string, post_date: string, post_title: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_parent, post_mime_type, post_date, post_title
-				 FROM {$posts_table}
+				 FROM %i
 				 WHERE post_type = 'attachment' AND ID > %d
 				 ORDER BY ID ASC LIMIT %d",
+                $wpdb->posts,
                 $cursor,
                 $limit
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return self::advance($state);
@@ -899,13 +882,11 @@ class UAMS_MRA_Scanner
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
         $counts = [];
-        /** @var literal-string $refs_table */
-        $refs_table = UAMS_MRA_Store::refs_table();
         $sql = 'SELECT attachment_id, COUNT(*) AS total, SUM(CASE WHEN confidence >= 2 THEN 1 ELSE 0 END) AS strong
-				   FROM '.$refs_table." WHERE attachment_id IN ({$placeholders}) GROUP BY attachment_id";
+				   FROM %i'." WHERE attachment_id IN ({$placeholders}) GROUP BY attachment_id";
         /** @var list<object{attachment_id: string, total: string, strong: string}> $count_rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $count_rows = $wpdb->get_results($wpdb->prepare($sql, $ids));
+        $count_rows = $wpdb->get_results($wpdb->prepare($sql, UAMS_MRA_Store::refs_table(), ...$ids));
         foreach ($count_rows as $count_row) {
             // An array key reads a numeric string as the same integer.
             // @pest-mutate-ignore:RemoveIntegerCast
@@ -936,12 +917,12 @@ class UAMS_MRA_Scanner
             // @pest-mutate-ignore:DecrementInteger
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
-            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- the placeholder list is built from `%d` and has one entry per integer bound.
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the placeholder list is built from `%d` and has one entry per integer bound.
             /** @var list<object{ID: string, post_status: string}> $parent_rows */
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            $parent_rows = $wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM {$posts_table} WHERE ID IN ({$placeholders})", $parents));
+            $parent_rows = $wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM %i WHERE ID IN ({$placeholders})", $wpdb->posts, ...$parents));
             foreach ($parent_rows as $parent_row) {
-                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
                 // An array key reads a numeric string as the same integer.
                 // @pest-mutate-ignore:RemoveIntegerCast
                 $parent_statuses[(int) $parent_row->ID] = $parent_row->post_status;
@@ -994,15 +975,13 @@ class UAMS_MRA_Scanner
             $args[] = $now;
         }
 
-        /** @var literal-string $results_table */
-        $results_table = UAMS_MRA_Store::results_table();
-        $sql = 'REPLACE INTO '.$results_table
+        $sql = 'REPLACE INTO %i'
             .' (attachment_id, parent_id, parent_status, is_attached, ref_count, ref_count_strict, bytes, mime, post_date, title, file, scanned_at) VALUES '
             .implode(',', $values);
 
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query is built from `UAMS_MRA_Store` table names and `%d` and `%s` placeholders only, and every value is bound through `prepare()`.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query is built from `%i`, `%d` and `%s` placeholders only, and the table name and every value are bound through `prepare()`.
         /** @var string $statement */
-        $statement = $wpdb->prepare($sql, $args);
+        $statement = $wpdb->prepare($sql, UAMS_MRA_Store::results_table(), ...$args);
         $wpdb->query($statement);
         // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
@@ -1039,22 +1018,20 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
-        $results = UAMS_MRA_Store::results_table();
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         /** @var list<object{parent_id: string, post_type: string, post_status: string, post_password: string, pending: string}> $rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
-            "SELECT r.parent_id, p.post_type, p.post_status, p.post_password, COUNT(*) AS pending
-			 FROM {$results} r
-			 INNER JOIN {$posts_table} p ON p.ID = r.parent_id
+            $wpdb->prepare(
+                'SELECT r.parent_id, p.post_type, p.post_status, p.post_password, COUNT(*) AS pending
+			 FROM %i r
+			 INNER JOIN %i p ON p.ID = r.parent_id
 			 WHERE r.ref_count = 0 AND r.is_attached = 1 AND r.parent_id > 0
 			 GROUP BY r.parent_id, p.post_type, p.post_status, p.post_password
-			 ORDER BY pending DESC, r.parent_id ASC"
+			 ORDER BY pending DESC, r.parent_id ASC',
+                UAMS_MRA_Store::results_table(),
+                $wpdb->posts
+            )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $fetchable = [];
         $skipped = [];
@@ -1147,8 +1124,6 @@ class UAMS_MRA_Scanner
             return [];
         }
 
-        /** @var literal-string $results */
-        $results = UAMS_MRA_Store::results_table();
         $out = [];
 
         // Any chunk size reads the same rows.
@@ -1162,11 +1137,11 @@ class UAMS_MRA_Scanner
             // @pest-mutate-ignore:DecrementInteger
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
-            $sql = "SELECT attachment_id, parent_id FROM {$results}
+            $sql = "SELECT attachment_id, parent_id FROM %i
 				WHERE ref_count = 0 AND is_attached = 1 AND parent_id IN ({$placeholders})";
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds `UAMS_MRA_Store` table names and one `%d` per bound integer.
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds one `%d` per bound integer, and the table name and every integer are bound through `prepare()`.
             /** @var list<object{attachment_id: string, parent_id: string}> $pending_rows */
-            $pending_rows = $wpdb->get_results($wpdb->prepare($sql, $chunk));
+            $pending_rows = $wpdb->get_results($wpdb->prepare($sql, UAMS_MRA_Store::results_table(), ...$chunk));
             // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
             foreach ($pending_rows as $row) {
                 $out[$row->parent_id][] = (int) $row->attachment_id;

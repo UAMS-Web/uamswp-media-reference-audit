@@ -177,7 +177,7 @@ function lt_wpdb(int $count = 0, mixed $rows = []): object
             /** @var list<bool|float|int|string|null> $values */
             $values = $args;
 
-            return 'PREPARED '.vsprintf(str_replace('%s', "'%s'", $query), $values);
+            return 'PREPARED '.vsprintf(str_replace('%i', '%s', str_replace('%s', "'%s'", $query)), $values);
         }
 
         public function get_var(string $query): string
@@ -542,7 +542,7 @@ describe('prepare_items', function (): void {
         $table->prepare_items();
 
         expect($wpdb->queries)->toBe([
-            'SELECT COUNT(*) FROM wp_uams_mra_results WHERE 1=1',
+            'PREPARED SELECT COUNT(*) FROM wp_uams_mra_results WHERE 1=1',
             'PREPARED SELECT * FROM wp_uams_mra_results WHERE 1=1 ORDER BY bytes DESC, attachment_id DESC LIMIT 50 OFFSET 0',
         ])
             ->and($table->items)->toBe($rows)
