@@ -43,11 +43,15 @@ final class RepointDownloadTest extends IntegrationTestCase
     private function answerWith(int $bytes, int $status = 200): void
     {
         add_filter('pre_http_request', function ($pre, array $args) use ($bytes, $status): array {
-            $this->sent = $args;
+            /** @var array<string, mixed> $request */
+            $request = $args;
+            $this->sent = $request;
 
-            file_put_contents((string) $args['filename'], str_repeat('x', $bytes));
+            /** @var string $filename */
+            $filename = $request['filename'];
+            file_put_contents($filename, str_repeat('x', $bytes));
 
-            return ['headers' => [], 'body' => '', 'response' => ['code' => $status, 'message' => ''], 'cookies' => [], 'filename' => $args['filename']];
+            return ['headers' => [], 'body' => '', 'response' => ['code' => $status, 'message' => ''], 'cookies' => [], 'filename' => $filename];
         }, 10, 2);
     }
 
@@ -109,7 +113,9 @@ final class RepointDownloadTest extends IntegrationTestCase
     public function test_a_transport_error_is_a_failed_fetch_and_leaves_no_file(): void
     {
         add_filter('pre_http_request', function ($pre, array $args): WP_Error {
-            $this->sent = $args;
+            /** @var array<string, mixed> $request */
+            $request = $args;
+            $this->sent = $request;
 
             return new WP_Error('http_request_failed', 'connection refused');
         }, 10, 2);

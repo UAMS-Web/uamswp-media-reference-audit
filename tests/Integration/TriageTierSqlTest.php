@@ -17,6 +17,7 @@ namespace UamswpMediaReferenceAudit\Tests\Integration;
 use UAMS_MRA_Store;
 use UAMS_MRA_Triage;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use wpdb;
 
 final class TriageTierSqlTest extends IntegrationTestCase
 {
@@ -32,6 +33,7 @@ final class TriageTierSqlTest extends IntegrationTestCase
      */
     private function row(string $mime, int $attached, string $render = '', int $bytes = 10): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $id = self::factory()->attachment->create(['post_mime_type' => $mime]);
@@ -54,9 +56,13 @@ final class TriageTierSqlTest extends IntegrationTestCase
      */
     private function selected(string $where): array
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
-        return array_map(intval(...), (array) $wpdb->get_col('SELECT attachment_id FROM '.UAMS_MRA_Store::results_table()." WHERE {$where} ORDER BY attachment_id"));
+        /** @var list<string> $ids */
+        $ids = $wpdb->get_col('SELECT attachment_id FROM '.UAMS_MRA_Store::results_table()." WHERE {$where} ORDER BY attachment_id");
+
+        return array_map(intval(...), $ids);
     }
 
     public function test_every_row_is_selected_by_exactly_the_tier_tier_gives_it(): void

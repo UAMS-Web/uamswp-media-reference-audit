@@ -17,6 +17,7 @@ namespace UamswpMediaReferenceAudit\Tests\Integration;
 use UAMS_MRA_Selection;
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use wpdb;
 
 final class SelectionQueryTest extends IntegrationTestCase
 {
@@ -41,6 +42,7 @@ final class SelectionQueryTest extends IntegrationTestCase
      */
     private function row(int $id, int $bytes = 10, string $file = '', string $title = '', int $refs = 0): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->insert(UAMS_MRA_Store::results_table(), [
@@ -100,6 +102,7 @@ final class SelectionQueryTest extends IntegrationTestCase
 
     public function test_the_filter_match_returns_one_more_than_the_limit_so_the_caller_can_tell(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $max = UAMS_MRA_Selection::MAX;
@@ -134,6 +137,7 @@ final class SelectionQueryTest extends IntegrationTestCase
 
     public function test_the_rows_of_an_empty_set_are_empty_without_asking_the_database(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $before = $wpdb->num_queries;

@@ -29,6 +29,7 @@ use UAMS_MRA_Store;
 use UAMS_MRA_Triage;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_User;
+use wpdb;
 
 /**
  * How a request ended: a wp_die(), with what it said, or a redirect.
@@ -320,6 +321,7 @@ final class AdminRequestsTest extends IntegrationTestCase
      */
     private function seedResult(int $id, array $row = []): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->insert(UAMS_MRA_Store::results_table(), array_merge(['attachment_id' => $id, 'file' => '2024/05/'.$id.'.pdf', 'bytes' => 100, 'ref_count' => 0], $row));
@@ -330,11 +332,15 @@ final class AdminRequestsTest extends IntegrationTestCase
      */
     private function resultRow(int $id): ?array
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
+        /** @var array<string, mixed>|null $row */
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
 
-        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
+        return $row;
     }
 
     /* ---------------------------------------------------------------------
