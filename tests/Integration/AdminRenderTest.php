@@ -181,7 +181,9 @@ final class AdminRenderTest extends IntegrationTestCase
             'source_label' => 'A page',
         ], $over);
 
-        $row['url_hash'] = md5((string) $row['url']);
+        /** @var string $rowUrl */
+        $rowUrl = $row['url'];
+        $row['url_hash'] = md5($rowUrl);
 
         $wpdb->insert(UAMS_MRA_Store::offsite_table(), $row);
     }
@@ -262,9 +264,11 @@ final class AdminRenderTest extends IntegrationTestCase
         $GLOBALS['submenu'] = [];
         $this->admin->add_menu();
 
+        /** @var array<string, array<int, array{string, string, string}>> $submenu */
+        $submenu = $GLOBALS['submenu'];
         $entries = array_map(
             static fn (array $e): array => [$e[0], $e[1], $e[2]],
-            array_values($GLOBALS['submenu']['upload.php'])
+            array_values($submenu['upload.php'])
         );
 
         $this->assertSame(
@@ -338,6 +342,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $data = $script->extra['data'];
         $this->assertStringContainsString('var UAMSMRA = ', $data);
+        /** @var array{ajaxUrl: string, nonce: string, triageNonce: string, archiveNonce: string, repointNonce: string, i18n: array<string, string>} $json */
         $json = json_decode($this->match('/\{.*\}/s', $data)[0], true);
 
         $this->assertSame(admin_url('admin-ajax.php'), $json['ajaxUrl']);
@@ -406,7 +411,10 @@ final class AdminRenderTest extends IntegrationTestCase
 
     private function cell(mixed $value): string
     {
-        return (string) (new ReflectionMethod(UAMS_MRA_Admin::class, 'csv_cell'))->invoke(null, $value);
+        /** @var scalar|null $cell */
+        $cell = (new ReflectionMethod(UAMS_MRA_Admin::class, 'csv_cell'))->invoke(null, $value);
+
+        return (string) $cell;
     }
 
     /**
@@ -468,7 +476,10 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function sourceLine(array $source): string
     {
-        return (string) (new ReflectionMethod($this->admin, 'offsite_source_line'))->invoke($this->admin, $source);
+        /** @var scalar|null $line */
+        $line = (new ReflectionMethod($this->admin, 'offsite_source_line'))->invoke($this->admin, $source);
+
+        return (string) $line;
     }
 
     public function test_a_source_that_is_not_a_post_gets_its_label_alone_escaped_and_decoded(): void
@@ -875,7 +886,9 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $this->assertStringContainsString('notice-warning', $html);
         $this->assertStringContainsString('Parked <b>words</b>', $html);
-        $this->assertSame('', (string) get_user_meta(get_current_user_id(), '_uams_mra_notice', true));
+        /** @var scalar|null $notice */
+        $notice = get_user_meta(get_current_user_id(), '_uams_mra_notice', true);
+        $this->assertSame('', (string) $notice);
     }
 
     public function test_the_review_action_shows_the_review_screen_instead(): void
@@ -969,7 +982,8 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $this->assertStringContainsString('1 of these have no file on disk. They will be left out of the archive but can still be deleted, which clears the orphaned database row.', $this->text($this->review()));
 
-        UAMS_MRA_Selection::store([(int) $GLOBALS['wpdb']->get_var('SELECT attachment_id FROM '.UAMS_MRA_Store::results_table().' WHERE bytes = 3000')]);
+        global $wpdb;
+        UAMS_MRA_Selection::store([(int) $wpdb->get_var('SELECT attachment_id FROM '.UAMS_MRA_Store::results_table().' WHERE bytes = 3000')]);
 
         $html = $this->review();
         $this->assertStringNotContainsString('have no file on disk', $html);
@@ -1808,7 +1822,7 @@ final class AdminRenderTest extends IntegrationTestCase
     }
 
     /**
-     * @param  array<string, mixed>  $get
+     * @param  array<string, string>  $get
      * @return list<array<int, string|null>>
      */
     private function exportCsv(array $get): array
@@ -1820,7 +1834,7 @@ final class AdminRenderTest extends IntegrationTestCase
     }
 
     /**
-     * @param  array<string, mixed>  $get
+     * @param  array<string, string>  $get
      * @return list<array<int, string|null>>
      */
     private function exportOffsite(array $get = []): array
