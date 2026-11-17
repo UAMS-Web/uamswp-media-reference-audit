@@ -17,7 +17,7 @@ class UAMS_MRA_Index
      * -e1234567890 suffix WordPress adds to edited images, in whatever order they
      * are stacked. Backslashes are read as separators on every platform.
      *
-     * @param  mixed  $file  Relative or absolute path or URL fragment; any other value is cast to a string.
+     * @param  scalar|null  $file  Relative or absolute path or URL fragment; any other value is cast to a string.
      * @return array{string, string} {path_norm, base_norm}
      */
     public static function normalize($file): array
@@ -149,7 +149,9 @@ class UAMS_MRA_Index
             $last_id = (int) $row->ID;
             $file = $row->file;
             if (! $file) {
-                $file = (string) get_post_meta($row->ID, '_wp_attached_file', true);
+                /** @var scalar|null $stored_file */
+                $stored_file = get_post_meta($row->ID, '_wp_attached_file', true);
+                $file = (string) $stored_file;
             }
 
             [$path_norm, $base_norm] = self::normalize($file);
@@ -242,7 +244,7 @@ class UAMS_MRA_Index
      * Filter a list of integers down to those that are real attachment IDs.
      *
      * @param  array  $ids  Candidate IDs.
-     * @param  array<int, mixed>  $ids
+     * @param  array<int, float|int|string>  $ids
      * @return list<int>
      */
     public static function filter_attachment_ids(array $ids): array
