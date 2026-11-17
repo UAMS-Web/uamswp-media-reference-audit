@@ -249,7 +249,7 @@ beforeEach(function (): void {
     $GLOBALS['cli_format_calls'] = [];
 
     // The real size_format() takes a number; a string byte count left uncast would reach it unchanged.
-    when('size_format')->alias(static fn ($bytes, $decimals = 0): string => is_int($bytes) ? $bytes.'B@'.$decimals : throw new LogicException('size_format() got a '.gettype($bytes)));
+    when('size_format')->alias(static fn ($bytes, int $decimals = 0): string => is_int($bytes) ? $bytes.'B@'.$decimals : throw new LogicException('size_format() got a '.gettype($bytes)));
     when('wp_list_pluck')->alias(static fn (array $list, string $field): array => array_column($list, $field));
     when('WP_CLI\Utils\format_items')->alias(static function ($format, $items, $fields): void {
         /** @var list<array{mixed, mixed, mixed}> $calls */
@@ -268,6 +268,7 @@ describe('scan', function (): void {
      * Script a scan: start() answers, then each step() answers the next state.
      *
      * @param  list<array{step: string, message: string}>  $steps
+     * @param  array<string, mixed>  $assoc
      * @param  array<string, int>  $summary
      * @return array{steps: int, installs: int, starts: int}
      */
@@ -286,14 +287,19 @@ describe('scan', function (): void {
         cli_redefine('UAMS_MRA_Scanner::step', static function () use (&$seen, &$queue): array {
             $seen['steps']++;
 
-            return array_shift($queue) ?? ['step' => 'done', 'message' => 'ran out'];
+            /** @var array{step: string, message: string}|null $next */
+            $next = array_shift($queue);
+
+            return $next ?? ['step' => 'done', 'message' => 'ran out'];
         });
         cli_redefine('UAMS_MRA_Store::summary', static fn (): array => array_merge(
             ['total' => 12, 'unattached' => 5, 'unreferenced' => 4, 'orphaned' => 3, 'orphaned_bytes' => 2048],
             $summary
         ));
 
-        (new UAMS_MRA_CLI)->scan([], $assoc);
+        /** @var array<string, string> $assoc_args */
+        $assoc_args = $assoc;
+        (new UAMS_MRA_CLI)->scan([], $assoc_args);
 
         return $seen;
     };
@@ -389,7 +395,9 @@ describe('list', function (): void {
         $wpdb = cli_wpdb($rows);
         $GLOBALS['wpdb'] = $wpdb;
 
-        (new UAMS_MRA_CLI)->list([], $assoc);
+        /** @var array<string, string> $assoc_args */
+        $assoc_args = $assoc;
+        (new UAMS_MRA_CLI)->list([], $assoc_args);
 
         return $wpdb;
     };

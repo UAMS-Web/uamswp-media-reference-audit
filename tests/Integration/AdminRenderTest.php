@@ -24,6 +24,7 @@ use UAMS_MRA_Selection;
 use UAMS_MRA_Store;
 use UAMS_MRA_Triage;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use wpdb;
 
 final class AdminRenderTest extends IntegrationTestCase
 {
@@ -53,7 +54,7 @@ final class AdminRenderTest extends IntegrationTestCase
     /**
      * The groups of a pattern that must match the page, or stop the test naming the pattern.
      *
-     * @return array<int, string>
+     * @return array<int|string, string>
      */
     private function match(string $pattern, string $subject): array
     {
@@ -154,6 +155,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function seedResult(int $id, array $row = []): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->insert(UAMS_MRA_Store::results_table(), array_merge(['attachment_id' => $id, 'file' => '2024/05/'.$id.'.pdf', 'bytes' => 100, 'ref_count' => 0], $row));
@@ -166,6 +168,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function seedOffsite(array $over = []): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         static $pk = 5000;
@@ -282,6 +285,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     public function test_the_menu_entries_render_their_own_screen(): void
     {
+        /** @var array<string, \WP_Hook> $wp_filter */
         global $wp_filter;
 
         $this->admin->add_menu();
@@ -289,7 +293,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertNotNull(get_plugin_page_hook(UAMS_MRA_Admin::SLUG, 'upload.php'));
         $this->assertNotNull(get_plugin_page_hook(UAMS_MRA_Admin::SLUG_OFFSITE, 'upload.php'));
 
+        /** @var array<string, array{function: array{object, string}}> $main */
         $main = $wp_filter[get_plugin_page_hookname(UAMS_MRA_Admin::SLUG, 'upload.php')]->callbacks[10];
+        /** @var array<string, array{function: array{object, string}}> $offsite */
         $offsite = $wp_filter[get_plugin_page_hookname(UAMS_MRA_Admin::SLUG_OFFSITE, 'upload.php')]->callbacks[10];
 
         $this->assertSame('render', array_values($main)[0]['function'][1]);
@@ -340,6 +346,7 @@ final class AdminRenderTest extends IntegrationTestCase
         $this->assertTrue(wp_style_is('uams-mra-admin', 'enqueued'));
         $this->assertTrue(wp_script_is('uams-mra-admin', 'enqueued'));
 
+        /** @var string $data */
         $data = $script->extra['data'];
         $this->assertStringContainsString('var UAMSMRA = ', $data);
         /** @var array{ajaxUrl: string, nonce: string, triageNonce: string, archiveNonce: string, repointNonce: string, i18n: array<string, string>} $json */
@@ -982,6 +989,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $this->assertStringContainsString('1 of these have no file on disk. They will be left out of the archive but can still be deleted, which clears the orphaned database row.', $this->text($this->review()));
 
+        /** @var wpdb $wpdb */
         global $wpdb;
         UAMS_MRA_Selection::store([(int) $wpdb->get_var('SELECT attachment_id FROM '.UAMS_MRA_Store::results_table().' WHERE bytes = 3000')]);
 
@@ -1148,6 +1156,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function bulkOffsite(int $count, string $host = 'bulk.example.edu'): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $table = UAMS_MRA_Store::offsite_table();
@@ -1174,6 +1183,7 @@ final class AdminRenderTest extends IntegrationTestCase
      */
     private function failReadsContaining(string $fragment): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->suppress_errors(true);
@@ -1246,6 +1256,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     private function localCopy(string $base, int $id): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->insert(UAMS_MRA_Store::index_table(), ['attachment_id' => $id, 'path_norm' => '2024/05/'.$base, 'base_norm' => $base]);
@@ -1471,7 +1482,9 @@ final class AdminRenderTest extends IntegrationTestCase
         $html = $this->offsite();
 
         $this->assertStringContainsString('Repoint what this library already has', $html);
-        $this->assertStringContainsString('plugin v'.UAMS_MRA_VERSION, $this->text($html));
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
+        $this->assertStringContainsString('plugin v'.$version, $this->text($html));
     }
 
     public function test_a_report_with_nothing_compared_offers_the_first_comparison_and_no_actions(): void
@@ -1863,6 +1876,7 @@ final class AdminRenderTest extends IntegrationTestCase
             'parent_id' => $parent, 'parent_status' => 'publish', 'is_attached' => 1, 'ref_count' => 3, 'ref_count_strict' => 2,
             'render_state' => 'absent', 'render_note' => 'Read fine', 'render_url' => 'https://example.org/p/', 'render_checked_at' => '2024-06-07 08:09:10',
         ]);
+        /** @var wpdb $wpdb */
         global $wpdb;
         $wpdb->insert(UAMS_MRA_Store::refs_table(), ['attachment_id' => $a, 'source_type' => 'content', 'source_id' => 11, 'source_label' => 'Home']);
         $wpdb->insert(UAMS_MRA_Store::refs_table(), ['attachment_id' => $a, 'source_type' => 'postmeta', 'source_id' => 12, 'source_label' => 'Hero']);
@@ -1961,6 +1975,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     public function test_the_results_export_runs_past_one_batch_of_five_hundred(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $table = UAMS_MRA_Store::results_table();
@@ -1980,6 +1995,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     public function test_the_results_export_of_exactly_five_hundred_stops_cleanly(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $table = UAMS_MRA_Store::results_table();
@@ -2068,6 +2084,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     private function lastSourceId(): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         return (int) $wpdb->get_var('SELECT source_id FROM '.UAMS_MRA_Store::offsite_table().' ORDER BY offsite_id DESC LIMIT 1');
@@ -2193,7 +2210,9 @@ final class AdminRenderTest extends IntegrationTestCase
 
         $this->review();
 
-        $batches = array_values(array_filter($primed, static fn (array $ids): bool => count($ids) > 1));
+        /** @var list<array<int>> $primed_ids */
+        $primed_ids = $primed;
+        $batches = array_values(array_filter($primed_ids, static fn (array $ids): bool => count($ids) > 1));
 
         $this->assertCount(1, $batches, 'one batched read for every row, apart from the per-file reads of the triage marks');
         $read = [];
@@ -2221,6 +2240,7 @@ final class AdminRenderTest extends IntegrationTestCase
 
     public function test_the_results_export_lists_at_most_ten_references_per_file(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $a = $this->attachment('Many');
@@ -2424,8 +2444,10 @@ final class AdminRenderTest extends IntegrationTestCase
     {
         [$a, $b, $c] = $this->library();
         $log = (string) tempnam(sys_get_temp_dir(), 'mra');
-        add_filter('update_post_metadata_cache', static function ($check, $ids) use ($log) {
-            file_put_contents($log, implode(',', $ids)."\n", FILE_APPEND);
+        add_filter('update_post_metadata_cache', static function ($check, array $ids) use ($log) {
+            /** @var list<string> $strings */
+            $strings = $ids;
+            file_put_contents($log, implode(',', $strings)."\n", FILE_APPEND);
 
             return $check;
         }, 10, 2);

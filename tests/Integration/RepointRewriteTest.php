@@ -18,6 +18,7 @@ use ReflectionMethod;
 use UAMS_MRA_Repoint;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Post;
+use wpdb;
 
 final class RepointRewriteTest extends IntegrationTestCase
 {
@@ -59,6 +60,7 @@ final class RepointRewriteTest extends IntegrationTestCase
         $result = $method->invoke(null, (object) ($row + ['url' => self::OLD_URL, 'target_url' => self::NEW_URL, 'source_key' => '']));
 
         $this->assertIsArray($result);
+        /** @var array<string, mixed> $result */
 
         return $result;
     }
@@ -68,6 +70,7 @@ final class RepointRewriteTest extends IntegrationTestCase
      */
     private function insertRawMeta(int $post_id, string $value): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->insert($wpdb->postmeta, ['post_id' => $post_id, 'meta_key' => 'uams_mra_test', 'meta_value' => $value]);
@@ -77,9 +80,13 @@ final class RepointRewriteTest extends IntegrationTestCase
 
     private function rawMeta(int $meta_id): ?string
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
-        return $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_id = %d", $meta_id));
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
+
+        return $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$postmeta_table} WHERE meta_id = %d", $meta_id));
     }
 
     public function test_a_rewritten_post_keeps_the_backslashes_of_its_block_json(): void

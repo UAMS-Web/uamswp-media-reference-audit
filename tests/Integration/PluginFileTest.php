@@ -31,6 +31,7 @@ use UAMS_MRA_Archive;
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Site;
+use wpdb;
 
 final class PluginFileTest extends IntegrationTestCase
 {
@@ -58,6 +59,7 @@ final class PluginFileTest extends IntegrationTestCase
      */
     private function tableExists(string $table): bool
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->suppress_errors(true);
@@ -198,6 +200,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_activation_creates_the_tables(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         foreach (self::SUFFIXES as $suffix) {
@@ -223,6 +226,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_maybe_install_runs_the_install_when_the_stored_version_differs(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->query('DROP TABLE IF EXISTS '.UAMS_MRA_Store::refs_table());
@@ -236,6 +240,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_maybe_install_runs_the_install_when_no_version_is_stored(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $wpdb->query('DROP TABLE IF EXISTS '.UAMS_MRA_Store::refs_table());
@@ -248,6 +253,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_maybe_install_does_nothing_when_the_version_matches(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         update_option('uams_mra_db_version', UAMS_MRA_VERSION);
@@ -302,9 +308,10 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_textdomain_is_loaded_from_the_languages_folder_of_the_plugin(): void
     {
+        /** @var \WP_Textdomain_Registry $wp_textdomain_registry */
         global $wp_textdomain_registry;
 
-        if (! property_exists($wp_textdomain_registry, 'custom_paths')) {
+        if (! (new \ReflectionClass($wp_textdomain_registry))->hasProperty('custom_paths')) {
             $this->markTestSkipped('This WordPress does not keep custom textdomain paths in a registry.');
         }
 
@@ -322,6 +329,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_new_site_hooks_leave_a_site_alone_when_the_plugin_is_not_network_active(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         if (! is_multisite()) {
@@ -341,6 +349,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_a_new_site_gets_its_own_tables_when_the_plugin_is_network_active(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         if (! is_multisite()) {
@@ -367,6 +376,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_legacy_hook_builds_tables_for_the_site_it_is_given(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         if (! is_multisite()) {
@@ -392,6 +402,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_modern_hook_passes_the_site_id_of_the_site_object(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         if (! is_multisite()) {
@@ -417,6 +428,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_uninstall_drops_the_four_tables(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         foreach (self::SUFFIXES as $suffix) {
@@ -460,6 +472,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_uninstall_leaves_everything_else_alone(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $attachment = self::factory()->attachment->create();
@@ -485,6 +498,7 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_a_network_uninstall_cleans_every_site(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         if (! is_multisite()) {
