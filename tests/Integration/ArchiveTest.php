@@ -19,6 +19,9 @@ use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Error;
 use ZipArchive;
 
+/**
+ * @phpstan-import-type ArchiveJob from UAMS_MRA_Archive
+ */
 final class ArchiveTest extends IntegrationTestCase
 {
     /**
@@ -111,7 +114,7 @@ final class ArchiveTest extends IntegrationTestCase
     /**
      * Run steps until the job is done, returning the final job.
      *
-     * @return array<string, mixed>
+     * @return ArchiveJob
      */
     private function finish(int $limit = 20): array
     {
@@ -120,6 +123,7 @@ final class ArchiveTest extends IntegrationTestCase
             $this->assertIsArray($job);
 
             if ($job['done']) {
+                /** @var ArchiveJob $job */
                 return $job;
             }
         }
@@ -128,7 +132,7 @@ final class ArchiveTest extends IntegrationTestCase
     }
 
     /**
-     * @param  array<string, mixed>  $job
+     * @param  ArchiveJob  $job
      * @return list<string>
      */
     private function entries(array $job, int $part): array
@@ -148,7 +152,7 @@ final class ArchiveTest extends IntegrationTestCase
     }
 
     /**
-     * @param  array<string, mixed>  $job
+     * @param  ArchiveJob  $job
      * @return list<list<string|null>>
      */
     private function manifest(array $job, int $part): array
@@ -225,7 +229,9 @@ final class ArchiveTest extends IntegrationTestCase
         $host = sanitize_file_name((string) wp_parse_url(home_url(), PHP_URL_HOST));
 
         $this->assertSame('uams-media-'.$host.'-part-3.zip', UAMS_MRA_Archive::part_name(3));
-        $this->assertSame('uams-media-'.$host.'-part-3.zip', UAMS_MRA_Archive::part_name($this->loose('3')));
+        /** @var int $three */
+        $three = $this->loose('3');
+        $this->assertSame('uams-media-'.$host.'-part-3.zip', UAMS_MRA_Archive::part_name($three));
     }
 
     public function test_there_is_no_job_until_one_is_started(): void
@@ -259,7 +265,9 @@ final class ArchiveTest extends IntegrationTestCase
         /** @var list<array<int, mixed>> $selections */
         $selections = [[], [0], ['0', '', 'abc'], [0, null]];
 
-        foreach ($selections as $ids) {
+        foreach ($selections as $selection) {
+            /** @var array<int, int|string> $ids */
+            $ids = $selection;
             $job = UAMS_MRA_Archive::start($ids);
 
             $this->assertInstanceOf(WP_Error::class, $job);

@@ -80,6 +80,7 @@ require_once __DIR__.'/../../includes/class-list-table.php';
  */
 function lt_redefine(string $target, callable $replacement): void
 {
+    /** @var callable $redefine */
     $redefine = lt_loose('Patchwork\\redefine');
     $redefine($target, $replacement);
 }
@@ -90,6 +91,42 @@ function lt_redefine(string $target, callable $replacement): void
 function lt_loose(mixed $value): mixed
 {
     return $value;
+}
+
+/**
+ * The table's own properties, read and set from outside it.
+ *
+ * @return object{args: array<string, mixed>, pagination: array<string, int>}
+ */
+function lt_state(UAMS_MRA_List_Table $table): object
+{
+    /** @var object{args: array<string, mixed>, pagination: array<string, int>} $state */
+    $state = lt_loose($table);
+
+    return $state;
+}
+
+/**
+ * Set the page the table reads its offset from.
+ */
+function lt_set_pagenum(UAMS_MRA_List_Table $table, int $pagenum): void
+{
+    /** @var stdClass $open */
+    $open = lt_loose($table);
+    $open->pagenum = $pagenum;
+}
+
+/**
+ * The views the table builds, as links by view name.
+ *
+ * @return array<string, string>
+ */
+function lt_views(UAMS_MRA_List_Table $table): array
+{
+    /** @var array<string, string> $views */
+    $views = lt_call($table, 'get_views');
+
+    return $views;
 }
 
 /**
@@ -137,7 +174,10 @@ function lt_wpdb(int $count = 0, mixed $rows = []): object
         {
             $args = (count($args) === 1 && is_array($args[0])) ? $args[0] : $args;
 
-            return 'PREPARED '.vsprintf(str_replace('%s', "'%s'", $query), $args);
+            /** @var list<bool|float|int|string|null> $values */
+            $values = $args;
+
+            return 'PREPARED '.vsprintf(str_replace('%s', "'%s'", $query), $values);
         }
 
         public function get_var(string $query): string
@@ -171,18 +211,23 @@ function lt_call(object $object, string $method, mixed ...$args): mixed
  */
 function lt_badge(array $item): string
 {
-    return (string) lt_call(lt_table(), 'render_badge', $item);
+    /** @var string $badge */
+    $badge = lt_call(lt_table(), 'render_badge', $item);
+
+    return $badge;
 }
 
 /**
  * A scanned row with every column the cells read.
  *
- * @param  array<string, mixed>  $over
- * @return array<string, mixed>
+ * @param  array<string, int|string>  $over
+ * @return array<string, string>
  */
 function lt_row(array $over = []): array
 {
-    return array_merge([
+    // A number given as an override is stored as text, as the database returns it.
+    /** @var array<string, string> $row */
+    $row = array_merge([
         'attachment_id' => '7',
         'title' => 'Hero',
         'file' => '2024/05/hero.jpg',
@@ -195,6 +240,8 @@ function lt_row(array $over = []): array
         'bytes' => '2048',
         'post_date' => '2024-05-01 10:00:00',
     ], $over);
+
+    return $row;
 }
 
 beforeEach(function (): void {
@@ -218,7 +265,7 @@ describe('the constructor', function (): void {
     it('names the items, turns ajax off and keeps the store summary', function (): void {
         $table = lt_table(['total' => 4]);
 
-        expect(lt_loose($table)->args)->toBe(['singular' => 'media_item', 'plural' => 'media_items', 'ajax' => false]);
+        expect(lt_state($table)->args)->toBe(['singular' => 'media_item', 'plural' => 'media_items', 'ajax' => false]);
 
         $views = (fn (): array => $this->summary)->call($table);
 
@@ -325,7 +372,7 @@ describe('get_views', function (): void {
         $table = lt_table(['total' => 1200, 'orphaned' => 3, 'unreferenced' => 5, 'unattached' => 7, 'weak_only' => 2]);
         $_REQUEST['view'] = 'unattached';
 
-        $views = lt_call($table, 'get_views');
+        $views = lt_views($table);
 
         expect(array_keys($views))->toBe(['orphaned', 'unreferenced', 'unattached', 'weak', 'referenced', 'all'])
             ->and($views['orphaned'])->toBe('<a href="http://x/wp-admin/upload.php?page=uams-media-audit&view=orphaned">Unattached and unreferenced <span class="count">(3)</span></a>')
@@ -339,7 +386,7 @@ describe('get_views', function (): void {
     it('reads a missing count as zero', function (): void {
         $table = lt_table([]);
 
-        $views = lt_call($table, 'get_views');
+        $views = lt_views($table);
 
         expect($views['orphaned'])->toContain('(0)')
             ->and($views['unreferenced'])->toContain('(0)')
@@ -353,7 +400,7 @@ describe('get_views', function (): void {
         when('menu_page_url')->justReturn('');
         $table = lt_table(['total' => 1]);
 
-        $views = lt_call($table, 'get_views');
+        $views = lt_views($table);
 
         expect($views['all'])->toContain('href="http://x/wp-admin/upload.php&page=uams-media-audit&view=all"');
     });
@@ -498,7 +545,7 @@ describe('prepare_items', function (): void {
             'PREPARED SELECT * FROM wp_uams_mra_results WHERE 1=1 ORDER BY bytes DESC, attachment_id DESC LIMIT 50 OFFSET 0',
         ])
             ->and($table->items)->toBe($rows)
-            ->and(lt_loose($table)->pagination)->toBe(['total_items' => 120, 'per_page' => 50, 'total_pages' => 3])
+            ->and(lt_state($table)->pagination)->toBe(['total_items' => 120, 'per_page' => 50, 'total_pages' => 3])
             ->and($primed)->toBe(['post', [7, 9]])
             ->and((fn (): array => $this->_column_headers)->call($table))->toBe([$table->get_columns(), [], $table->get_sortable_columns(), 'title']);
     });
@@ -509,7 +556,7 @@ describe('prepare_items', function (): void {
         lt_redefine('UAMS_MRA_Store::results_table', static fn (): string => 'T');
         $_REQUEST['s'] = 'hero';
         $table = new UAMS_MRA_List_Table;
-        lt_loose($table)->pagenum = 3;
+        lt_set_pagenum($table, 3);
 
         $table->prepare_items();
 
@@ -526,14 +573,14 @@ describe('prepare_items', function (): void {
         $_REQUEST['s'] = 'x';
         $table = new UAMS_MRA_List_Table;
 
-        lt_loose($table)->pagenum = 1;
+        lt_set_pagenum($table, 1);
         $table->prepare_items();
 
         expect($wpdb->queries[1])->toEndWith('LIMIT 50 OFFSET 0');
 
         $wpdb = lt_wpdb(1, []);
         $GLOBALS['wpdb'] = $wpdb;
-        lt_loose($table)->pagenum = 0;
+        lt_set_pagenum($table, 0);
         $table->prepare_items();
 
         expect($wpdb->queries[1])->toEndWith('LIMIT 50 OFFSET 0');
@@ -567,12 +614,12 @@ describe('prepare_items', function (): void {
 
         $table->prepare_items();
 
-        expect(lt_loose($table)->pagination['total_pages'])->toBe(3);
+        expect(lt_state($table)->pagination['total_pages'])->toBe(3);
 
         $GLOBALS['wpdb'] = lt_wpdb(100, []);
         $table->prepare_items();
 
-        expect(lt_loose($table)->pagination['total_pages'])->toBe(2);
+        expect(lt_state($table)->pagination['total_pages'])->toBe(2);
     });
 
     it('does not prime anything when there are no rows', function (): void {
@@ -586,7 +633,7 @@ describe('prepare_items', function (): void {
         $table->prepare_items();
 
         expect($table->items)->toBe([])
-            ->and(lt_loose($table)->pagination['total_items'])->toBe(0);
+            ->and(lt_state($table)->pagination['total_items'])->toBe(0);
     });
 });
 

@@ -39,7 +39,10 @@ function wp_like_maybe_unserialize(mixed $value): mixed
     set_error_handler(static fn (): bool => true);
 
     try {
-        return unserialize(trim($value));
+        /** @var string $text */
+        $text = $value;
+
+        return unserialize(trim($text));
     } finally {
         restore_error_handler();
     }
@@ -93,7 +96,9 @@ it('keeps the byte-length prefixes of a serialized value correct', function (): 
     $result = UAMS_MRA_Repoint::replace_variants($stored, OLD_URL, NEW_URL);
 
     // The result has to unserialize to exactly the intended structure.
-    expect(unserialize($result))->toBe(['url' => NEW_URL, 'id' => 7]);
+    /** @var string $rewritten */
+    $rewritten = $result;
+    expect(unserialize($rewritten))->toBe(['url' => NEW_URL, 'id' => 7]);
 
     // Control: the replacement this method exists to avoid really does corrupt the value.
     // If this stopped failing, the test above would no longer be showing anything.
@@ -106,7 +111,10 @@ it('rewrites inside nested arrays and objects', function (): void {
     $object->src = OLD_URL;
     $object->list = [OLD_URL, 'keep'];
 
-    $result = unserialize(UAMS_MRA_Repoint::replace_variants(serialize(['deep' => ['deeper' => $object]]), OLD_URL, NEW_URL));
+    /** @var string $rewritten */
+    $rewritten = UAMS_MRA_Repoint::replace_variants(serialize(['deep' => ['deeper' => $object]]), OLD_URL, NEW_URL);
+    /** @var array{deep: array{deeper: object{src: string, list: list<string>}}} $result */
+    $result = unserialize($rewritten);
 
     expect($result['deep']['deeper']->src)->toBe(NEW_URL)
         ->and($result['deep']['deeper']->list)->toBe([NEW_URL, 'keep']);
@@ -171,7 +179,10 @@ function rewrite_row(array $row): array
 {
     $method = new ReflectionMethod(UAMS_MRA_Repoint::class, 'rewrite_row');
 
-    return $method->invoke(null, (object) $row);
+    /** @var array<string, mixed> $result */
+    $result = $method->invoke(null, (object) $row);
+
+    return $result;
 }
 
 it('passes slashed text to wp_update_post so block JSON keeps its backslashes', function (): void {
@@ -194,7 +205,7 @@ it('passes slashed text to wp_update_post so block JSON keeps its backslashes', 
     // is the intended text with every backslash doubled.
     $intended = '<!-- wp:image {"url":"https:\\/\\/new.example.edu\\/wp-content\\/uploads\\/2024\\/05\\/report.pdf"} -->';
 
-    /** @var array<string, mixed> $captured */
+    /** @var array{post_content: string} $captured */
     expect($result['status'])->toBe('applied')
         ->and(stripslashes($captured['post_content']))->toBe($intended)
         ->and($captured['post_content'])->toBe(addslashes($intended));
@@ -203,7 +214,7 @@ it('passes slashed text to wp_update_post so block JSON keeps its backslashes', 
 it('reports a meta value it cannot read as failed and writes nothing', function (): void {
     $corrupt = 'a:1:{s:3:"url";s:5:"'.OLD_URL.'";}';
 
-    $GLOBALS['wpdb'] = new class($corrupt)
+    $wpdb = new class($corrupt)
     {
         public int $updates = 0;
 
@@ -238,11 +249,12 @@ it('reports a meta value it cannot read as failed and writes nothing', function 
             return 1;
         }
     };
+    $GLOBALS['wpdb'] = $wpdb;
 
     $result = rewrite_row(['url' => OLD_URL, 'target_url' => NEW_URL, 'source_type' => 'postmeta', 'source_pk' => 9, 'source_id' => 3]);
 
     expect($result)->toBe(['status' => 'failed', 'applied' => 3])
-        ->and($GLOBALS['wpdb']->updates)->toBe(0);
+        ->and($wpdb->updates)->toBe(0);
 
     unset($GLOBALS['wpdb']);
 });
