@@ -63,9 +63,12 @@ class UAMS_MRA_Archive
      */
     public static function part_max_bytes(): int
     {
+        /** @var int|float|string $bytes */
+        $bytes = apply_filters('uams_mra_archive_part_bytes', 200 * MB_IN_BYTES);
+
         // The `int` return type reads a numeric string as the number, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
-        return (int) apply_filters('uams_mra_archive_part_bytes', 200 * MB_IN_BYTES);
+        return (int) $bytes;
     }
 
     /**
@@ -75,13 +78,16 @@ class UAMS_MRA_Archive
      */
     public static function step_budget(): array
     {
-        return (array) apply_filters(
+        /** @var array<string, int> $budget */
+        $budget = (array) apply_filters(
             'uams_mra_archive_step_budget',
             [
                 'bytes' => 48 * MB_IN_BYTES,
                 'files' => 25,
             ]
         );
+
+        return $budget;
     }
 
     /* ---------------------------------------------------------------------
@@ -377,6 +383,7 @@ class UAMS_MRA_Archive
      */
     protected static function local_name($id, $path): string
     {
+        /** @var array{basedir: string} $uploads */
         $uploads = wp_get_upload_dir();
         $base = trailingslashit($uploads['basedir']);
 
@@ -530,6 +537,7 @@ class UAMS_MRA_Archive
      */
     public static function base_dir(): string
     {
+        /** @var array{basedir: string} $uploads */
         $uploads = wp_get_upload_dir();
 
         return trailingslashit($uploads['basedir']).self::DIR;

@@ -95,8 +95,11 @@ class UAMS_MRA_Admin
             return;
         }
 
-        wp_enqueue_style('uams-mra-admin', UAMS_MRA_URL.'assets/css/admin.css', [], UAMS_MRA_VERSION);
-        wp_enqueue_script('uams-mra-admin', UAMS_MRA_URL.'assets/js/admin.js', [], UAMS_MRA_VERSION, true);
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
+
+        wp_enqueue_style('uams-mra-admin', UAMS_MRA_URL.'assets/css/admin.css', [], $version);
+        wp_enqueue_script('uams-mra-admin', UAMS_MRA_URL.'assets/js/admin.js', [], $version, true);
 
         wp_localize_script(
             'uams-mra-admin',
@@ -269,13 +272,15 @@ class UAMS_MRA_Admin
      *
      * @param  array  $ids  Attachment IDs.
      * @param  bool  $force  Delete even when references were recorded.
-     * @param  array<int, int|string>  $ids
+     * @param  array<array-key, int|string>  $ids
      * @return array{deleted: int, skipped: int, bytes: int} {deleted, skipped, bytes}
      */
     protected function delete_ids(array $ids, $force): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
         $deleted = 0;
         $skipped = 0;
@@ -291,6 +296,7 @@ class UAMS_MRA_Admin
             }
 
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+            /** @var array{ref_count: string, bytes: string}|null $row */
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             $row = $wpdb->get_row($wpdb->prepare("SELECT ref_count, bytes FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -422,6 +428,7 @@ class UAMS_MRA_Admin
         check_admin_referer('uams_mra_select');
 
         if ($from_filter) {
+            /** @var array<int, int> $ids */
             $ids = UAMS_MRA_Selection::ids_matching_filter();
 
             if ($ids === []) {
@@ -695,7 +702,9 @@ class UAMS_MRA_Admin
         $tiers = UAMS_MRA_Triage::tiers();
 
         if ($rows !== []) {
-            update_meta_cache('post', wp_list_pluck($rows, 'attachment_id'));
+            /** @var array<int> $attachment_ids */
+            $attachment_ids = wp_list_pluck($rows, 'attachment_id');
+            update_meta_cache('post', $attachment_ids);
         }
         ?>
 		<div class="wrap uams-mra-wrap">
@@ -1129,6 +1138,7 @@ class UAMS_MRA_Admin
         check_admin_referer('uams_mra_export');
 
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         // The view is text.
         /** @var array{view?: string} $_GET */
@@ -1177,19 +1187,23 @@ class UAMS_MRA_Admin
             ''
         );
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
         $offset = 0;
 
         do {
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            /** @var list<array<string, string>> $rows */
             $rows = $wpdb->get_results(
                 $wpdb->prepare("SELECT * FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT 500 OFFSET %d", $offset),
                 ARRAY_A
             );
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-            update_meta_cache('post', wp_list_pluck($rows, 'attachment_id'));
+            /** @var array<int> $attachment_ids */
+            $attachment_ids = wp_list_pluck($rows, 'attachment_id');
+            update_meta_cache('post', $attachment_ids);
 
             foreach ($rows as $row) {
                 // The ID is read as a number wherever it is used, so the cast changes nothing.
@@ -1634,7 +1648,7 @@ class UAMS_MRA_Admin
      * the screen can only say "something failed", which helps nobody. Catching
      * it here turns it into a message a person can act on or send on.
      *
-     * @param  callable  $work  Returns a job array.
+     * @param  callable(): array<string, mixed>  $work  Returns a job array.
      */
     protected function repoint_respond(callable $work): void
     {
@@ -1645,7 +1659,10 @@ class UAMS_MRA_Admin
         UAMS_MRA_Repoint::watch_for_fatal(UAMS_MRA_Repoint::next_target());
 
         try {
-            wp_send_json_success($this->repoint_payload($work()));
+            /** @var RepointJob $job */
+            $job = $work();
+
+            wp_send_json_success($this->repoint_payload($job));
         } catch (Throwable $throwable) {
             $this->send_json_error(
                 [
@@ -1838,7 +1855,11 @@ class UAMS_MRA_Admin
         $applied = UAMS_MRA_Repoint::applied_counts();
         /** @var array<string, string> $verdicts */
         $verdicts = UAMS_MRA_Repoint::verdicts();
-        $planned = array_sum(wp_list_pluck($counts, 'files'));
+        /** @var list<int> $planned_files */
+        $planned_files = wp_list_pluck($counts, 'files');
+        $planned = array_sum($planned_files);
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
         // Freshly pulled files are eligible exactly like a byte-identical
         // match, so the button has to count them. Reading only "identical"
         // left the screen with no way to repoint what it had just
@@ -1866,7 +1887,7 @@ class UAMS_MRA_Admin
 					<span class="uams-mra-muted" style="font-weight:normal;font-size:13px">
 						<?php
                     /* translators: %s: plugin version. */
-                    printf(esc_html__('plugin v%s', 'uams-mra'), esc_html(UAMS_MRA_VERSION));
+                    printf(esc_html__('plugin v%s', 'uams-mra'), esc_html($version));
         ?>
 					</span>
 				</h2>
