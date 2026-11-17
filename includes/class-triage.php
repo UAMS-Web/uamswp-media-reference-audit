@@ -147,7 +147,7 @@ class UAMS_MRA_Triage
      * Tier for one results row.
      *
      * @param  array  $row  Results row.
-     * @param  array<string, mixed>  $row
+     * @param  array<string, int|string|Stringable>  $row
      */
     public static function tier($row): string
     {
@@ -208,9 +208,14 @@ class UAMS_MRA_Triage
     {
         $attachment_id = (int) $attachment_id;
 
+        /** @var scalar|null $disposition */
+        $disposition = get_post_meta($attachment_id, self::META_DISPOSITION, true);
+        /** @var scalar|null $note */
+        $note = get_post_meta($attachment_id, self::META_NOTE, true);
+
         return [
-            'd' => (string) get_post_meta($attachment_id, self::META_DISPOSITION, true),
-            'n' => (string) get_post_meta($attachment_id, self::META_NOTE, true),
+            'd' => (string) $disposition,
+            'n' => (string) $note,
         ];
     }
 

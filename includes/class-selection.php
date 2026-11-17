@@ -177,7 +177,7 @@ class UAMS_MRA_Selection
      * Store the working set for this user.
      *
      * @param  array  $ids  Attachment IDs.
-     * @param  array<int, mixed>  $ids
+     * @param  array<int, float|int|string>  $ids
      * @return list<int> The stored IDs.
      */
     public static function store(array $ids): array
@@ -202,6 +202,7 @@ class UAMS_MRA_Selection
      */
     public static function get(): array
     {
+        /** @var array<int, int|string>|string $ids */
         $ids = get_user_meta(get_current_user_id(), self::META_KEY, true);
 
         return is_array($ids) ? array_map(intval(...), $ids) : [];
@@ -219,8 +220,8 @@ class UAMS_MRA_Selection
      * Results rows for the working set, largest first.
      *
      * @param  array  $ids  Attachment IDs.
-     * @param  array<int, int|string>  $ids
-     * @return array<array<string, mixed>> Rows.
+     * @param  array<int, float|int|string>  $ids
+     * @return array<array<string, int|string>> Rows.
      */
     public static function rows(array $ids): array
     {
@@ -249,7 +250,7 @@ class UAMS_MRA_Selection
      * Totals for a set of rows.
      *
      * @param  array  $rows  Results rows.
-     * @param  array<array<string, mixed>>  $rows
+     * @param  array<array<string, int|string>>  $rows
      * @return array{count: int, bytes: int, referenced: int, attached: int, missing: int}
      */
     public static function totals(array $rows): array
