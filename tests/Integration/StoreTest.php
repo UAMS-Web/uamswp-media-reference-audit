@@ -22,6 +22,7 @@ namespace UamswpMediaReferenceAudit\Tests\Integration;
 
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use wpdb;
 
 final class StoreTest extends IntegrationTestCase
 {
@@ -96,7 +97,7 @@ final class StoreTest extends IntegrationTestCase
     private function withRealTables(callable $check): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $tables = [UAMS_MRA_Store::index_table(), UAMS_MRA_Store::refs_table(), UAMS_MRA_Store::results_table(), UAMS_MRA_Store::offsite_table()];
 
         remove_filter('query', [$this, '_create_temporary_tables']);
@@ -129,7 +130,7 @@ final class StoreTest extends IntegrationTestCase
     public function result(?int $id = null, array $values = []): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $wpdb->insert(UAMS_MRA_Store::results_table(), ['attachment_id' => $id] + $values);
     }
 
@@ -141,8 +142,11 @@ final class StoreTest extends IntegrationTestCase
     private function resultRow(int $id): array
     {
         global $wpdb;
-
-        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.UAMS_MRA_Store::results_table().' WHERE attachment_id = %d', $id), ARRAY_A);
+        /** @var wpdb $wpdb */
+        /** @var literal-string $table */
+        $table = UAMS_MRA_Store::results_table();
+        /** @var array<string, string>|null $row */
+        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.$table.' WHERE attachment_id = %d', $id), ARRAY_A);
 
         $this->assertIsArray($row);
 
@@ -178,6 +182,7 @@ final class StoreTest extends IntegrationTestCase
     private function rowCount(string $table, string $where = '1=1'): int
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$where}");
     }
@@ -190,11 +195,14 @@ final class StoreTest extends IntegrationTestCase
     private function keyColumns(string $table, string $key): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $columns = [];
 
-        foreach ((array) $wpdb->get_results("SHOW INDEX FROM {$table} WHERE Key_name = '{$key}'") as $row) {
-            $columns[(int) $row->Seq_in_index] = (string) $row->Column_name;
+        /** @var list<object{Seq_in_index: string, Column_name: string}> $found */
+        $found = $wpdb->get_results("SHOW INDEX FROM {$table} WHERE Key_name = '{$key}'");
+
+        foreach ($found as $row) {
+            $columns[(int) $row->Seq_in_index] = $row->Column_name;
         }
 
         ksort($columns);
@@ -205,7 +213,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_table_names_follow_the_site_prefix_and_the_override(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $this->assertSame($wpdb->prefix.'uams_mra_index', UAMS_MRA_Store::index_table());
         $this->assertSame($wpdb->prefix.'uams_mra_refs', UAMS_MRA_Store::refs_table());
         $this->assertSame($wpdb->prefix.'uams_mra_results', UAMS_MRA_Store::results_table());
@@ -226,7 +234,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_an_empty_override_is_the_same_as_none(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         UAMS_MRA_Store::set_prefix_override('wp_7_');
         UAMS_MRA_Store::set_prefix_override(null);
 
@@ -236,7 +244,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_install_creates_the_four_tables_with_their_keys_and_records_the_version(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         delete_option('uams_mra_db_version');
 
         UAMS_MRA_Store::install();
@@ -264,7 +272,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_install_replaces_an_offsite_key_that_still_names_the_object_instead_of_the_row(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $offsite = UAMS_MRA_Store::offsite_table();
 
         $this->withRealTables(function () use ($wpdb, $offsite): void {
@@ -289,7 +297,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_install_issues_no_drop_when_the_offsite_table_has_no_such_key_or_a_current_one(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $offsite = UAMS_MRA_Store::offsite_table();
         $drops = [];
 
@@ -329,7 +337,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_reset_empties_every_working_table_and_forgets_the_cached_summary(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $wpdb->insert(UAMS_MRA_Store::index_table(), ['attachment_id' => 1]);
         $this->result(1, ['bytes' => 5]);
         UAMS_MRA_Store::add_refs([['attachment_id' => 1, 'source_type' => 'content', 'source_id' => 2, 'source_label' => 'x']]);
@@ -499,7 +507,7 @@ final class StoreTest extends IntegrationTestCase
     {
         $this->withRealTables(function (): void {
             global $wpdb;
-
+            /** @var wpdb $wpdb */
             $ids = range(1, 450);
             $table = UAMS_MRA_Store::results_table();
 
@@ -557,7 +565,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_a_render_state_reaches_every_file_across_chunks(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $ids = range(1, 450);
         $table = UAMS_MRA_Store::results_table();
 
@@ -589,7 +597,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_an_offsite_hit_is_stored_with_a_hash_and_the_row_it_sits_in(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $url = 'https://old.example.edu/wp-content/uploads/a.jpg';
 
         UAMS_MRA_Store::add_offsite([
@@ -597,6 +605,7 @@ final class StoreTest extends IntegrationTestCase
             $this->offsite($url, ['source_type' => 'meta', 'source_id' => 5, 'source_pk' => 77, 'source_key' => 'hero']),
         ]);
 
+        /** @var list<array<string, string>> $rows */
         $rows = $wpdb->get_results('SELECT * FROM '.UAMS_MRA_Store::offsite_table().' ORDER BY offsite_id', ARRAY_A);
 
         $this->assertCount(2, $rows);
@@ -630,7 +639,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_offsite_text_is_cut_at_its_column_limits_in_characters(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         UAMS_MRA_Store::add_offsite([
             $this->offsite('https://x.example/'.str_repeat('é', 600), [
                 'host' => str_repeat('é', 200),
@@ -640,6 +649,7 @@ final class StoreTest extends IntegrationTestCase
             ]),
         ]);
 
+        /** @var array<string, string> $row */
         $row = $wpdb->get_row('SELECT * FROM '.UAMS_MRA_Store::offsite_table(), ARRAY_A);
 
         $this->assertSame(500, mb_strlen($row['url']));
@@ -653,7 +663,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_offsite_text_at_its_limit_is_kept_whole(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         UAMS_MRA_Store::add_offsite([
             $this->offsite('https://x.example/'.str_repeat('a', 482), [
                 'host' => str_repeat('h', 191),
@@ -663,6 +673,7 @@ final class StoreTest extends IntegrationTestCase
             ]),
         ]);
 
+        /** @var array<string, string> $row */
         $row = $wpdb->get_row('SELECT * FROM '.UAMS_MRA_Store::offsite_table(), ARRAY_A);
 
         $this->assertSame([500, 191, 191, 191, 250], [strlen($row['url']), strlen($row['host']), strlen($row['base_norm']), strlen($row['source_key']), strlen($row['source_label'])]);
@@ -709,7 +720,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_the_offsite_summary_counts_hits_files_hosts_and_files_with_a_local_copy(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $this->assertSame(['hits' => 0, 'files' => 0, 'hosts' => 0, 'with_local' => 0], UAMS_MRA_Store::offsite_summary());
 
         UAMS_MRA_Store::add_offsite([
@@ -745,7 +756,7 @@ final class StoreTest extends IntegrationTestCase
     public function test_offsite_files_list_each_file_once_with_its_hits_types_and_local_copies(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         UAMS_MRA_Store::add_offsite([
             $this->offsite('https://old.example.edu/a.jpg', ['base_norm' => 'a.jpg', 'source_type' => 'meta', 'source_id' => 1]),
             $this->offsite('https://old.example.edu/a.jpg', ['base_norm' => 'a.jpg', 'source_type' => 'content', 'source_id' => 2]),
@@ -878,7 +889,7 @@ final class StoreTest extends IntegrationTestCase
     private function failReadsContaining(string $fragment): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $wpdb->suppress_errors(true);
         add_filter('query', static fn (string $sql): string => str_contains($sql, $fragment) ? 'SELECT * FROM mra_missing_table' : $sql);
     }
@@ -933,9 +944,9 @@ final class StoreTest extends IntegrationTestCase
     public function test_an_offsite_read_that_returns_null_throws_and_says_the_query_was_empty(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $real = $wpdb;
-        $double = $this->getMockBuilder(\wpdb::class)->disableOriginalConstructor()->onlyMethods(['get_results'])->getMock();
+        $double = $this->getMockBuilder(wpdb::class)->disableOriginalConstructor()->onlyMethods(['get_results'])->getMock();
         $double->method('get_results')->willReturn(null);
         $double->prefix = $real->prefix;
         $double->base_prefix = $real->base_prefix;

@@ -15,7 +15,7 @@ use function Brain\Monkey\Functions\when;
 
 beforeEach(function (): void {
     when('wp_get_upload_dir')->justReturn(['baseurl' => 'https://site.example.edu/wp-content/uploads']);
-    when('wp_parse_url')->alias(static fn ($url, $component = -1): string|int|array|false|null => parse_url((string) $url, $component));
+    when('wp_parse_url')->alias(static fn (string $url, int $component = -1): string|int|array|false|null => parse_url($url, $component));
     when('home_url')->justReturn('https://site.example.edu');
     when('site_url')->justReturn('https://site.example.edu');
     when('uams_mra_settings')->justReturn(['extra_paths' => '']);
