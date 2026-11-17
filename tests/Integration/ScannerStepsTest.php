@@ -100,7 +100,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     /**
      * Every stored reference, in insertion order.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array<int, array<string, string>>
      */
     private function refs(): array
     {
@@ -124,12 +124,13 @@ final class ScannerStepsTest extends IntegrationTestCase
     /**
      * One results row.
      *
-     * @return array<string, mixed>
+     * @return array<string, string>
      */
     public function result(?int $attachment_id = null): array
     {
         global $wpdb;
 
+        /** @var array<string, string>|null $row */
         $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.UAMS_MRA_Store::results_table().' WHERE attachment_id = %d', $attachment_id), ARRAY_A);
 
         return is_array($row) ? $row : [];
@@ -288,10 +289,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $seen = [];
         $state = $this->state('index', $settings, ['cursor' => 99]);
 
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
-
         for ($i = 0; $i < 12 && $state['step'] !== 'done'; $i++) {
-            $state = $method->invoke(null, $state);
+            $state = $this->advance($state);
             $seen[] = $state['step'];
         }
 
@@ -301,45 +300,40 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_last_step_ends_the_scan_and_a_new_step_gets_its_label(): void
     {
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
-
-        $next = $method->invoke(null, $this->state('posts', [], ['cursor' => 5]));
+        $next = $this->advance($this->state('posts', [], ['cursor' => 5]));
 
         $this->same('postmeta', $next['step']);
         $this->same(0, $next['cursor']);
         $this->same(UAMS_MRA_Scanner::step_label('postmeta'), $next['message']);
 
-        $end = $method->invoke(null, $this->state('render'));
+        $end = $this->advance($this->state('render'));
 
         $this->same('done', $end['step']);
         $this->same('Scan complete', $end['message']);
         $this->assertGreaterThan(0, $end['finished']);
 
-        $unknown = $method->invoke(null, $this->state('nowhere'));
+        $unknown = $this->advance($this->state('nowhere'));
 
         $this->same('done', $unknown['step']);
     }
 
     public function test_each_optional_step_is_skipped_only_when_its_own_setting_is_off(): void
     {
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
         $on = ['include_termmeta' => 1, 'include_usermeta' => 1, 'include_comments' => 1, 'include_network' => 0, 'include_render' => 0];
 
-        $this->same('termmeta', $method->invoke(null, $this->state('options', $on))['step']);
-        $this->same('usermeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0] + $on))['step']);
-        $this->same('commentmeta', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0] + $on))['step']);
-        $this->same('finalize', $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0] + $on))['step']);
-        $this->same('usermeta', $method->invoke(null, $this->state('termmeta', $on))['step']);
-        $this->same('commentmeta', $method->invoke(null, $this->state('usermeta', $on))['step']);
-        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', $on))['step']);
-        $this->same('done', $method->invoke(null, $this->state('finalize', $on))['step']);
+        $this->same('termmeta', $this->advance($this->state('options', $on))['step']);
+        $this->same('usermeta', $this->advance($this->state('options', ['include_termmeta' => 0] + $on))['step']);
+        $this->same('commentmeta', $this->advance($this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0] + $on))['step']);
+        $this->same('finalize', $this->advance($this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0] + $on))['step']);
+        $this->same('usermeta', $this->advance($this->state('termmeta', $on))['step']);
+        $this->same('commentmeta', $this->advance($this->state('usermeta', $on))['step']);
+        $this->same('finalize', $this->advance($this->state('commentmeta', $on))['step']);
+        $this->same('done', $this->advance($this->state('finalize', $on))['step']);
     }
 
     public function test_the_skipped_steps_still_leave_the_cursor_at_zero_and_the_label_of_the_step_reached(): void
     {
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
-
-        $next = $method->invoke(null, $this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0, 'include_render' => 0], ['cursor' => 9]));
+        $next = $this->advance($this->state('options', ['include_termmeta' => 0, 'include_usermeta' => 0, 'include_comments' => 0, 'include_render' => 0], ['cursor' => 9]));
 
         $this->same('finalize', $next['step']);
         $this->same(0, $next['cursor']);
@@ -348,16 +342,14 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_render_step_is_skipped_when_it_is_off_or_has_nothing_to_fetch_and_entered_when_it_does(): void
     {
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
-
-        $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 0]))['step']);
-        $this->same('done', $method->invoke(null, $this->state('finalize', ['include_render' => 1]))['step']);
+        $this->same('done', $this->advance($this->state('finalize', ['include_render' => 0]))['step']);
+        $this->same('done', $this->advance($this->state('finalize', ['include_render' => 1]))['step']);
 
         $parent = self::factory()->post->create(['post_status' => 'publish']);
         $attachment = $this->attachment('2025/11/a.jpg', $parent);
         $this->putResult($attachment, ['parent_id' => $parent, 'is_attached' => 1]);
 
-        $state = $method->invoke(null, $this->state('finalize', ['include_render' => 1], ['cursor' => 4]));
+        $state = $this->advance($this->state('finalize', ['include_render' => 1], ['cursor' => 4]));
 
         $this->same('render', $state['step']);
         $this->same([$parent], $state['render_queue']);
@@ -367,21 +359,19 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_network_step_is_skipped_on_a_single_site_or_when_it_is_off(): void
     {
-        $method = new \ReflectionMethod(UAMS_MRA_Scanner::class, 'advance');
-
-        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 0]))['step']);
+        $this->same('finalize', $this->advance($this->state('commentmeta', ['include_network' => 0]))['step']);
 
         if (! is_multisite()) {
-            $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step']);
+            $this->same('finalize', $this->advance($this->state('commentmeta', ['include_network' => 1]))['step']);
 
             return;
         }
 
-        $this->same('finalize', $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]))['step'], 'No other site yet.');
+        $this->same('finalize', $this->advance($this->state('commentmeta', ['include_network' => 1]))['step'], 'No other site yet.');
 
         $this->setExpectedDeprecated('wpmu_new_blog');
         $other = self::factory()->blog->create();
-        $state = $method->invoke(null, $this->state('commentmeta', ['include_network' => 1]));
+        $state = $this->advance($this->state('commentmeta', ['include_network' => 1]));
 
         $this->same('network', $state['step']);
         $this->same([$other], $state['site_queue']);
@@ -1204,6 +1194,41 @@ final class ScannerStepsTest extends IntegrationTestCase
     }
 
     /**
+     * Run a protected static method of the scanner that answers with a scan state.
+     *
+     * @return array<string, mixed>
+     */
+    private function callState(string $method, mixed ...$args): array
+    {
+        /** @var array<string, mixed> $state */
+        $state = $this->call($method, ...$args);
+
+        return $state;
+    }
+
+    /**
+     * Run a protected static method of the scanner that answers with text.
+     */
+    private function callString(string $method, mixed ...$args): string
+    {
+        /** @var string $text */
+        $text = $this->call($method, ...$args);
+
+        return $text;
+    }
+
+    /**
+     * Move a scan state on to its next step.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function advance(array $state): array
+    {
+        return $this->callState('advance', $state);
+    }
+
+    /**
      * A parent post with attachments hanging off it that no reference has explained.
      *
      * @param  array<string, mixed>  $post
@@ -1236,13 +1261,14 @@ final class ScannerStepsTest extends IntegrationTestCase
         $orphan = $this->attachment('2025/11/o.jpg');
         $this->putResult($orphan, ['parent_id' => 0, 'is_attached' => 1, 'ref_count' => 0]);
 
-        $state = $this->call('build_render_queue', $this->state('finalize'));
+        $state = $this->callState('build_render_queue', $this->state('finalize'));
 
         $this->same([$many, $few, $tie], $state['render_queue']);
         $this->same(3, $state['render_total']);
         $this->same(0, $state['render_skipped']);
         $this->same(0, $state['render_capped']);
         $this->same(['pages' => 0, 'found' => 0, 'absent' => 0, 'error' => 0, 'offsite' => 0], $state['render_stats']);
+        $this->assertIsString($state['render_token']);
         $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{8}$/', $state['render_token']);
         $this->same([], UAMS_MRA_Store::render_counts());
         $this->assertCount(3, $many_files);
@@ -1259,7 +1285,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         [$hidden, $hidden_files] = $this->parentWithFiles(1, ['post_type' => 'zz_hidden']);
         [$open, $open_files] = $this->parentWithFiles(1);
 
-        $state = $this->call('build_render_queue', $this->state('finalize'));
+        $state = $this->callState('build_render_queue', $this->state('finalize'));
 
         $this->same([$open], $state['render_queue']);
         $this->same(3, $state['render_skipped']);
@@ -1283,7 +1309,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         [$second, $second_files] = $this->parentWithFiles(2);
         [$third, $third_files] = $this->parentWithFiles(1);
 
-        $state = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
+        $state = $this->callState('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
 
         $this->same([$first, $second], $state['render_queue']);
         $this->same(2, $state['render_total']);
@@ -1300,15 +1326,21 @@ final class ScannerStepsTest extends IntegrationTestCase
         [$first] = $this->parentWithFiles(2);
         $this->parentWithFiles(1);
 
-        $zero = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 0]));
+        $zero = $this->callState('build_render_queue', $this->state('finalize', ['render_max_pages' => 0]));
 
         $this->same([$first], $zero['render_queue']);
         $this->same(1, $zero['render_capped']);
 
         $state = $this->state('finalize');
-        unset($state['settings']['render_max_pages']);
+        /** @var array<string, mixed> $settings */
+        $settings = $state['settings'];
+        unset($settings['render_max_pages']);
+        $state['settings'] = $settings;
 
-        $this->assertCount(2, $this->call('build_render_queue', $state)['render_queue']);
+        /** @var array<string, mixed> $built */
+        $built = $this->callState('build_render_queue', $state);
+        $this->assertIsArray($built['render_queue']);
+        $this->assertCount(2, $built['render_queue']);
     }
 
     public function test_pending_files_are_grouped_by_parent_and_leave_out_the_explained_ones(): void
@@ -1337,6 +1369,7 @@ final class ScannerStepsTest extends IntegrationTestCase
             $wpdb->insert(UAMS_MRA_Store::results_table(), ['attachment_id' => 900000 + $i, 'parent_id' => 800000 + $i, 'is_attached' => 1, 'ref_count' => 0]);
         }
 
+        /** @var array<int, list<int>> $found */
         $found = $this->call('pending_attachment_ids', $parents);
 
         $this->assertCount(201, $found);
@@ -1511,7 +1544,9 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         $this->assertCount(0, $log);
         $this->same('skipped', $this->result(555001)['render_state']);
-        $this->same(0, $state['render_stats']['pages']);
+        /** @var array{pages: int} $stats */
+        $stats = $state['render_stats'];
+        $this->same(0, $stats['pages']);
         $this->same(1, $state['processed']);
     }
 
@@ -1570,7 +1605,10 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same(25, $exact['processed']);
 
         $absent = $this->state('render', [], ['render_queue' => $queue]);
-        unset($absent['settings']['batch_render']);
+        /** @var array<string, mixed> $settings */
+        $settings = $absent['settings'];
+        unset($settings['batch_render']);
+        $absent['settings'] = $settings;
         $this->same(3, $this->scanStep($absent)['processed']);
 
         $this->same(3, $this->scanStep($this->renderState(array_slice($queue, 0, 3)))['processed']);
@@ -1663,8 +1701,10 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same(3, $args['redirection']);
         $this->assertTrue($args['sslverify']);
         $this->same('UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')', $args['user-agent']);
-        $this->same('no-cache', $args['headers']['Cache-Control']);
-        $this->same('no-cache', $args['headers']['Pragma']);
+        /** @var array<string, string> $headers */
+        $headers = $args['headers'];
+        $this->same('no-cache', $headers['Cache-Control']);
+        $this->same('no-cache', $headers['Pragma']);
     }
 
     public function test_the_request_arguments_and_ssl_check_can_be_changed_by_filters(): void
@@ -1716,7 +1756,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_a_post_label_names_the_type_and_title_and_flags_a_status_that_is_not_live(): void
     {
-        $label = fn (array $row): string => $this->call('post_label', (object) $row);
+        $label = fn (array $row): string => $this->callString('post_label', (object) $row);
 
         $this->same('page: About', $label(['post_type' => 'page', 'post_title' => 'About', 'post_status' => 'publish']));
         $this->same('attachment: Photo', $label(['post_type' => 'attachment', 'post_title' => 'Photo', 'post_status' => 'inherit']));
@@ -1922,7 +1962,9 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         while ($guard-- > 0) {
             $state = UAMS_MRA_Scanner::step();
-            $seen[] = (string) ($state['step'] ?? '');
+            /** @var string $step */
+            $step = $state['step'] ?? '';
+            $seen[] = $step;
 
             if (($state['step'] ?? '') === 'done') {
                 return $seen;
@@ -2025,9 +2067,11 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_a_skipped_meta_key_does_not_end_the_batch(): void
     {
+        global $wpdb;
+
         $attachment = $this->attachment('2025/11/zi-a.jpg');
         $post = self::factory()->post->create();
-        $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
+        $before = $this->maxId($wpdb->postmeta, 'meta_id');
         add_post_meta($post, '_edit_lock', '1:1');
         add_post_meta($post, 'zi_hero', $this->url('2025/11/zi-a.jpg'));
 
@@ -2038,8 +2082,10 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_an_empty_option_does_not_end_the_batch(): void
     {
+        global $wpdb;
+
         $attachment = $this->attachment('2025/11/zj-a.jpg');
-        $before = $this->maxId($GLOBALS['wpdb']->options, 'option_id');
+        $before = $this->maxId($wpdb->options, 'option_id');
         add_option('zj_empty', '');
         add_option('zj_hero', $this->url('2025/11/zj-a.jpg'));
 
@@ -2052,15 +2098,16 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $this->parentWithFiles(1);
 
-        $state = $this->call('advance', $this->state('finalize', ['include_render' => 0]));
+        $state = $this->advance($this->state('finalize', ['include_render' => 0]));
 
         $this->same('done', $state['step']);
         $this->same([], $state['render_queue']);
         $this->assertArrayNotHasKey('render_token', $state);
 
-        $on = $this->call('advance', $this->state('finalize', ['include_render' => 1]));
+        $on = $this->advance($this->state('finalize', ['include_render' => 1]));
 
         $this->same('render', $on['step']);
+        $this->assertIsArray($on['render_queue']);
         $this->assertCount(1, $on['render_queue']);
     }
 
@@ -2069,8 +2116,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->parentWithFiles(1);
         $this->parentWithFiles(1);
 
-        $exact = $this->call('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
+        $exact = $this->callState('build_render_queue', $this->state('finalize', ['render_max_pages' => 2]));
 
+        $this->assertIsArray($exact['render_queue']);
         $this->assertCount(2, $exact['render_queue']);
         $this->same(0, $exact['render_capped']);
         $this->same(0, $exact['render_skipped']);
@@ -2085,9 +2133,10 @@ final class ScannerStepsTest extends IntegrationTestCase
             return $password;
         }, 10, 4);
 
-        $state = $this->call('build_render_queue', $this->state('finalize'));
+        $state = $this->callState('build_render_queue', $this->state('finalize'));
 
         $this->same([[8, false, false]], $asked);
+        $this->assertIsString($state['render_token']);
         $this->same(8, strlen($state['render_token']));
     }
 
@@ -2187,12 +2236,14 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_a_revision_row_and_an_empty_value_do_not_end_the_postmeta_batch(): void
     {
+        global $wpdb;
+
         $attachment = $this->attachment('2025/11/zl-a.jpg');
         $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
-        $before = $this->maxId($GLOBALS['wpdb']->postmeta, 'meta_id');
+        $before = $this->maxId($wpdb->postmeta, 'meta_id');
         // add_post_meta() writes a revision's meta to its parent, so the row is inserted directly.
-        $GLOBALS['wpdb']->insert($GLOBALS['wpdb']->postmeta, ['post_id' => $revision, 'meta_key' => 'zl_old', 'meta_value' => 'x']);
+        $wpdb->insert($wpdb->postmeta, ['post_id' => $revision, 'meta_key' => 'zl_old', 'meta_value' => 'x']);
         add_post_meta($post, 'zl_empty', '');
         add_post_meta($post, 'zl_hero', $this->url('2025/11/zl-a.jpg'));
 
@@ -2216,7 +2267,7 @@ final class ScannerStepsTest extends IntegrationTestCase
             $asked = $query->query_vars;
         });
 
-        $state = $this->call('advance', $this->state('commentmeta', ['include_network' => 1]));
+        $state = $this->advance($this->state('commentmeta', ['include_network' => 1]));
 
         $this->same([$other], $state['site_queue']);
         $this->same(500, $asked['number']);

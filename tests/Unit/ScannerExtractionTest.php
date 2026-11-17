@@ -28,6 +28,7 @@ function scanner_call(string $method, mixed ...$args): mixed
  */
 function scanner_redefine(string $target, callable $replacement): void
 {
+    /** @var callable $redefine */
     $redefine = scanner_loose('Patchwork\\redefine');
     $redefine($target, $replacement);
 }
@@ -98,6 +99,7 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    /** @var callable $restore */
     $restore = scanner_loose('Patchwork\\restoreAll');
     $restore();
 });
@@ -175,7 +177,10 @@ it('takes the prefixes of the current site when none are given', function (): vo
 });
 
 it('reads a null as no text when looking for paths', function (): void {
-    expect(UAMS_MRA_Scanner::extract_paths(scanner_loose(null)))->toBe([]);
+    /** @var string $content */
+    $content = scanner_loose(null);
+
+    expect(UAMS_MRA_Scanner::extract_paths($content))->toBe([]);
 });
 
 // upload_path_prefixes(), own_uploads_path(), own_hosts()
@@ -273,7 +278,10 @@ it('lists each ID once, drops zero, and returns integers', function (): void {
 });
 
 it('returns nothing for text with no ID in it', function (mixed $content): void {
-    expect(UAMS_MRA_Scanner::extract_ids_from_content($content))->toBe([]);
+    /** @var string $text */
+    $text = $content;
+
+    expect(UAMS_MRA_Scanner::extract_ids_from_content($text))->toBe([]);
 })->with(['', 'plain words', null]);
 
 // scan_meta_value()
@@ -421,7 +429,10 @@ it('refuses the weak match to a key for another object, and when the caller says
 it('reads a number as text when scanning meta', function (): void {
     scanner_index(known: [5]);
 
-    expect(UAMS_MRA_Scanner::scan_meta_value('field', scanner_loose(5)))->toBe([5 => 1]);
+    /** @var string $number */
+    $number = scanner_loose(5);
+
+    expect(UAMS_MRA_Scanner::scan_meta_value('field', $number))->toBe([5 => 1]);
 });
 
 // collect_ids_from_array()
@@ -538,6 +549,7 @@ it('lets a filter switch a source type on', function (): void {
 });
 
 it('skips the meta that describes the attachment itself and this plugin triage, as a lookup', function (): void {
+    /** @var array<string, int> $keys */
     $keys = scanner_call('skipped_meta_keys');
 
     foreach (['_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes', '_wp_attachment_image_alt', '_wp_attachment_is_custom_header', '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date', '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_desired_post_slug', '_uams_mra_disposition', '_uams_mra_note'] as $key) {
@@ -614,6 +626,7 @@ it('turns the foreign uploads URLs in content into rows for the offsite report',
 });
 
 it('names the exact row and key to write back to when it is given them', function (): void {
+    /** @var list<array<string, int|string>> $rows */
     $rows = scanner_call('collect_offsite', 'https://old.example.edu/wp-content/uploads/a.jpg', 'postmeta', 12, 'A page', 77, 'hero');
 
     expect($rows[0]['source_id'])->toBe(12)
