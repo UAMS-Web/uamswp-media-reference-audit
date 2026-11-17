@@ -22,7 +22,10 @@ final class PluginVersionTest extends IntegrationTestCase
     {
         $header = get_plugin_data(UAMS_MRA_FILE, false, false)['Version'];
 
-        $this->assertMatchesRegularExpression('/^\d+\.\d+\.\d+$/', UAMS_MRA_VERSION);
-        $this->assertSame($header, UAMS_MRA_VERSION);
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
+
+        $this->assertMatchesRegularExpression('/^\d+\.\d+\.\d+$/', $version);
+        $this->assertSame($header, $version);
     }
 }

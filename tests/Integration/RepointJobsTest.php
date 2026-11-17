@@ -23,6 +23,7 @@ use UAMS_MRA_Repoint;
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Error;
+use wpdb;
 
 final class RepointJobsTest extends IntegrationTestCase
 {
@@ -164,8 +165,8 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     private function row(array $over = []): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         static $pk = 1000;
         $pk++;
 
@@ -202,10 +203,13 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     private function stored(int $id): array
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
+        /** @var literal-string $offsite_table */
+        $offsite_table = UAMS_MRA_Store::offsite_table();
         /** @var array<string, string>|null $row */
-        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.UAMS_MRA_Store::offsite_table().' WHERE offsite_id = %d', $id), ARRAY_A);
+        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.$offsite_table.' WHERE offsite_id = %d', $id), ARRAY_A);
 
         return is_array($row) ? $row : [];
     }
@@ -221,6 +225,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $result = $this->call('rewrite_row', (object) array_merge(['url' => self::OLD, 'target_url' => self::NEW, 'source_key' => '', 'source_id' => 0, 'source_pk' => 0], $over));
 
         $this->assertIsArray($result);
+        /** @var array<string, mixed> $result */
 
         return $result;
     }
@@ -230,8 +235,8 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     private function metaRow(string $table, string $id_column, int $id, string $value): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $wpdb->insert($table, [$id_column => $id, 'meta_key' => 'uams_mra_jobs', 'meta_value' => $value]);
 
         return (int) $wpdb->insert_id;
@@ -239,9 +244,15 @@ final class RepointJobsTest extends IntegrationTestCase
 
     private function metaValue(string $table, string $pk_column, int $pk): ?string
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
-        return $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$table} WHERE {$pk_column} = %d", $pk));
+        /** @var literal-string $meta_table */
+        $meta_table = $table;
+        /** @var literal-string $pk_name */
+        $pk_name = $pk_column;
+
+        return $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$meta_table} WHERE {$pk_name} = %d", $pk));
     }
 
     /**
@@ -297,7 +308,9 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     private function attachment(string $file, string $bytes): int
     {
-        $path = wp_get_upload_dir()['basedir'].'/'.$file;
+        /** @var array{basedir: string} $uploads */
+        $uploads = wp_get_upload_dir();
+        $path = $uploads['basedir'].'/'.$file;
         wp_mkdir_p(dirname($path));
         file_put_contents($path, $bytes);
         $this->files[] = $path;
@@ -389,6 +402,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $decoded = json_decode((string) file_get_contents($out), true);
         $this->assertIsArray($decoded);
+        /** @var array<string, mixed> $decoded */
 
         return $decoded;
     }
@@ -450,15 +464,17 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_saving_a_job_stamps_it_and_keeps_it_out_of_the_autoloaded_options(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $this->call('put_job', ['phase' => 'apply']);
 
         $job = UAMS_MRA_Repoint::get_job();
 
         $this->assertSame('apply', $job['phase']);
         $this->assertEqualsWithDelta(time(), $job['updated'], 5);
-        $this->assertContains($wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", UAMS_MRA_Repoint::STATE_OPTION)), ['no', 'off']);
+        /** @var literal-string $options_table */
+        $options_table = $wpdb->options;
+        $this->assertContains($wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$options_table} WHERE option_name = %s", UAMS_MRA_Repoint::STATE_OPTION)), ['no', 'off']);
     }
 
     public function test_the_stall_timeout_is_five_minutes_unless_filtered(): void
@@ -743,6 +759,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('plan', $job['phase']);
         $this->assertSame(2, $job['done']);
 
+        /** @var wpdb $wpdb */
         global $wpdb;
         $planned = $wpdb->get_col('SELECT DISTINCT url_hash FROM '.UAMS_MRA_Store::offsite_table()." WHERE verdict = 'nolocal' ORDER BY url_hash ASC");
         $all = $urls;
@@ -1042,6 +1059,7 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     public static function metaTypes(): array
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         return [
@@ -1092,8 +1110,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_meta_row_that_will_not_save_fails_and_keeps_its_cache(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $meta_id = $this->metaRow($wpdb->postmeta, 'post_id', 4244, 'Link '.self::OLD);
         wp_cache_set('4244', ['stale' => ['x']], 'post_meta');
         $wpdb->suppress_errors(true);
@@ -1107,8 +1125,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_serialized_meta_value_with_a_hidden_copy_is_not_half_written(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $private = serialize(['one' => self::OLD, 'two' => new UamsMraJobsPrivateHolder(self::OLD)]);
         $meta_id = $this->metaRow($wpdb->postmeta, 'post_id', 4245, $private);
 
@@ -1118,8 +1136,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_meta_value_that_cannot_be_read_and_one_that_hides_the_url_fail(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $corrupt = 'a:1:{s:3:"url";s:5:"'.self::OLD.'";}';
         $broken = $this->metaRow($wpdb->postmeta, 'post_id', 4246, $corrupt);
         $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'postmeta', 'source_pk' => $broken, 'source_id' => 4246]));
@@ -1133,8 +1151,8 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_the_meta_tables_are_found_by_type_and_unknown_types_have_none(): void
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
-
         $this->assertSame(['table' => $wpdb->postmeta, 'pk' => 'meta_id', 'cache' => 'post_meta'], $this->call('meta_target', 'postmeta'));
         $this->assertSame(['table' => $wpdb->termmeta, 'pk' => 'meta_id', 'cache' => 'term_meta'], $this->call('meta_target', 'termmeta'));
         $this->assertSame(['table' => $wpdb->usermeta, 'pk' => 'umeta_id', 'cache' => 'user_meta'], $this->call('meta_target', 'usermeta'));
@@ -1227,6 +1245,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $this->call('point_group_at', [md5('https://old.example.edu/u/nothing.jpg')], $id);
 
+        /** @var wpdb $wpdb */
         global $wpdb;
         $this->assertSame('0', (string) $wpdb->get_var('SELECT COUNT(*) FROM '.UAMS_MRA_Store::offsite_table()));
     }
@@ -1302,7 +1321,9 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame(1, $job['applied']);
         $this->assertSame(0, $job['failed']);
 
+        /** @var wpdb $wpdb */
         global $wpdb;
+        /** @var array<string, string> $row */
         $row = $wpdb->get_row('SELECT * FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'", ARRAY_A);
         $attachment = (int) $row['local_id'];
 
@@ -1329,6 +1350,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $this->http['HEAD'][$url] = [200, null];
         $this->http['GET'][$url] = function () use ($url, &$seen): array {
+            /** @var wpdb $wpdb */
             global $wpdb;
             $seen['verdict'] = $wpdb->get_var('SELECT verdict FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
             $seen['local'] = $wpdb->get_var('SELECT local_id FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
@@ -1382,7 +1404,9 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $job = UAMS_MRA_Repoint::step();
 
+        /** @var wpdb $wpdb */
         global $wpdb;
+        /** @var array<string, string> $row */
         $row = $wpdb->get_row('SELECT * FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'", ARRAY_A);
 
         $this->assertSame($verdict, $row['verdict']);
@@ -1439,6 +1463,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
     private function firstRowId(string $url): int
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         return (int) $wpdb->get_var('SELECT offsite_id FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."' LIMIT 1");
@@ -1698,6 +1723,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->http['GET'][$url] = [200, '%PDF-1.4 small'];
         $this->sideloadJob([$group]);
 
+        /** @var list<string> $stored */
         $stored = [];
         add_filter('wp_handle_upload', static function (array $upload) use (&$stored): array {
             $stored[] = $upload['file'];
@@ -1711,7 +1737,9 @@ final class RepointJobsTest extends IntegrationTestCase
         $this->assertSame('rejected', $this->stored($this->firstRowId($url))['verdict']);
         $this->assertSame(1, $job['failed']);
         $this->assertCount(1, $stored);
-        $this->assertFileDoesNotExist($stored[0]);
+        /** @var string $copy */
+        $copy = $stored[0];
+        $this->assertFileDoesNotExist($copy);
     }
 
     public function test_a_picture_too_large_to_resize_is_kept_at_full_size_with_its_dimensions(): void

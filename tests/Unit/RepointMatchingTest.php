@@ -96,8 +96,8 @@ function repoint_clean(string $dir): void
 }
 
 beforeEach(function (): void {
-    when('wp_parse_url')->alias(static fn ($url, $component = -1): string|int|array|false|null => parse_url((string) $url, $component));
-    when('trailingslashit')->alias(static fn ($value): string => rtrim((string) $value, '/\\').'/');
+    when('wp_parse_url')->alias(static fn (string $url, int $component = -1): string|int|array|false|null => parse_url($url, $component));
+    when('trailingslashit')->alias(static fn (string $value): string => rtrim($value, '/\\').'/');
     when('is_serialized')->alias(static fn ($value): bool => is_string($value) && preg_match('/^(?:N;|[bidsaOCE]:)/', trim($value)) === 1);
 });
 
@@ -426,11 +426,16 @@ it('stops going deeper after ten levels', function (): void {
     };
 
     $leaf = static function (array $data): string {
+        /** @var array<string, mixed> $data */
         while (isset($data['next'])) {
+            /** @var array<string, mixed> $data */
             $data = $data['next'];
         }
 
-        return $data['leaf'];
+        /** @var string $leaf */
+        $leaf = $data['leaf'];
+
+        return $leaf;
     };
 
     // Depth starts at zero: a leaf string at depth 10 is still replaced, at depth 11 it is not.
@@ -454,10 +459,15 @@ it('stops going deeper after ten levels through objects as well', function (): v
 
     $leaf = static function (object $data): string {
         while (isset($data->next)) {
+            /** @var stdClass $data */
             $data = $data->next;
         }
 
-        return $data->leaf;
+        /** @var stdClass $data */
+        /** @var string $leaf */
+        $leaf = $data->leaf;
+
+        return $leaf;
     };
 
     expect($leaf(repoint_call_object('deep_replace', $nest(9), ['A'], ['B'])))->toBe('B')
@@ -473,6 +483,26 @@ it('does not touch an object it cannot read', function (): void {
         ->and(serialize($result))->toBe('O:11:"MissingKind":1:{s:3:"url";s:1:"A";}');
 });
 
+/**
+ * The status code of a canned response, as wp_remote_retrieve_response_code() reads it.
+ *
+ * @param  array{response?: array{code?: int|string}, headers?: array<string, mixed>}  $response
+ */
+function repoint_response_code(array $response): int|string
+{
+    return $response['response']['code'] ?? '';
+}
+
+/**
+ * One header of a canned response, as wp_remote_retrieve_header() reads it.
+ *
+ * @param  array{response?: array{code?: int|string}, headers?: array<string, mixed>}  $response
+ */
+function repoint_response_header(array $response, string $header): mixed
+{
+    return $response['headers'][$header] ?? '';
+}
+
 // remote_size()
 
 /**
@@ -486,8 +516,8 @@ function repoint_head(mixed $response, ?array &$seen = null): void
     when('home_url')->justReturn('https://site.example.edu');
     when('apply_filters')->alias(static fn ($hook, $value) => $value);
     when('is_wp_error')->alias(static fn ($thing): bool => $thing instanceof WP_Error);
-    when('wp_remote_retrieve_response_code')->alias(static fn ($r) => $r['response']['code'] ?? '');
-    when('wp_remote_retrieve_header')->alias(static fn ($r, $header) => $r['headers'][$header] ?? '');
+    when('wp_remote_retrieve_response_code')->alias(repoint_response_code(...));
+    when('wp_remote_retrieve_header')->alias(repoint_response_header(...));
 
     when('wp_safe_remote_head')->alias(static function (string $url, array $args) use ($response, &$seen) {
         $seen = ['url' => $url, 'args' => $args];
@@ -532,12 +562,14 @@ it('asks for the HEAD with a timeout, a redirect limit, ssl verification and an 
     repoint_call('remote_size', MATCH_URL);
 
     /** @var array{url: string, args: array<string, mixed>} $seen */
+    /** @var string $version */
+    $version = UAMS_MRA_VERSION;
     expect($seen['url'])->toBe(MATCH_URL)
         ->and($seen['args'])->toBe([
             'timeout' => 15,
             'redirection' => 3,
             'sslverify' => true,
-            'user-agent' => 'UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+https://site.example.edu)',
+            'user-agent' => 'UAMS-Media-Reference-Audit/'.$version.' (+https://site.example.edu)',
         ]);
 });
 
@@ -788,8 +820,8 @@ function repoint_classify(array $candidates, array $opts = []): array
 
         return ['response' => ['code' => $remote === null ? 404 : 200], 'headers' => ['content-length' => (string) $remote]];
     });
-    when('wp_remote_retrieve_response_code')->alias(static fn ($r) => $r['response']['code']);
-    when('wp_remote_retrieve_header')->alias(static fn ($r, $h) => $r['headers'][$h] ?? '');
+    when('wp_remote_retrieve_response_code')->alias(repoint_response_code(...));
+    when('wp_remote_retrieve_header')->alias(repoint_response_header(...));
     when('get_attached_file')->justReturn($dir.'hero.jpg');
     when('wp_get_attachment_url')->justReturn(($opts['noUrl'] ?? false) ? false : 'https://site.example.edu/wp-content/uploads/2020/01/hero.jpg');
     when('wp_get_attachment_metadata')->justReturn($opts['meta'] ?? false);
