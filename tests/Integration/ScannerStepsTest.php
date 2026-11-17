@@ -20,6 +20,7 @@ use UAMS_MRA_Scanner;
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Error;
+use wpdb;
 
 final class ScannerStepsTest extends IntegrationTestCase
 {
@@ -90,11 +91,24 @@ final class ScannerStepsTest extends IntegrationTestCase
     }
 
     /**
+     * The uploads directory and URL of the site under test.
+     *
+     * @return array{basedir: string, baseurl: string}
+     */
+    private function uploads(): array
+    {
+        /** @var array{basedir: string, baseurl: string} $uploads */
+        $uploads = wp_get_upload_dir();
+
+        return $uploads;
+    }
+
+    /**
      * The URL of a file under this site's uploads.
      */
     private function url(string $file): string
     {
-        return wp_get_upload_dir()['baseurl'].'/'.$file;
+        return $this->uploads()['baseurl'].'/'.$file;
     }
 
     /**
@@ -105,8 +119,12 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function refs(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
-        return (array) $wpdb->get_results('SELECT attachment_id, source_type, source_id, source_label, site_id, confidence FROM '.UAMS_MRA_Store::refs_table().' ORDER BY ref_id ASC', ARRAY_A);
+        /** @var list<array<string, string>> $rows */
+        $rows = $wpdb->get_results('SELECT attachment_id, source_type, source_id, source_label, site_id, confidence FROM '.UAMS_MRA_Store::refs_table().' ORDER BY ref_id ASC', ARRAY_A);
+
+        return $rows;
     }
 
     /**
@@ -117,8 +135,12 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function offsite(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
-        return (array) $wpdb->get_results('SELECT url, host, base_norm, source_type, source_id, source_pk, source_key, source_label FROM '.UAMS_MRA_Store::offsite_table().' ORDER BY offsite_id ASC', ARRAY_A);
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $wpdb->get_results('SELECT url, host, base_norm, source_type, source_id, source_pk, source_key, source_label FROM '.UAMS_MRA_Store::offsite_table().' ORDER BY offsite_id ASC', ARRAY_A);
+
+        return $rows;
     }
 
     /**
@@ -129,9 +151,12 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function result(?int $attachment_id = null): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $table */
+        $table = UAMS_MRA_Store::results_table();
         /** @var array<string, string>|null $row */
-        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.UAMS_MRA_Store::results_table().' WHERE attachment_id = %d', $attachment_id), ARRAY_A);
+        $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.$table.' WHERE attachment_id = %d', $attachment_id), ARRAY_A);
 
         return is_array($row) ? $row : [];
     }
@@ -144,7 +169,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function putResult(int $attachment_id, array $row = []): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $wpdb->replace(UAMS_MRA_Store::results_table(), array_merge([
             'attachment_id' => $attachment_id,
             'parent_id' => 0,
@@ -159,6 +184,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function maxId(string $table, string $column): int
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         return (int) $wpdb->get_var("SELECT MAX({$column}) FROM {$table}");
     }
@@ -185,12 +211,14 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_state_is_stored_without_autoloading_and_read_back_whole(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         UAMS_MRA_Scanner::set_state(['step' => 'posts', 'cursor' => 7]);
 
         $this->same(['step' => 'posts', 'cursor' => 7], UAMS_MRA_Scanner::get_state());
+        /** @var literal-string $options_table */
+        $options_table = $wpdb->options;
         $this->assertContains(
-            $wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", UAMS_MRA_Scanner::STATE_OPTION)),
+            $wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$options_table} WHERE option_name = %s", UAMS_MRA_Scanner::STATE_OPTION)),
             ['no', 'off'],
         );
     }
@@ -385,6 +413,7 @@ final class ScannerStepsTest extends IntegrationTestCase
         $b = $this->attachment('2025/11/b.jpg');
         $c = $this->attachment('2025/11/c.jpg');
         global $wpdb;
+        /** @var wpdb $wpdb */
         $wpdb->query('DELETE FROM '.UAMS_MRA_Store::index_table());
 
         $state = $this->scanStep($this->state('index', ['batch_index' => 2], ['cursor' => $a - 1, 'processed' => 5]));
@@ -581,7 +610,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_records_strong_and_weak_references_with_the_label_of_the_post(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
         $post = self::factory()->post->create(['post_title' => 'Alpha', 'post_status' => 'draft']);
@@ -604,7 +633,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_takes_a_bare_number_only_when_the_setting_allows_it(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
@@ -622,7 +651,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_skips_meta_that_describes_the_attachment_and_empty_values(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
@@ -642,7 +671,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_does_not_let_an_attachment_reference_itself(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $other = $this->attachment('2025/11/b.jpg');
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
@@ -660,7 +689,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_reads_revision_meta_only_when_asked_and_calls_it_revision_meta(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
@@ -684,7 +713,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_records_offsite_urls_with_the_row_and_key_to_write_back_to(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $post = self::factory()->post->create(['post_title' => 'Alpha']);
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
@@ -714,13 +743,17 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_postmeta_step_batches_by_its_setting_and_advances_on_an_empty_page(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
         add_post_meta($post, 'a', 'x');
         add_post_meta($post, 'b', 'x');
         add_post_meta($post, 'c', 'x');
-        $ids = array_map(intval(...), $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->postmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
+        /** @var list<string> $found */
+        $found = $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$postmeta_table} WHERE meta_id > %d ORDER BY meta_id", $before));
+        $ids = array_map(intval(...), $found);
         $second = $ids[1];
 
         $first = $this->scanStep($this->state('postmeta', ['batch_meta' => 2], ['cursor' => $before]));
@@ -745,7 +778,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_options_step_records_references_labelled_with_the_option_name(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
         $before = $this->maxId($wpdb->options, 'option_id');
@@ -771,14 +804,18 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function optionId(string $name): int
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
-        return (int) $wpdb->get_var($wpdb->prepare("SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $name));
+        /** @var literal-string $options_table */
+        $options_table = $wpdb->options;
+
+        return (int) $wpdb->get_var($wpdb->prepare("SELECT option_id FROM {$options_table} WHERE option_name = %s", $name));
     }
 
     public function test_the_options_step_leaves_out_transients_and_its_own_options_but_not_look_alikes(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $this->attachment('2025/11/a.jpg');
         $before = $this->maxId($wpdb->options, 'option_id');
         $url = $this->url('2025/11/a.jpg');
@@ -803,7 +840,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_options_step_takes_a_bare_number_only_when_the_setting_allows_it(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $before = $this->maxId($wpdb->options, 'option_id');
         update_option('logo_x', (string) $attachment);
@@ -816,7 +853,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_options_step_records_offsite_urls_with_the_option_to_write_back_to(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $before = $this->maxId($wpdb->options, 'option_id');
         $url = 'https://old.example.edu/x/wp-content/uploads/2020/a-300x200.jpg';
         update_option('site_logo_x', $url);
@@ -843,7 +880,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_options_step_batches_by_its_setting_and_advances_on_an_empty_page(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $before = $this->maxId($wpdb->options, 'option_id');
         update_option('a_x', 'v');
         update_option('b_x', 'v');
@@ -871,7 +908,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_term_meta_step_records_references_labelled_with_the_term(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
         $term = self::factory()->term->create();
@@ -893,7 +930,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_user_meta_step_never_takes_a_bare_number_but_does_take_a_url(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $by_path = $this->attachment('2025/11/a.jpg');
         $by_number = $this->attachment('2025/11/b.jpg');
         $user = self::factory()->user->create();
@@ -914,7 +951,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_comment_meta_step_records_references_labelled_with_the_comment(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/a.jpg');
         $comment = self::factory()->comment->create(['comment_post_ID' => self::factory()->post->create()]);
         $before = $this->maxId($wpdb->commentmeta, 'meta_id');
@@ -930,7 +967,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_generic_meta_steps_skip_describing_meta_and_empty_values_and_record_offsite_urls(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $this->attachment('2025/11/a.jpg');
         $term = self::factory()->term->create();
         $before = $this->maxId($wpdb->termmeta, 'meta_id');
@@ -963,13 +1000,17 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_generic_meta_steps_batch_by_their_setting_and_advance_on_an_empty_page(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $term = self::factory()->term->create();
         $before = $this->maxId($wpdb->termmeta, 'meta_id');
         add_term_meta($term, 'a_x', 'v');
         add_term_meta($term, 'b_x', 'v');
         add_term_meta($term, 'c_x', 'v');
-        $ids = array_map(intval(...), $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$wpdb->termmeta} WHERE meta_id > %d ORDER BY meta_id", $before)));
+        /** @var literal-string $termmeta_table */
+        $termmeta_table = $wpdb->termmeta;
+        /** @var list<string> $found */
+        $found = $wpdb->get_col($wpdb->prepare("SELECT meta_id FROM {$termmeta_table} WHERE meta_id > %d ORDER BY meta_id", $before));
+        $ids = array_map(intval(...), $found);
 
         $first = $this->scanStep($this->state('termmeta', ['batch_meta' => 2], ['cursor' => $before]));
 
@@ -1146,7 +1187,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
     public function test_the_finalize_step_measures_the_files_on_disk(): void
     {
-        $dir = wp_get_upload_dir()['basedir'].'/2025/11';
+        $dir = $this->uploads()['basedir'].'/2025/11';
         wp_mkdir_p($dir);
         file_put_contents($dir.'/zz-final.jpg', str_repeat('x', 12));
         $attachment = $this->attachment('2025/11/zz-final.jpg');
@@ -1361,7 +1402,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_pending_files_are_found_for_more_parents_than_one_query_takes(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $parents = [];
 
         for ($i = 1; $i <= 201; $i++) {
@@ -1389,9 +1430,10 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $log = new \ArrayObject;
 
-        add_filter('pre_http_request', static function ($pre, $args, $url) use ($respond, $log) {
-            $log->append(['url' => (string) $url, 'args' => (array) $args]);
-            $answer = $respond((string) $url, (array) $args);
+        add_filter('pre_http_request', static function ($pre, array $args, string $url) use ($respond, $log) {
+            /** @var array<string, mixed> $args */
+            $log->append(['url' => $url, 'args' => $args]);
+            $answer = $respond($url, $args);
 
             if (is_string($answer)) {
                 return ['headers' => [], 'body' => $answer, 'response' => ['code' => 200, 'message' => 'OK'], 'cookies' => [], 'filename' => null];
@@ -1700,7 +1742,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->same(15, $args['timeout']);
         $this->same(3, $args['redirection']);
         $this->assertTrue($args['sslverify']);
-        $this->same('UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')', $args['user-agent']);
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
+        $this->same('UAMS-Media-Reference-Audit/'.$version.' (+'.home_url().')', $args['user-agent']);
         /** @var array<string, string> $headers */
         $headers = $args['headers'];
         $this->same('no-cache', $headers['Cache-Control']);
@@ -1711,7 +1755,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     {
         $given = [];
         add_filter('uams_mra_render_sslverify', static fn ($verify): bool => ! $verify);
-        add_filter('uams_mra_render_request_args', static function ($args, $url) use (&$given) {
+        add_filter('uams_mra_render_request_args', static function (array $args, $url) use (&$given): array {
             $given = [$args['sslverify'], $url];
             $args['timeout'] = 99;
 
@@ -1780,7 +1824,7 @@ final class ScannerStepsTest extends IntegrationTestCase
      */
     private function putFiles(array $files): void
     {
-        $base = wp_get_upload_dir()['basedir'];
+        $base = $this->uploads()['basedir'];
 
         foreach ($files as $relative => $contents) {
             wp_mkdir_p(dirname($base.'/'.$relative));
@@ -1807,7 +1851,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function useRealTables(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $this->realTablesFrom = [
             'posts' => $this->maxId($wpdb->posts, 'ID'),
             'postmeta' => $this->maxId($wpdb->postmeta, 'meta_id'),
@@ -1839,7 +1883,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     private function dropRealTables(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if ($this->realTablesFrom === null) {
             return;
         }
@@ -1848,8 +1892,16 @@ final class ScannerStepsTest extends IntegrationTestCase
             $wpdb->query("DROP TABLE IF EXISTS {$table}");
         }
 
-        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->postmeta} WHERE meta_id > %d", $this->realTablesFrom['postmeta']));
-        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->posts} WHERE ID > %d", $this->realTablesFrom['posts']));
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
+        /** @var string $delete_meta */
+        $delete_meta = $wpdb->prepare("DELETE FROM {$postmeta_table} WHERE meta_id > %d", $this->realTablesFrom['postmeta']);
+        $wpdb->query($delete_meta);
+        /** @var string $delete_posts */
+        $delete_posts = $wpdb->prepare("DELETE FROM {$posts_table} WHERE ID > %d", $this->realTablesFrom['posts']);
+        $wpdb->query($delete_posts);
         // The test case runs with autocommit off, so the deletes above are rolled back unless they are committed.
         $wpdb->query('COMMIT');
 
@@ -1936,7 +1988,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_attachment_bytes_ignores_a_folder_and_a_malformed_size_list(): void
     {
         $this->putFiles(['2025/11/zf-main.jpg' => str_repeat('a', 9)]);
-        $dir = wp_get_upload_dir()['basedir'].'/2025/11/zf-folder.jpg';
+        $dir = $this->uploads()['basedir'].'/2025/11/zf-folder.jpg';
         wp_mkdir_p($dir);
         $this->written[] = $dir;
         $id = $this->attachment('2025/11/zf-main.jpg');
@@ -1997,6 +2049,8 @@ final class ScannerStepsTest extends IntegrationTestCase
         $this->serve(fn (): string => '<img src="'.$this->url('2025/11/zg-shown.jpg').'">');
 
         global $wpdb;
+
+        /** @var wpdb $wpdb */
         $attachments = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'");
         /** @var array<string, mixed> $state */
         $state = UAMS_MRA_Scanner::start();
@@ -2068,7 +2122,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_a_skipped_meta_key_does_not_end_the_batch(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/zi-a.jpg');
         $post = self::factory()->post->create();
         $before = $this->maxId($wpdb->postmeta, 'meta_id');
@@ -2083,7 +2137,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_an_empty_option_does_not_end_the_batch(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/zj-a.jpg');
         $before = $this->maxId($wpdb->options, 'option_id');
         add_option('zj_empty', '');
@@ -2210,6 +2264,7 @@ final class ScannerStepsTest extends IntegrationTestCase
 
         global $wpdb;
 
+        /** @var wpdb $wpdb */
         $blog = self::factory()->blog->create();
 
         $this->scanStep($this->state('network', [], ['site_queue' => [$blog]]));
@@ -2237,7 +2292,7 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_a_revision_row_and_an_empty_value_do_not_end_the_postmeta_batch(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $attachment = $this->attachment('2025/11/zl-a.jpg');
         $post = self::factory()->post->create();
         $revision = wp_insert_post(['post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $post, 'post_name' => $post.'-revision-v1', 'post_title' => 'Rev']);
@@ -2262,8 +2317,9 @@ final class ScannerStepsTest extends IntegrationTestCase
         }
 
         $other = self::factory()->blog->create();
+        /** @var array<string, mixed> $asked */
         $asked = [];
-        add_action('pre_get_sites', static function ($query) use (&$asked): void {
+        add_action('pre_get_sites', static function (\WP_Site_Query $query) use (&$asked): void {
             $asked = $query->query_vars;
         });
 
@@ -2278,15 +2334,15 @@ final class ScannerStepsTest extends IntegrationTestCase
     public function test_the_finalize_step_reads_the_stored_paths_with_one_meta_query(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $first = $this->attachment('2025/11/zm-a.jpg');
         $this->attachment('2025/11/zm-b.jpg');
         $this->attachment('2025/11/zm-c.jpg');
         wp_cache_flush();
 
         $queries = 0;
-        add_filter('query', static function ($sql) use (&$queries, $wpdb) {
-            if (str_contains((string) $sql, "FROM {$wpdb->postmeta}")) {
+        add_filter('query', static function (string $sql) use (&$queries, $wpdb): string {
+            if (str_contains($sql, "FROM {$wpdb->postmeta}")) {
                 $queries++;
             }
 
