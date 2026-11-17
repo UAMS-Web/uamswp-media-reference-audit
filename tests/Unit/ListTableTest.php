@@ -247,11 +247,11 @@ function lt_row(array $over = []): array
 beforeEach(function (): void {
     stubTranslationFunctions();
     stubEscapeFunctions();
-    when('sanitize_key')->alias(static fn ($key): string => strtolower((string) preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) $key)));
+    when('sanitize_key')->alias(static fn (string $key): string => strtolower((string) preg_replace('/[^a-zA-Z0-9_\-]/', '', $key)));
     // Core trims too; this one does not, so the class's own trim is what the test sees.
-    when('sanitize_text_field')->alias(static fn ($text): string => strip_tags((string) $text));
+    when('sanitize_text_field')->alias(static fn (string $text): string => strip_tags($text));
     when('wp_unslash')->alias(static fn ($value) => is_string($value) ? stripslashes($value) : $value);
-    when('number_format_i18n')->alias(static fn ($n): string => number_format((float) $n));
+    when('number_format_i18n')->alias(static fn (float|int|string $n): string => number_format((float) $n));
 
     $_REQUEST = [];
 });
@@ -317,6 +317,7 @@ describe('default_view', function (): void {
     });
 
     it('opens on the first view that has rows, in order of how much it wants attention', function (array $summary, string $expected): void {
+        /** @var array<string, int> $summary */
         lt_summary($summary);
 
         expect(UAMS_MRA_List_Table::default_view())->toBe($expected);
@@ -468,8 +469,8 @@ describe('build_query', function (): void {
     beforeEach(function (): void {
         lt_summary(['total' => 9, 'orphaned' => 1]);
         $GLOBALS['wpdb'] = lt_wpdb();
-        lt_redefine('UAMS_MRA_Triage::tier_where', static fn ($tier): string => 'TIER('.$tier.')');
-        lt_redefine('UAMS_MRA_Triage::disposition_where', static fn ($disposition): string => 'DISP('.$disposition.')');
+        lt_redefine('UAMS_MRA_Triage::tier_where', static fn (string $tier): string => 'TIER('.$tier.')');
+        lt_redefine('UAMS_MRA_Triage::disposition_where', static fn (string $disposition): string => 'DISP('.$disposition.')');
     });
 
     it('is the view alone when nothing narrows it', function (): void {
@@ -639,8 +640,8 @@ describe('prepare_items', function (): void {
 
 describe('the cells', function (): void {
     beforeEach(function (): void {
-        when('get_edit_post_link')->alias(static fn ($id): string => 'http://x/edit/'.$id);
-        when('wp_get_attachment_url')->alias(static fn ($id): string => 'http://x/file/'.$id);
+        when('get_edit_post_link')->alias(static fn (int|string $id): string => 'http://x/edit/'.$id);
+        when('wp_get_attachment_url')->alias(static fn (int|string $id): string => 'http://x/file/'.$id);
     });
 
     it('renders a checkbox that carries the attachment id', function (): void {
