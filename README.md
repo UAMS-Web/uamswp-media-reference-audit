@@ -424,7 +424,7 @@ request after that.
 
 Then go to **Media > Media Audit** and run a scan.
 
-Requires WordPress 6.0 and PHP 8.2.
+Requires WordPress 6.8 and PHP 8.2.
 
 ## Development
 
