@@ -41,7 +41,7 @@ parameters:
     # from 0 upward (see the code-quality skill), then raise it by one per
     # change as findings are fixed, until `max`. Lowering it is a deliberate,
     # argued change, not a quiet edit to get a red run green.
-    level: 9
+    level: 10
 
     # the directories and files holding first-party PHP, including
     # the plugin header file at the root. Include tests: test bugs are real
@@ -167,17 +167,14 @@ parameters:
         # the `afterEach` hook of tests/Pest.php analyzes as `mixed`, so the
         # call reports method.nonObject. Pest binds `$this` to the running test
         # case, which PHPStan cannot see. One finding, one entry (count: 1),
-        # so a second call on `mixed` in this file still fails. Unmatched is not
-        # reported because the finding exists only from level 10 and `level` is
-        # still 9. Ruled in #146; it comes out when the shared `tests` template
-        # hands the count to Mockery's PHPUnit integration
-        # (UAMS-Web/uams-claude-skills#801).
+        # so a second call on `mixed` in this file still fails. Ruled in #146;
+        # it comes out when the shared `tests` template hands the count to
+        # Mockery's PHPUnit integration (UAMS-Web/uams-claude-skills#801).
         -
             identifier: method.nonObject
             message: '#^Cannot call method addToAssertionCount\(\) on mixed\.$#'
             path: tests/Pest.php
             count: 1
-            reportUnmatched: false
         # Pest routes its public API through classes it tags @internal; calling
         # them from a test is Pest's intended use.
         -
