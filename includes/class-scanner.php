@@ -70,6 +70,9 @@ class UAMS_MRA_Scanner
     public static function start(): WP_Error|array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
 
         // A scan empties the offsite table. Doing that under a running repoint
         // or download leaves that job writing verdicts into rows the scan has
@@ -83,7 +86,8 @@ class UAMS_MRA_Scanner
 
         UAMS_MRA_Store::reset();
 
-        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'");
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is a `$wpdb` property.
+        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$posts_table} WHERE post_type = 'attachment'");
 
         $state = [
             'step' => 'index',
@@ -127,6 +131,7 @@ class UAMS_MRA_Scanner
             return self::advance($state);
         }
 
+        /** @var ScanState $state */
         $state = self::$method($state);
 
         self::set_state($state);
@@ -264,6 +269,9 @@ class UAMS_MRA_Scanner
     protected static function step_posts($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -277,11 +285,12 @@ class UAMS_MRA_Scanner
             : '';
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the fragment is one of two literals chosen from the scan settings.
+        /** @var list<object{ID: string, post_type: string, post_title: string, post_status: string, post_content: string, post_excerpt: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_type, post_title, post_status, post_content, post_excerpt
-				 FROM {$wpdb->posts}
+				 FROM {$posts_table}
 				 WHERE ID > %d AND post_type != 'attachment' {$exclude_revisions}
 				 ORDER BY ID ASC LIMIT %d",
                 $cursor,
@@ -370,6 +379,11 @@ class UAMS_MRA_Scanner
     protected static function step_postmeta($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -378,17 +392,20 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
+        /** @var list<object{meta_id: string, post_id: string, meta_key: string, meta_value: string, post_type: string|null, post_title: string|null, post_status: string|null}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT pm.meta_id, pm.post_id, pm.meta_key, pm.meta_value, p.post_type, p.post_title, p.post_status
-				 FROM {$wpdb->postmeta} pm
-				 LEFT JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				 FROM {$postmeta_table} pm
+				 LEFT JOIN {$posts_table} p ON p.ID = pm.post_id
 				 WHERE pm.meta_id > %d
 				 ORDER BY pm.meta_id ASC LIMIT %d",
                 $cursor,
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // Without the early return the loop has no rows to read and the batch check below advances for the same reason, so the returned state is the same.
         // @pest-mutate-ignore:RemoveEarlyReturn
@@ -482,6 +499,9 @@ class UAMS_MRA_Scanner
     protected static function step_options($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
+        /** @var literal-string $options_table */
+        $options_table = $wpdb->options;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -490,11 +510,12 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
-        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
+        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the patterns are constants with no user input; `%%` is a literal percent sign for `prepare()`.
+        /** @var list<object{option_id: string, option_name: string, option_value: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT option_id, option_name, option_value
-				 FROM {$wpdb->options}
+				 FROM {$options_table}
 				 WHERE option_id > %d
 				   AND option_name NOT LIKE '\_transient\_%%'
 				   AND option_name NOT LIKE '\_site\_transient\_%%'
@@ -584,6 +605,7 @@ class UAMS_MRA_Scanner
     protected static function step_termmeta($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         return self::generic_meta_step($state, $wpdb->termmeta, 'meta_id', 'term_id', 'termmeta', 'Term');
     }
@@ -598,6 +620,7 @@ class UAMS_MRA_Scanner
     protected static function step_usermeta($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         return self::generic_meta_step($state, $wpdb->usermeta, 'umeta_id', 'user_id', 'usermeta', 'User');
     }
@@ -612,6 +635,7 @@ class UAMS_MRA_Scanner
     protected static function step_commentmeta($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         return self::generic_meta_step($state, $wpdb->commentmeta, 'meta_id', 'comment_id', 'commentmeta', 'Comment');
     }
@@ -631,6 +655,7 @@ class UAMS_MRA_Scanner
     protected static function generic_meta_step($state, $table, $pk, $object_col, $source_type, $prefix)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -639,9 +664,11 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
+        /** @var literal-string $sql */
         $sql = "SELECT {$pk} AS pk, {$object_col} AS object_id, meta_key, meta_value
 				FROM {$table} WHERE {$pk} > %d ORDER BY {$pk} ASC LIMIT %d";
 
+        /** @var list<object{pk: string, object_id: string, meta_key: string, meta_value: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results($wpdb->prepare($sql, $cursor, $limit));
 
@@ -730,7 +757,7 @@ class UAMS_MRA_Scanner
     protected static function step_network($state)
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if (empty($state['site_queue'])) {
             return self::advance($state);
         }
@@ -751,16 +778,23 @@ class UAMS_MRA_Scanner
 
         UAMS_MRA_Store::set_prefix_override($target_prefix);
 
+        // The table name is read after switch_to_blog(), which points `$wpdb->posts` at the sibling site.
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
+        /** @var list<object{ID: string, post_type: string, post_title: string, post_status: string, post_content: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_type, post_title, post_status, post_content
-				 FROM {$wpdb->posts}
+				 FROM {$posts_table}
 				 WHERE ID > %d AND post_type NOT IN ('attachment','revision')
 				 ORDER BY ID ASC LIMIT %d",
                 $cursor,
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $refs = [];
 
@@ -820,6 +854,9 @@ class UAMS_MRA_Scanner
     protected static function step_finalize($state)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
 
         // The setting or cursor reaches a %d placeholder, which reads a numeric string as the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -828,21 +865,25 @@ class UAMS_MRA_Scanner
         // @pest-mutate-ignore:RemoveIntegerCast
         $cursor = (int) $state['cursor'];
 
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
+        /** @var list<object{ID: string, post_parent: string, post_mime_type: string, post_date: string, post_title: string}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID, post_parent, post_mime_type, post_date, post_title
-				 FROM {$wpdb->posts}
+				 FROM {$posts_table}
 				 WHERE post_type = 'attachment' AND ID > %d
 				 ORDER BY ID ASC LIMIT %d",
                 $cursor,
                 $limit
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return self::advance($state);
         }
 
+        /** @var list<string> $ids */
         $ids = wp_list_pluck($rows, 'ID');
         // The IDs reach a %d placeholder and get_post_meta(), which read a numeric string as the same integer.
         // @pest-mutate-ignore:UnwrapArrayMap
@@ -854,13 +895,18 @@ class UAMS_MRA_Scanner
         // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
         // @pest-mutate-ignore:IncrementInteger
         // @pest-mutate-ignore:DecrementInteger
+        /** @var literal-string $placeholders */
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
         $counts = [];
+        /** @var literal-string $refs_table */
+        $refs_table = UAMS_MRA_Store::refs_table();
         $sql = 'SELECT attachment_id, COUNT(*) AS total, SUM(CASE WHEN confidence >= 2 THEN 1 ELSE 0 END) AS strong
-				   FROM '.UAMS_MRA_Store::refs_table()." WHERE attachment_id IN ({$placeholders}) GROUP BY attachment_id";
+				   FROM '.$refs_table." WHERE attachment_id IN ({$placeholders}) GROUP BY attachment_id";
+        /** @var list<object{attachment_id: string, total: string, strong: string}> $count_rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        foreach ($wpdb->get_results($wpdb->prepare($sql, $ids)) as $count_row) {
+        $count_rows = $wpdb->get_results($wpdb->prepare($sql, $ids));
+        foreach ($count_rows as $count_row) {
             // An array key reads a numeric string as the same integer.
             // @pest-mutate-ignore:RemoveIntegerCast
             $counted_id = (int) $count_row->attachment_id;
@@ -877,7 +923,9 @@ class UAMS_MRA_Scanner
         // A zero or numeric string in the IN list matches nothing extra, so the list reaches the same parents.
         // @pest-mutate-ignore:UnwrapArrayMap
         // @pest-mutate-ignore:UnwrapArrayFilter
-        $parents = array_filter(array_map(intval(...), wp_list_pluck($rows, 'post_parent')));
+        /** @var list<string> $parent_values */
+        $parent_values = wp_list_pluck($rows, 'post_parent');
+        $parents = array_filter(array_map(intval(...), $parent_values));
         if ($parents !== []) {
             // A repeated ID in the IN list matches the same row, and the list keys are never read.
             // @pest-mutate-ignore:UnwrapArrayValues
@@ -886,10 +934,13 @@ class UAMS_MRA_Scanner
             // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
             // @pest-mutate-ignore:IncrementInteger
             // @pest-mutate-ignore:DecrementInteger
+            /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($parents), '%d'));
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- the placeholder list is built from `%d` and has one entry per integer bound.
+            /** @var list<object{ID: string, post_status: string}> $parent_rows */
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            foreach ($wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM {$wpdb->posts} WHERE ID IN ({$placeholders})", $parents)) as $parent_row) {
+            $parent_rows = $wpdb->get_results($wpdb->prepare("SELECT ID, post_status FROM {$posts_table} WHERE ID IN ({$placeholders})", $parents));
+            foreach ($parent_rows as $parent_row) {
                 // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 // An array key reads a numeric string as the same integer.
                 // @pest-mutate-ignore:RemoveIntegerCast
@@ -897,6 +948,7 @@ class UAMS_MRA_Scanner
             }
         }
 
+        /** @var list<literal-string> $values */
         $values = [];
         $args = [];
         $now = current_time('mysql');
@@ -910,7 +962,9 @@ class UAMS_MRA_Scanner
             // @pest-mutate-ignore:RemoveIntegerCast
             $count = $counts[(int) $row->ID] ?? [0, 0];
             /** @var scalar|null $stored_file */
-            $stored_file = get_post_meta($row->ID, '_wp_attached_file', true);
+            // get_post_meta() reads a numeric string as the same ID.
+            // @pest-mutate-ignore:RemoveIntegerCast
+            $stored_file = get_post_meta((int) $row->ID, '_wp_attached_file', true);
             // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveStringCast
             $file = (string) $stored_file;
@@ -940,12 +994,17 @@ class UAMS_MRA_Scanner
             $args[] = $now;
         }
 
-        $sql = 'REPLACE INTO '.UAMS_MRA_Store::results_table()
+        /** @var literal-string $results_table */
+        $results_table = UAMS_MRA_Store::results_table();
+        $sql = 'REPLACE INTO '.$results_table
             .' (attachment_id, parent_id, parent_status, is_attached, ref_count, ref_count_strict, bytes, mime, post_date, title, file, scanned_at) VALUES '
             .implode(',', $values);
 
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $wpdb->query($wpdb->prepare($sql, $args));
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query is built from `UAMS_MRA_Store` table names and `%d` and `%s` placeholders only, and every value is bound through `prepare()`.
+        /** @var string $statement */
+        $statement = $wpdb->prepare($sql, $args);
+        $wpdb->query($statement);
+        // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
         $state['cursor'] = $cursor;
         $state['processed'] += count($rows);
@@ -979,15 +1038,18 @@ class UAMS_MRA_Scanner
     protected static function build_render_queue($state)
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
         $results = UAMS_MRA_Store::results_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<object{parent_id: string, post_type: string, post_status: string, post_password: string, pending: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             "SELECT r.parent_id, p.post_type, p.post_status, p.post_password, COUNT(*) AS pending
 			 FROM {$results} r
-			 INNER JOIN {$wpdb->posts} p ON p.ID = r.parent_id
+			 INNER JOIN {$posts_table} p ON p.ID = r.parent_id
 			 WHERE r.ref_count = 0 AND r.is_attached = 1 AND r.parent_id > 0
 			 GROUP BY r.parent_id, p.post_type, p.post_status, p.post_password
 			 ORDER BY pending DESC, r.parent_id ASC"
@@ -1072,6 +1134,7 @@ class UAMS_MRA_Scanner
     protected static function pending_attachment_ids(array $parent_ids): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         // A repeated or numeric-string ID in the IN list matches the same rows, and the list keys are never read.
         // @pest-mutate-ignore:UnwrapArrayUnique
@@ -1084,6 +1147,7 @@ class UAMS_MRA_Scanner
             return [];
         }
 
+        /** @var literal-string $results */
         $results = UAMS_MRA_Store::results_table();
         $out = [];
 
@@ -1096,16 +1160,24 @@ class UAMS_MRA_Scanner
             // Only the number of placeholders matters, because the start index of the filled array is dropped when the list is joined.
             // @pest-mutate-ignore:IncrementInteger
             // @pest-mutate-ignore:DecrementInteger
+            /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
             $sql = "SELECT attachment_id, parent_id FROM {$results}
 				WHERE ref_count = 0 AND is_attached = 1 AND parent_id IN ({$placeholders})";
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            foreach ($wpdb->get_results($wpdb->prepare($sql, $chunk)) as $row) {
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds `UAMS_MRA_Store` table names and one `%d` per bound integer.
+            /** @var list<object{attachment_id: string, parent_id: string}> $pending_rows */
+            $pending_rows = $wpdb->get_results($wpdb->prepare($sql, $chunk));
+            // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+            foreach ($pending_rows as $row) {
                 $out[$row->parent_id][] = (int) $row->attachment_id;
             }
         }
 
-        return $out;
+        // PHP stores a numeric string key as the same integer.
+        /** @var array<int, list<int>> $keyed */
+        $keyed = $out;
+
+        return $keyed;
     }
 
     /**
@@ -1444,19 +1516,22 @@ class UAMS_MRA_Scanner
      */
     protected static function fetch_rendered($url, $token): ?string
     {
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
         $request_url = $url;
 
         if ($token && apply_filters('uams_mra_render_cache_bust', true, $url)) {
             $request_url = add_query_arg('uams-mra-check', $token, $url);
         }
 
+        /** @var array{timeout: int, redirection: int, sslverify: bool, user-agent: string, headers: array<string, string>} $args */
         $args = apply_filters(
             'uams_mra_render_request_args',
             [
                 'timeout' => 15,
                 'redirection' => 3,
                 'sslverify' => apply_filters('uams_mra_render_sslverify', true),
-                'user-agent' => 'UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')',
+                'user-agent' => 'UAMS-Media-Reference-Audit/'.$version.' (+'.home_url().')',
                 'headers' => [
                     'Cache-Control' => 'no-cache',
                     'Pragma' => 'no-cache',
@@ -1506,12 +1581,15 @@ class UAMS_MRA_Scanner
      */
     protected static function foreign_id_key_pattern(): string
     {
-        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
-        // @pest-mutate-ignore:RemoveStringCast
-        return (string) apply_filters(
+        /** @var scalar|null $pattern */
+        $pattern = apply_filters(
             'uams_mra_foreign_id_key_pattern',
             '#(^|_)(user|author|customer|post|page|parent|term|category|tag|comment|order|site|blog|form|entry)_id$#i'
         );
+
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
+        return (string) $pattern;
     }
 
     /**
@@ -1548,6 +1626,7 @@ class UAMS_MRA_Scanner
      */
     protected static function source_allows_numeric_match($source_type): bool
     {
+        /** @var array<string, bool> $allowed */
         $allowed = apply_filters(
             'uams_mra_numeric_match_sources',
             [
@@ -1570,30 +1649,31 @@ class UAMS_MRA_Scanner
      */
     protected static function skipped_meta_keys(): array
     {
-        return array_flip(
-            apply_filters(
-                'uams_mra_skipped_meta_keys',
-                [
-                    '_wp_attached_file',
-                    '_wp_attachment_metadata',
-                    '_wp_attachment_backup_sizes',
-                    '_wp_attachment_image_alt',
-                    '_wp_attachment_is_custom_header',
-                    '_edit_lock',
-                    '_edit_last',
-                    '_wp_old_slug',
-                    '_wp_old_date',
-                    '_wp_trash_meta_status',
-                    '_wp_trash_meta_time',
-                    '_wp_desired_post_slug',
-                    // This plugin's own triage. The note is free text, so a note
-                    // that quotes an upload URL would otherwise be recorded as a
-                    // strong reference to whatever file it names.
-                    UAMS_MRA_Triage::META_DISPOSITION,
-                    UAMS_MRA_Triage::META_NOTE,
-                ]
-            )
+        /** @var list<string> $keys */
+        $keys = apply_filters(
+            'uams_mra_skipped_meta_keys',
+            [
+                '_wp_attached_file',
+                '_wp_attachment_metadata',
+                '_wp_attachment_backup_sizes',
+                '_wp_attachment_image_alt',
+                '_wp_attachment_is_custom_header',
+                '_edit_lock',
+                '_edit_last',
+                '_wp_old_slug',
+                '_wp_old_date',
+                '_wp_trash_meta_status',
+                '_wp_trash_meta_time',
+                '_wp_desired_post_slug',
+                // This plugin's own triage. The note is free text, so a note
+                // that quotes an upload URL would otherwise be recorded as a
+                // strong reference to whatever file it names.
+                UAMS_MRA_Triage::META_DISPOSITION,
+                UAMS_MRA_Triage::META_NOTE,
+            ]
         );
+
+        return array_flip($keys);
     }
 
     /**
@@ -1601,6 +1681,7 @@ class UAMS_MRA_Scanner
      */
     protected static function own_uploads_path(): string
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
 
         // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
@@ -1619,6 +1700,7 @@ class UAMS_MRA_Scanner
      */
     protected static function own_hosts(): array
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
         $hosts = [];
 
@@ -1646,6 +1728,7 @@ class UAMS_MRA_Scanner
      */
     public static function upload_path_prefixes(): array
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
         // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
@@ -1929,7 +2012,7 @@ class UAMS_MRA_Scanner
     /**
      * Readable source label for a post row.
      *
-     * @param  object  $row  Row with post_type, post_title, post_status.
+     * @param  object{post_title?: string|null, post_type?: string|null, post_status?: string|null}  $row  Row with post_type, post_title, post_status.
      */
     protected static function post_label($row): string
     {
@@ -1954,6 +2037,7 @@ class UAMS_MRA_Scanner
      */
     public static function attachment_bytes($attachment_id, $file = ''): int
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
         $basedir = trailingslashit($uploads['basedir']);
 
@@ -1980,6 +2064,7 @@ class UAMS_MRA_Scanner
         $meta = wp_get_attachment_metadata($attachment_id);
 
         if (is_array($meta)) {
+            /** @var array{original_image?: string, sizes?: mixed} $meta */
             if (! empty($meta['original_image'])) {
                 $targets[] = $subdir.$meta['original_image'];
             }

@@ -137,18 +137,11 @@ parameters:
             message: '#^Parameter \#1 \$new_blog_id of function switch_to_blog expects int, WP_Site given\.$#'
             path: uninstall.php
 
-        # wp_get_attachment_metadata(): the stubs' array shape omits
-        # 'original_image', which core has written since WordPress 5.3 for a
-        # big image it scaled down, so both reads of it report a missing
-        # offset. The same shape types 'sizes' as an array, which makes the
-        # is_array() beside it look redundant; the value is read back from
-        # post meta, where nothing guarantees the shape, so the check stays.
-        -
-            identifier: empty.offset
-            path: includes/class-scanner.php
-        -
-            identifier: offsetAccess.notFound
-            path: includes/class-scanner.php
+        # wp_get_attachment_metadata(): the stubs' array shape types 'sizes'
+        # as an array, which makes the is_array() beside it look redundant;
+        # the value is read back from post meta, where nothing guarantees the
+        # shape, so the check stays. The reads of 'original_image', which the
+        # shape omits, are typed in the scanner where the metadata is read.
         -
             identifier: booleanAnd.rightAlwaysTrue
             path: includes/class-scanner.php
