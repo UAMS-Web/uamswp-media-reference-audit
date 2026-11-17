@@ -312,6 +312,7 @@ final class PluginFileTest extends IntegrationTestCase
 
         uams_mra_load_textdomain();
 
+        /** @var array<string, string> $paths */
         $paths = (new \ReflectionProperty($wp_textdomain_registry, 'custom_paths'))->getValue($wp_textdomain_registry);
         // The folder is named relative to the plugins directory: the plugin's own folder when it is
         // installed there, and a path below it when the checkout sits elsewhere (as on a CI runner).
@@ -321,6 +322,8 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_new_site_hooks_leave_a_site_alone_when_the_plugin_is_not_network_active(): void
     {
+        global $wpdb;
+
         if (! is_multisite()) {
             $this->markTestSkipped('Needs a multisite install.');
         }
@@ -330,7 +333,7 @@ final class PluginFileTest extends IntegrationTestCase
 
         $blog = self::factory()->blog->create();
         switch_to_blog($blog);
-        $prefix = $GLOBALS['wpdb']->prefix;
+        $prefix = $wpdb->prefix;
         restore_current_blog();
 
         $this->assertFalse($this->tableExists($prefix.'uams_mra_index'));
@@ -338,6 +341,8 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_a_new_site_gets_its_own_tables_when_the_plugin_is_network_active(): void
     {
+        global $wpdb;
+
         if (! is_multisite()) {
             $this->markTestSkipped('Needs a multisite install.');
         }
@@ -349,7 +354,7 @@ final class PluginFileTest extends IntegrationTestCase
         $blog = self::factory()->blog->create();
 
         switch_to_blog($blog);
-        $prefix = $GLOBALS['wpdb']->prefix;
+        $prefix = $wpdb->prefix;
         restore_current_blog();
 
         $this->assertNotSame($current, $blog);
@@ -362,6 +367,8 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_legacy_hook_builds_tables_for_the_site_it_is_given(): void
     {
+        global $wpdb;
+
         if (! is_multisite()) {
             $this->markTestSkipped('Needs a multisite install.');
         }
@@ -375,7 +382,7 @@ final class PluginFileTest extends IntegrationTestCase
         uams_mra_new_site_tables($blog);
 
         switch_to_blog($blog);
-        $prefix = $GLOBALS['wpdb']->prefix;
+        $prefix = $wpdb->prefix;
         $stored = get_option('uams_mra_db_version');
         restore_current_blog();
 
@@ -385,6 +392,8 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_the_modern_hook_passes_the_site_id_of_the_site_object(): void
     {
+        global $wpdb;
+
         if (! is_multisite()) {
             $this->markTestSkipped('Needs a multisite install.');
         }
@@ -400,7 +409,7 @@ final class PluginFileTest extends IntegrationTestCase
         uams_mra_new_site_tables_modern($site);
 
         switch_to_blog($blog);
-        $prefix = $GLOBALS['wpdb']->prefix;
+        $prefix = $wpdb->prefix;
         restore_current_blog();
 
         $this->assertTrue($this->tableExists($prefix.'uams_mra_offsite'));
@@ -476,6 +485,8 @@ final class PluginFileTest extends IntegrationTestCase
 
     public function test_a_network_uninstall_cleans_every_site(): void
     {
+        global $wpdb;
+
         if (! is_multisite()) {
             $this->markTestSkipped('Needs a multisite install.');
         }
@@ -491,7 +502,7 @@ final class PluginFileTest extends IntegrationTestCase
             UAMS_MRA_Store::install();
             update_option('uams_mra_settings', ['batch_posts' => 9]);
             update_option('uams_mra_unrelated', 'kept');
-            $prefixes[$blog] = $GLOBALS['wpdb']->prefix;
+            $prefixes[$blog] = $wpdb->prefix;
             restore_current_blog();
         }
 
@@ -540,6 +551,7 @@ final class PluginFileTest extends IntegrationTestCase
 
         $this->assertSame(0, $status, $errors);
 
+        /** @var array{commands: list<array{string, string}>, files: list<string>} $result */
         $result = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
         $result['decoy'] = $decoy;
 

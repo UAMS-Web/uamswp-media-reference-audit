@@ -103,7 +103,8 @@ final class RepointJobsTest extends IntegrationTestCase
      */
     public function answer($pre, array $args, string $url): WP_Error|array
     {
-        $method = (string) ($args['method'] ?? 'GET');
+        /** @var string $method */
+        $method = $args['method'] ?? 'GET';
         $this->requests[] = [$method, $url, $args];
 
         $entry = $this->http[$method][$url] ?? null;
@@ -113,9 +114,11 @@ final class RepointJobsTest extends IntegrationTestCase
         }
 
         if ($method === 'HEAD') {
-            $headers = $entry[1] === null ? [] : ['content-length' => (string) $entry[1]];
+            /** @var array{int, int|null} $head */
+            $head = $entry;
+            $headers = $head[1] === null ? [] : ['content-length' => (string) $head[1]];
 
-            return ['headers' => $headers, 'body' => '', 'response' => ['code' => $entry[0], 'message' => ''], 'cookies' => [], 'filename' => null];
+            return ['headers' => $headers, 'body' => '', 'response' => ['code' => $head[0], 'message' => ''], 'cookies' => [], 'filename' => null];
         }
 
         if (is_callable($entry)) {
@@ -126,11 +129,16 @@ final class RepointJobsTest extends IntegrationTestCase
             return $entry;
         }
 
+        /** @var array{int, string} $reply */
+        $reply = $entry;
+
         if (! empty($args['filename'])) {
-            file_put_contents((string) $args['filename'], $entry[1]);
+            /** @var string $filename */
+            $filename = $args['filename'];
+            file_put_contents($filename, $reply[1]);
         }
 
-        return ['headers' => [], 'body' => $entry[1], 'response' => ['code' => $entry[0], 'message' => ''], 'cookies' => [], 'filename' => $args['filename'] ?? null];
+        return ['headers' => [], 'body' => $reply[1], 'response' => ['code' => $reply[0], 'message' => ''], 'cookies' => [], 'filename' => $args['filename'] ?? null];
     }
 
     /**
@@ -178,7 +186,9 @@ final class RepointJobsTest extends IntegrationTestCase
             'applied' => 0,
         ], $over);
 
-        $row['url_hash'] = md5((string) $row['url']);
+        /** @var string $rowUrl */
+        $rowUrl = $row['url'];
+        $row['url_hash'] = md5($rowUrl);
 
         $wpdb->insert(UAMS_MRA_Store::offsite_table(), $row);
 
@@ -188,12 +198,13 @@ final class RepointJobsTest extends IntegrationTestCase
     /**
      * One stored offsite row.
      *
-     * @return array<string, mixed>
+     * @return array<string, string>
      */
     private function stored(int $id): array
     {
         global $wpdb;
 
+        /** @var array<string, string>|null $row */
         $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM '.UAMS_MRA_Store::offsite_table().' WHERE offsite_id = %d', $id), ARRAY_A);
 
         return is_array($row) ? $row : [];
@@ -302,7 +313,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
     public function test_a_fatal_is_recorded_with_its_message_place_and_context(): void
     {
-        /** @var array<string, mixed> $result */
+        /** @var array{context: string, message: string, file: string, line: mixed, when: mixed, autoload: mixed} $result */
         $result = $this->fatalChild("UAMS_MRA_Repoint::watch_for_fatal('while testing'); trigger_a_fatal_error();");
 
         $this->assertSame('while testing', $result['context']);
@@ -996,7 +1007,9 @@ final class RepointJobsTest extends IntegrationTestCase
 
         update_option('uams_mra_jobs_hidden', new UamsMraJobsPrivateHolder(self::OLD));
         $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'option', 'source_key' => 'uams_mra_jobs_hidden']));
-        $this->assertSame(self::OLD, get_option('uams_mra_jobs_hidden')->url());
+        /** @var UamsMraJobsPrivateHolder $held */
+        $held = get_option('uams_mra_jobs_hidden');
+        $this->assertSame(self::OLD, $held->url());
 
         $this->assertSame(['status' => 'skipped', 'applied' => 2], $this->rewrite(['source_type' => 'option', 'source_key' => 'uams_mra_jobs_missing']));
     }
@@ -1009,7 +1022,9 @@ final class RepointJobsTest extends IntegrationTestCase
         update_option('uams_mra_jobs_half', $holder);
 
         $this->assertSame(['status' => 'failed', 'applied' => 3], $this->rewrite(['source_type' => 'option', 'source_key' => 'uams_mra_jobs_half']));
-        $this->assertSame(self::OLD, get_option('uams_mra_jobs_half')->two->url());
+        /** @var object{two: UamsMraJobsPrivateHolder} $half */
+        $half = get_option('uams_mra_jobs_half');
+        $this->assertSame(self::OLD, $half->two->url());
     }
 
     public function test_an_option_that_core_will_not_save_fails(): void
@@ -1184,6 +1199,7 @@ final class RepointJobsTest extends IntegrationTestCase
     public function test_a_group_is_pointed_at_the_attachment_and_a_sized_url_at_its_matching_size(): void
     {
         $id = self::factory()->attachment->create_upload_object($this->writeJpeg('2024/05/grp.jpg', 800, 600));
+        /** @var array<string, array{file: string}> $sizes */
         $sizes = $this->attachmentMeta($id)['sizes'];
 
         $full = 'https://old.example.edu/u/grp.jpg';
@@ -1317,7 +1333,9 @@ final class RepointJobsTest extends IntegrationTestCase
             $seen['verdict'] = $wpdb->get_var('SELECT verdict FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
             $seen['local'] = $wpdb->get_var('SELECT local_id FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
             $seen['target'] = (string) $wpdb->get_var('SELECT target_url FROM '.UAMS_MRA_Store::offsite_table()." WHERE url_hash = '".md5($url)."'");
-            $seen['queue'] = array_column(UAMS_MRA_Repoint::get_job()['queue'], 'url');
+            /** @var array{queue: list<array<string, mixed>>} $running */
+            $running = UAMS_MRA_Repoint::get_job();
+            $seen['queue'] = array_column($running['queue'], 'url');
 
             return [200, $this->jpeg(50, 50)];
         };
@@ -1357,7 +1375,9 @@ final class RepointJobsTest extends IntegrationTestCase
         $group = $this->group($url);
         $this->settings(['sideload_max_mb' => 1]);
         $this->http['HEAD'][$url] = $head;
-        $this->http['GET'][$url] = $get === 'error' ? new WP_Error('http_request_failed', 'no route') : ($get[1] === 'over' ? [200, str_repeat('a', 1048577)] : $get);
+        /** @var array{int, string}|string $reply */
+        $reply = $get;
+        $this->http['GET'][$url] = $reply === 'error' ? new WP_Error('http_request_failed', 'no route') : ($reply[1] === 'over' ? [200, str_repeat('a', 1048577)] : $reply);
         $this->sideloadJob([$group]);
 
         $job = UAMS_MRA_Repoint::step();
@@ -1374,7 +1394,9 @@ final class RepointJobsTest extends IntegrationTestCase
         // The download's own temporary file is the one named in the request, so other processes using the directory cannot disturb the check.
         foreach ($this->requests as [$method, , $args]) {
             if ($method === 'GET') {
-                $this->assertFileDoesNotExist((string) $args['filename']);
+                /** @var string $filename */
+                $filename = $args['filename'];
+                $this->assertFileDoesNotExist($filename);
             }
         }
 
@@ -1480,6 +1502,7 @@ final class RepointJobsTest extends IntegrationTestCase
             $job = UAMS_MRA_Repoint::step();
 
             $this->assertSame($handled, $job['done'], 'setting '.var_export($setting, true));
+            $this->assertIsArray($job['queue']);
             $this->assertCount(4 - $handled, $job['queue']);
             $this->assertSame($handled === 4 ? 'done' : 'sideload', $job['phase']);
         }
@@ -1504,6 +1527,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         // The first file is always taken; with no time left the rest wait for the next batch.
         $this->assertSame(1, $job['done']);
+        $this->assertIsArray($job['queue']);
         $this->assertCount(2, $job['queue']);
         $this->assertSame('sideload', $job['phase']);
         $this->assertSame('sideload: https://old.example.edu/u/b.pdf', UAMS_MRA_Repoint::next_target());
@@ -1641,6 +1665,7 @@ final class RepointJobsTest extends IntegrationTestCase
         $job = UAMS_MRA_Repoint::step();
 
         $this->assertSame(10, $job['done']);
+        $this->assertIsArray($job['queue']);
         $this->assertCount(1, $job['queue']);
     }
 
@@ -1789,6 +1814,7 @@ final class RepointJobsTest extends IntegrationTestCase
 
         $this->http['GET'][$url] = new WP_Error('http_request_failed', 'no route to host');
         $error = $this->call('sideload_one', $url);
+        $this->assertInstanceOf(WP_Error::class, $error);
         $this->assertSame('fetchfailed', $error->get_error_code());
         $this->assertSame('no route to host', $error->get_error_message());
     }
