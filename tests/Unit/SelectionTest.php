@@ -44,7 +44,10 @@ function selection_wpdb(array $answers = []): object
 
         public function prepare(string $query, mixed ...$args): string
         {
-            return vsprintf(str_replace('%s', "'%s'", $query), $args);
+            /** @var list<bool|float|int|string|null> $values */
+            $values = $args;
+
+            return vsprintf(str_replace('%s', "'%s'", $query), $values);
         }
 
         public function get_var(string $query): mixed
@@ -54,6 +57,19 @@ function selection_wpdb(array $answers = []): object
             return array_shift($this->answers);
         }
     };
+}
+
+/**
+ * The queries the stand-in recorded.
+ *
+ * @return object{queries: list<string>}
+ */
+function selection_db(): object
+{
+    /** @var object{queries: list<string>} $db */
+    $db = $GLOBALS['wpdb'];
+
+    return $db;
 }
 
 afterEach(function (): void {
@@ -179,7 +195,10 @@ it('lists each ID once and each unmatched token as pasted', function (): void {
 });
 
 it('returns nothing for empty text, and reads other types as text', function (mixed $text): void {
-    expect(UAMS_MRA_Selection::resolve_text($text))->toBe(['ids' => [], 'unmatched' => []]);
+    /** @var string $pasted */
+    $pasted = $text;
+
+    expect(UAMS_MRA_Selection::resolve_text($pasted))->toBe(['ids' => [], 'unmatched' => []]);
 })->with(['', "\n,;\r\n", '   ', null]);
 
 it('treats an ID with a leading zero or an attachment ID of zero as not found', function (): void {
@@ -219,9 +238,9 @@ it('falls back to the filename of a URL the site does not recognize', function (
     $out = UAMS_MRA_Selection::resolve_text('https://cdn.example.net/media/2025/hero%20image.jpg?v=2');
 
     expect($out)->toBe(['ids' => [31], 'unmatched' => []])
-        ->and($GLOBALS['wpdb']->queries)->toHaveCount(1)
-        ->and($GLOBALS['wpdb']->queries[0])->toContain("file = 'hero image.jpg'")
-        ->and($GLOBALS['wpdb']->queries[0])->toContain("file LIKE '%/hero image.jpg'");
+        ->and(selection_db()->queries)->toHaveCount(1)
+        ->and(selection_db()->queries[0])->toContain("file = 'hero image.jpg'")
+        ->and(selection_db()->queries[0])->toContain("file LIKE '%/hero image.jpg'");
 });
 
 it('falls back to the whole token when a URL has no path', function (): void {
@@ -232,7 +251,7 @@ it('falls back to the whole token when a URL has no path', function (): void {
     $out = UAMS_MRA_Selection::resolve_text('https://example.edu');
 
     expect($out['unmatched'])->toBe(['https://example.edu'])
-        ->and($GLOBALS['wpdb']->queries[0])->toContain("file = 'example.edu'");
+        ->and(selection_db()->queries[0])->toContain("file = 'example.edu'");
 });
 
 it('looks a filename up in the results table with the first match by ID', function (): void {
@@ -240,7 +259,7 @@ it('looks a filename up in the results table with the first match by ID', functi
 
     $out = UAMS_MRA_Selection::resolve_text('2025/11/50%_off.pdf');
 
-    $query = $GLOBALS['wpdb']->queries[0];
+    $query = selection_db()->queries[0];
 
     expect($out['ids'])->toBe([44])
         ->and($query)->toContain('FROM wp_uams_mra_results')
@@ -254,7 +273,7 @@ it('reads a stored name by what it says when it is percent-encoded and padded', 
 
     UAMS_MRA_Selection::resolve_text('a%20b.pdf');
 
-    expect($GLOBALS['wpdb']->queries[0])->toContain("file = 'a b.pdf'");
+    expect(selection_db()->queries[0])->toContain("file = 'a b.pdf'");
 });
 
 it('does not ask the database about a name that decodes to nothing', function (): void {
@@ -263,7 +282,7 @@ it('does not ask the database about a name that decodes to nothing', function ()
     $out = UAMS_MRA_Selection::resolve_text('%20');
 
     expect($out)->toBe(['ids' => [], 'unmatched' => ['%20']])
-        ->and($GLOBALS['wpdb']->queries)->toBe([]);
+        ->and(selection_db()->queries)->toBe([]);
 });
 
 it('reports a filename the audit does not know as unmatched', function (): void {

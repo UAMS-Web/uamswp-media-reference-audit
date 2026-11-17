@@ -27,6 +27,17 @@ final class RepointDownloadTest extends IntegrationTestCase
     private array $sent = [];
 
     /**
+     * The file the last request was told to stream into.
+     */
+    private function sentFilename(): string
+    {
+        /** @var string $filename */
+        $filename = $this->sent['filename'];
+
+        return $filename;
+    }
+
+    /**
      * Answer the next request with a body of the given size and status.
      */
     private function answerWith(int $bytes, int $status = 200): void
@@ -81,7 +92,7 @@ final class RepointDownloadTest extends IntegrationTestCase
 
         $this->assertInstanceOf(WP_Error::class, $result);
         $this->assertSame('toobig', $result->get_error_code());
-        $this->assertFileDoesNotExist((string) $this->sent['filename']);
+        $this->assertFileDoesNotExist($this->sentFilename());
     }
 
     public function test_a_status_other_than_200_is_a_failed_fetch_and_leaves_no_file(): void
@@ -92,7 +103,7 @@ final class RepointDownloadTest extends IntegrationTestCase
 
         $this->assertInstanceOf(WP_Error::class, $result);
         $this->assertSame('fetchfailed', $result->get_error_code());
-        $this->assertFileDoesNotExist((string) $this->sent['filename']);
+        $this->assertFileDoesNotExist($this->sentFilename());
     }
 
     public function test_a_transport_error_is_a_failed_fetch_and_leaves_no_file(): void
@@ -108,6 +119,6 @@ final class RepointDownloadTest extends IntegrationTestCase
         $this->assertInstanceOf(WP_Error::class, $result);
         $this->assertSame('fetchfailed', $result->get_error_code());
         $this->assertSame('connection refused', $result->get_error_message());
-        $this->assertFileDoesNotExist((string) $this->sent['filename']);
+        $this->assertFileDoesNotExist($this->sentFilename());
     }
 }

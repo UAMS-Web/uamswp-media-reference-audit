@@ -48,7 +48,9 @@ if (! class_exists('UamsMraRecordingDb')) {
 
         public function prepare(string $query, mixed ...$args): string
         {
-            $this->queries[] = $query.'|'.implode(',', $args);
+            /** @var list<scalar> $values */
+            $values = $args;
+            $this->queries[] = $query.'|'.implode(',', $values);
 
             return $query;
         }
@@ -90,7 +92,21 @@ function rewrite_row_result(array $fields): array
 
     $method = new ReflectionMethod(UAMS_MRA_Repoint::class, 'rewrite_row');
 
-    return $method->invoke(null, $row);
+    /** @var array{status: string, applied: int} $result */
+    $result = $method->invoke(null, $row);
+
+    return $result;
+}
+
+/**
+ * The recording stand-in the test put in place of `$wpdb`.
+ */
+function rewrite_db(): UamsMraRecordingDb
+{
+    /** @var UamsMraRecordingDb $db */
+    $db = $GLOBALS['wpdb'];
+
+    return $db;
 }
 
 /**
@@ -191,12 +207,12 @@ it('skips an option that no longer holds the URL, and fails one that holds it wh
 });
 
 it('writes a meta row to the table and key of its type, then drops that row from the cache group of its type', function (string $type, string $table, string $key, string $group): void {
-    $GLOBALS['wpdb']->stored = 'see '.REWRITE_OLD;
+    rewrite_db()->stored = 'see '.REWRITE_OLD;
     Functions\expect('wp_cache_delete')->once()->with('55', $group);
 
     expect(rewrite_row_result(['source_type' => $type]))->toBe(['status' => 'applied', 'applied' => 1])
-        ->and($GLOBALS['wpdb']->updates)->toBe([[$table, ['meta_value' => 'see '.REWRITE_NEW], [$key => 7]]])
-        ->and($GLOBALS['wpdb']->queries)->toBe(['SELECT meta_value FROM '.$table.' WHERE '.$key.' = %d|7']);
+        ->and(rewrite_db()->updates)->toBe([[$table, ['meta_value' => 'see '.REWRITE_NEW], [$key => 7]]])
+        ->and(rewrite_db()->queries)->toBe(['SELECT meta_value FROM '.$table.' WHERE '.$key.' = %d|7']);
 })->with([
     'postmeta' => ['postmeta', 'wp_postmeta', 'meta_id', 'post_meta'],
     'termmeta' => ['termmeta', 'wp_termmeta', 'meta_id', 'term_meta'],
@@ -205,24 +221,25 @@ it('writes a meta row to the table and key of its type, then drops that row from
 ]);
 
 it('fails a meta row that is gone, or whose update returns false', function (): void {
-    $GLOBALS['wpdb']->stored = null;
+    rewrite_db()->stored = null;
 
     expect(rewrite_row_result(['source_type' => 'postmeta']))->toBe(['status' => 'failed', 'applied' => 3]);
 
-    $GLOBALS['wpdb']->stored = REWRITE_OLD;
-    $GLOBALS['wpdb']->updateResult = false;
+    rewrite_db()->stored = REWRITE_OLD;
+    rewrite_db()->updateResult = false;
+
     Functions\expect('wp_cache_delete')->never();
 
     expect(rewrite_row_result(['source_type' => 'postmeta']))->toBe(['status' => 'failed', 'applied' => 3]);
 });
 
 it('skips an unchanged meta value, fails one that holds the URL out of reach, and writes nothing for either', function (): void {
-    $GLOBALS['wpdb']->stored = 'nothing to change';
+    rewrite_db()->stored = 'nothing to change';
 
     expect(rewrite_row_result(['source_type' => 'postmeta']))->toBe(['status' => 'skipped', 'applied' => 2]);
 
-    $GLOBALS['wpdb']->stored = rewrite_unreachable();
+    rewrite_db()->stored = rewrite_unreachable();
 
     expect(rewrite_row_result(['source_type' => 'postmeta']))->toBe(['status' => 'failed', 'applied' => 3])
-        ->and($GLOBALS['wpdb']->updates)->toBe([]);
+        ->and(rewrite_db()->updates)->toBe([]);
 });
