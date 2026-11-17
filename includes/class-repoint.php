@@ -109,7 +109,10 @@ class UAMS_MRA_Repoint
     {
         $fatal = get_option(self::FATAL_OPTION, []);
 
-        return is_array($fatal) ? $fatal : [];
+        /** @var array<string, mixed> $typed */
+        $typed = is_array($fatal) ? $fatal : [];
+
+        return $typed;
     }
 
     /**
@@ -186,7 +189,10 @@ class UAMS_MRA_Repoint
     {
         $job = get_option(self::STATE_OPTION, []);
 
-        return is_array($job) ? $job : [];
+        /** @var array<string, mixed> $typed */
+        $typed = is_array($job) ? $job : [];
+
+        return $typed;
     }
 
     /**
@@ -216,9 +222,12 @@ class UAMS_MRA_Repoint
      */
     protected static function stall_timeout(): int
     {
+        /** @var int|float|string $timeout */
+        $timeout = apply_filters('uams_mra_repoint_stall_timeout', 5 * MINUTE_IN_SECONDS);
+
         // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
-        return (int) apply_filters('uams_mra_repoint_stall_timeout', 5 * MINUTE_IN_SECONDS);
+        return (int) $timeout;
     }
 
     /**
@@ -237,7 +246,9 @@ class UAMS_MRA_Repoint
     public static function start_plan(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // A previous plan is cleared rather than resumed. Content moves, and a
@@ -276,7 +287,7 @@ class UAMS_MRA_Repoint
     public static function start_apply($include_resized = false): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if (UAMS_MRA_Store::offsite_needs_rescan()) {
             // A stale job is already done, so no caller reads its `resized` entry.
             /** @var RepointApplyJob $stale */
@@ -285,6 +296,7 @@ class UAMS_MRA_Repoint
             return $stale;
         }
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
         $verdicts = self::eligible_verdicts($include_resized);
         // The list holds fixed verdict names with nothing to escape, so escaping them changes nothing.
@@ -414,10 +426,13 @@ class UAMS_MRA_Repoint
     protected static function step_plan($job)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<object{url_hash: string, url: string, base_norm: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -443,20 +458,20 @@ class UAMS_MRA_Repoint
             $verdict = self::classify($row->url, $row->base_norm);
 
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            $wpdb->query(
-                $wpdb->prepare(
-                    "UPDATE {$t} SET verdict = %s, local_id = %d, remote_bytes = %d, local_bytes = %d, target_url = %s, checked_at = %s
+            /** @var string $statement */
+            $statement = $wpdb->prepare(
+                "UPDATE {$t} SET verdict = %s, local_id = %d, remote_bytes = %d, local_bytes = %d, target_url = %s, checked_at = %s
 					 WHERE url_hash = %s AND applied = 0",
-                    $verdict['verdict'],
-                    $verdict['local_id'],
-                    $verdict['remote_bytes'],
-                    $verdict['local_bytes'],
-                    $verdict['target_url'],
-                    current_time('mysql'),
-                    $row->url_hash
-                )
+                $verdict['verdict'],
+                $verdict['local_id'],
+                $verdict['remote_bytes'],
+                $verdict['local_bytes'],
+                $verdict['target_url'],
+                current_time('mysql'),
+                $row->url_hash
             );
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $wpdb->query($statement);
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             $job['done']++;
@@ -543,13 +558,16 @@ class UAMS_MRA_Repoint
      */
     protected static function remote_size($url): ?int
     {
+        /** @var string $version */
+        $version = UAMS_MRA_VERSION;
+        /** @var array{timeout: int, redirection: int, sslverify: bool, user-agent: string} $args */
         $args = apply_filters(
             'uams_mra_repoint_request_args',
             [
                 'timeout' => 15,
                 'redirection' => 3,
                 'sslverify' => apply_filters('uams_mra_render_sslverify', true),
-                'user-agent' => 'UAMS-Media-Reference-Audit/'.UAMS_MRA_VERSION.' (+'.home_url().')',
+                'user-agent' => 'UAMS-Media-Reference-Audit/'.$version.' (+'.home_url().')',
             ],
             $url
         );
@@ -566,6 +584,8 @@ class UAMS_MRA_Repoint
         if (is_array($length)) {
             $length = reset($length);
         }
+
+        /** @var string|false $length */
 
         // The return type is ?int, which converts a numeric string to the same integer, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -616,7 +636,10 @@ class UAMS_MRA_Repoint
         $base = (string) wp_get_attachment_url($attachment_id);
         $base = trailingslashit(dirname($base));
 
-        foreach ($meta['sizes'] as $size) {
+        /** @var array<array{file?: string, width?: int, height?: int}> $sizes */
+        $sizes = $meta['sizes'];
+
+        foreach ($sizes as $size) {
             if (empty($size['file'])) {
                 continue;
             }
@@ -686,9 +709,12 @@ class UAMS_MRA_Repoint
 
         $budget = max(5, (int) floor($max * 0.6));
 
+        /** @var int|float|string $filtered */
+        $filtered = apply_filters('uams_mra_repoint_time_budget', $budget);
+
         // The return type is int, which converts a numeric filter result to the same integer, so the outer cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
-        return (int) apply_filters('uams_mra_repoint_time_budget', $budget);
+        return (int) $filtered;
     }
 
     /* ---------------------------------------------------------------------
@@ -709,7 +735,7 @@ class UAMS_MRA_Repoint
     public static function start_sideload(): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if (UAMS_MRA_Store::offsite_needs_rescan()) {
             // A stale job is already done, so no caller reads its `queue` entry.
             /** @var RepointSideloadJob $stale */
@@ -718,11 +744,13 @@ class UAMS_MRA_Repoint
             return $stale;
         }
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // 'crashed' rows are deliberately not picked up again here. Retrying them
         // is a decision a person makes, by running the comparison again.
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<object{url_hash: string, url: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results("SELECT url_hash, url FROM {$t} WHERE verdict = 'nolocal' AND applied = 0 GROUP BY url_hash, url");
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -748,7 +776,7 @@ class UAMS_MRA_Repoint
         usort(
             $queue,
             static function (array $a, array $b): int {
-                $rank = static function ($url): int {
+                $rank = static function (string $url): int {
                     // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
                     // @pest-mutate-ignore:RemoveStringCast
                     $ext = strtolower(pathinfo((string) wp_parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
@@ -999,6 +1027,7 @@ class UAMS_MRA_Repoint
 
         // wp_handle_sideload runs the same checks as the media screen, so a file
         // type this site does not allow is refused rather than written anywhere.
+        /** @var array{file: string, url: string, type: string, error?: string} $sideloaded */
         $sideloaded = wp_handle_sideload($file, ['test_form' => false]);
 
         if (isset($sideloaded['error'])) {
@@ -1102,7 +1131,9 @@ class UAMS_MRA_Repoint
     protected static function sideload_parent($url): int
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
@@ -1132,7 +1163,9 @@ class UAMS_MRA_Repoint
     protected static function point_group_at(array $hashes, $attachment_id): void
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         foreach ($hashes as $hash) {
@@ -1171,11 +1204,12 @@ class UAMS_MRA_Repoint
     protected static function mark_hashes(array $hashes, $verdict, $local, $target): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if ($hashes === []) {
             return;
         }
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // Any chunk size reaches every hash, so a smaller one only changes how many queries run.
@@ -1187,15 +1221,20 @@ class UAMS_MRA_Repoint
             // Only the number of placeholders is used, so the starting index of the filled array does not matter.
             // @pest-mutate-ignore:DecrementInteger
             // @pest-mutate-ignore:IncrementInteger
+            /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%s'));
+            /** @var literal-string $sql */
             $sql = "UPDATE {$t} SET verdict = %s, local_id = %d, target_url = %s, checked_at = %s
 				WHERE url_hash IN ({$placeholders}) AND applied = 0";
             // `prepare()` binds `%d` as an integer, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveIntegerCast
             $args = array_merge([$verdict, (int) $local, $target, current_time('mysql')], $chunk);
 
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            $wpdb->query($wpdb->prepare($sql, $args));
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the query holds the offsite table name and one `%s` per bound hash, and every value is bound through `prepare()`.
+            /** @var string $statement */
+            $statement = $wpdb->prepare($sql, $args);
+            $wpdb->query($statement);
+            // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         }
     }
 
@@ -1213,14 +1252,19 @@ class UAMS_MRA_Repoint
     protected static function step_apply($job)
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
         $verdicts = self::eligible_verdicts(! empty($job['resized']));
         // The list holds fixed verdict names with nothing to escape, so escaping them changes nothing.
         // @pest-mutate-ignore:UnwrapArrayMap
-        $in = "'".implode("','", array_map(esc_sql(...), $verdicts))."'";
+        /** @var literal-string $verdict_list */
+        $verdict_list = implode("','", array_map(esc_sql(...), $verdicts));
+        $in = "'".$verdict_list."'";
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
+        /** @var list<object{offsite_id: string, url: string, target_url: string, source_type: string, source_pk: string, source_key: string, source_id: string, verdict: string}> $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -1245,10 +1289,13 @@ class UAMS_MRA_Repoint
             $result = self::rewrite_row($row);
 
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             // `prepare()` binds `%d` as an integer, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveIntegerCast
-            $wpdb->query($wpdb->prepare("UPDATE {$t} SET applied = %d WHERE offsite_id = %d", $result['applied'], (int) $row->offsite_id));
+            $applied_at = (int) $row->offsite_id;
+            /** @var string $statement */
+            $statement = $wpdb->prepare("UPDATE {$t} SET applied = %d WHERE offsite_id = %d", $result['applied'], $applied_at);
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $wpdb->query($statement);
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             $job['done']++;
@@ -1278,6 +1325,7 @@ class UAMS_MRA_Repoint
     protected static function rewrite_row($row): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         // The declared type or the receiving function converts the value the same way, so the cast changes nothing.
         // @pest-mutate-ignore:RemoveStringCast
@@ -1513,17 +1561,25 @@ class UAMS_MRA_Repoint
      * Table, primary key, and cache group for a meta source type.
      *
      * @param  string  $type  Source type.
-     * @return array{table: string, pk: string, cache: string}|null
+     * @return array{table: literal-string, pk: literal-string, cache: string}|null
      */
     protected static function meta_target($type): ?array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
+        /** @var literal-string $postmeta */
+        $postmeta = $wpdb->postmeta;
+        /** @var literal-string $termmeta */
+        $termmeta = $wpdb->termmeta;
+        /** @var literal-string $usermeta */
+        $usermeta = $wpdb->usermeta;
+        /** @var literal-string $commentmeta */
+        $commentmeta = $wpdb->commentmeta;
         $map = [
-            'postmeta' => [$wpdb->postmeta, 'meta_id', 'post_meta'],
-            'termmeta' => [$wpdb->termmeta, 'meta_id', 'term_meta'],
-            'usermeta' => [$wpdb->usermeta, 'umeta_id', 'user_meta'],
-            'commentmeta' => [$wpdb->commentmeta, 'meta_id', 'comment_meta'],
+            'postmeta' => [$postmeta, 'meta_id', 'post_meta'],
+            'termmeta' => [$termmeta, 'meta_id', 'term_meta'],
+            'usermeta' => [$usermeta, 'umeta_id', 'user_meta'],
+            'commentmeta' => [$commentmeta, 'meta_id', 'comment_meta'],
         ];
 
         if (! isset($map[$type])) {
@@ -1773,15 +1829,21 @@ class UAMS_MRA_Repoint
     public static function counts(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
+        /** @var array<string, array{files: int, rows: int}> $out */
         $out = [];
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<array{verdict: string, files: string, rows_affected: string}> $count_rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        foreach ($wpdb->get_results("SELECT verdict, COUNT(DISTINCT url_hash) AS files, COUNT(*) AS rows_affected FROM {$t} WHERE verdict <> '' AND applied = 0 GROUP BY verdict", ARRAY_A) as $row) {
-            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $count_rows = $wpdb->get_results("SELECT verdict, COUNT(DISTINCT url_hash) AS files, COUNT(*) AS rows_affected FROM {$t} WHERE verdict <> '' AND applied = 0 GROUP BY verdict", ARRAY_A);
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        foreach ($count_rows as $row) {
             $out[$row['verdict']] = [
                 'files' => (int) $row['files'],
                 'rows' => (int) $row['rows_affected'],
@@ -1799,7 +1861,9 @@ class UAMS_MRA_Repoint
     public static function applied_counts(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $t */
         $t = UAMS_MRA_Store::offsite_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
