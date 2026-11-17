@@ -75,7 +75,10 @@ if (! class_exists('WP_CLI')) {
         {
             self::$calls[] = ['error', $message];
 
-            throw new CliHalt((string) $message);
+            /** @var scalar|null $text */
+            $text = $message;
+
+            throw new CliHalt((string) $text);
         }
 
         /**
@@ -109,6 +112,7 @@ require_once __DIR__.'/../../includes/class-cli.php';
  */
 function cli_redefine(string $target, callable $replacement): void
 {
+    /** @var callable $redefine */
     $redefine = cli_loose('Patchwork\\redefine');
     $redefine($target, $replacement);
 }
@@ -168,7 +172,10 @@ function cli_wpdb(mixed $rows = []): object
 
         public function prepare(string $query, mixed ...$args): string
         {
-            return vsprintf($query, $args);
+            /** @var list<bool|float|int|string|null> $values */
+            $values = $args;
+
+            return vsprintf($query, $values);
         }
 
         public function get_results(string $query, mixed $output = null): mixed
@@ -194,6 +201,19 @@ function cli_wpdb(mixed $rows = []): object
 
 // What the commands handed to format_items(), in order.
 $GLOBALS['cli_format_calls'] = [];
+
+/**
+ * What the commands handed to format_items(), in order.
+ *
+ * @return list<array{string, list<array<string, mixed>>, list<string>}>
+ */
+function cli_format_calls(): array
+{
+    /** @var list<array{string, list<array<string, mixed>>, list<string>}> $calls */
+    $calls = $GLOBALS['cli_format_calls'];
+
+    return $calls;
+}
 
 /**
  * Everything the commands have done to WP-CLI so far.
@@ -232,7 +252,10 @@ beforeEach(function (): void {
     when('size_format')->alias(static fn ($bytes, $decimals = 0): string => is_int($bytes) ? $bytes.'B@'.$decimals : throw new LogicException('size_format() got a '.gettype($bytes)));
     when('wp_list_pluck')->alias(static fn (array $list, string $field): array => array_column($list, $field));
     when('WP_CLI\Utils\format_items')->alias(static function ($format, $items, $fields): void {
-        $GLOBALS['cli_format_calls'][] = [$format, $items, $fields];
+        /** @var list<array{mixed, mixed, mixed}> $calls */
+        $calls = $GLOBALS['cli_format_calls'];
+        $calls[] = [$format, $items, $fields];
+        $GLOBALS['cli_format_calls'] = $calls;
     });
 });
 
@@ -435,19 +458,19 @@ describe('list', function (): void {
     it('passes the chosen format through', function (string $format) use ($list, $row): void {
         $list([$row()], ['format' => $format]);
 
-        expect($GLOBALS['cli_format_calls'][0][0])->toBe($format);
+        expect(cli_format_calls()[0][0])->toBe($format);
     })->with(['csv', 'json', 'table']);
 
     it('leaves the attached column blank for a file with no parent', function (mixed $parent) use ($list, $row): void {
         $list([$row(['parent_id' => $parent])]);
 
-        expect($GLOBALS['cli_format_calls'][0][1][0]['attached'])->toBe('');
+        expect(cli_format_calls()[0][1][0]['attached'])->toBe('');
     })->with(['0', 0, '', null]);
 
     it('keeps one output row per result row, in order', function () use ($list, $row): void {
         $list([$row(['attachment_id' => '1']), $row(['attachment_id' => '2'])]);
 
-        expect(array_column($GLOBALS['cli_format_calls'][0][1], 'id'))->toBe(['1', '2']);
+        expect(array_column(cli_format_calls()[0][1], 'id'))->toBe(['1', '2']);
     });
 });
 
@@ -518,7 +541,10 @@ describe('delete', function (): void {
             throw new RuntimeException('a dry run deleted something');
         });
 
-        (new UAMS_MRA_CLI)->delete([], ['dry-run' => $flag]);
+        /** @var bool|string $dry */
+        $dry = $flag;
+
+        (new UAMS_MRA_CLI)->delete([], ['dry-run' => $dry]);
 
         expect(cli_calls())->toBe([
             ['log', "7\ta.jpg\t1000B@1"],
@@ -642,7 +668,7 @@ describe('why', function (): void {
 
         (new UAMS_MRA_CLI)->why(['1']);
 
-        expect(array_column($GLOBALS['cli_format_calls'][0][1], 'confidence'))->toBe(['by ID', 'strong']);
+        expect(array_column(cli_format_calls()[0][1], 'confidence'))->toBe(['by ID', 'strong']);
     });
 });
 

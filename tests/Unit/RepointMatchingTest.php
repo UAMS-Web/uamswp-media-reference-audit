@@ -37,10 +37,35 @@ function repoint_loose(mixed $value): mixed
 }
 
 /**
+ * Call a protected static method of the repoint class that answers with an array.
+ *
+ * @return array<string, mixed>
+ */
+function repoint_call_array(string $method, mixed ...$args): array
+{
+    /** @var array<string, mixed> $result */
+    $result = repoint_call($method, ...$args);
+
+    return $result;
+}
+
+/**
+ * Call a protected static method of the repoint class that answers with an object.
+ */
+function repoint_call_object(string $method, mixed ...$args): object
+{
+    /** @var object $result */
+    $result = repoint_call($method, ...$args);
+
+    return $result;
+}
+
+/**
  * Redefine a method through Patchwork, which is loaded at run time and unknown to static analysis.
  */
 function repoint_redefine(string $target, callable $replacement): void
 {
+    /** @var callable $redefine */
     $redefine = repoint_loose('Patchwork\\redefine');
     $redefine($target, $replacement);
 }
@@ -77,6 +102,7 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    /** @var callable $restore */
     $restore = repoint_loose('Patchwork\\restoreAll');
     $restore();
 });
@@ -247,11 +273,13 @@ it('reads the dimensions as numbers, so text that is not a number weighs nothing
 
 it('leaves a value alone when the source URL is empty or only a scheme', function (mixed $from): void {
     $text = 'plain text with https://elsewhere.example/a.jpg in it';
+    /** @var string $source */
+    $source = $from;
 
-    expect(UAMS_MRA_Repoint::replace_variants($text, $from, 'https://new.example.edu/a.jpg'))->toBe($text)
-        ->and(UAMS_MRA_Repoint::replace_variants(['k' => $text], $from, 'https://new.example.edu/a.jpg'))->toBe(['k' => $text])
-        ->and(UAMS_MRA_Repoint::replace_variants(serialize(['k' => $text]), $from, 'https://new.example.edu/a.jpg'))->toBe(serialize(['k' => $text]))
-        ->and(UAMS_MRA_Repoint::holds_url($text, $from))->toBeFalse();
+    expect(UAMS_MRA_Repoint::replace_variants($text, $source, 'https://new.example.edu/a.jpg'))->toBe($text)
+        ->and(UAMS_MRA_Repoint::replace_variants(['k' => $text], $source, 'https://new.example.edu/a.jpg'))->toBe(['k' => $text])
+        ->and(UAMS_MRA_Repoint::replace_variants(serialize(['k' => $text]), $source, 'https://new.example.edu/a.jpg'))->toBe(serialize(['k' => $text]))
+        ->and(UAMS_MRA_Repoint::holds_url($text, $source))->toBeFalse();
 })->with([
     'an empty string' => [''],
     'null' => [null],
@@ -260,7 +288,10 @@ it('leaves a value alone when the source URL is empty or only a scheme', functio
 ]);
 
 it('treats a missing target as empty text instead of failing', function (): void {
-    expect(UAMS_MRA_Repoint::replace_variants('https://old.example.edu/a.jpg', 'https://old.example.edu/a.jpg', repoint_loose(null)))->toBe('');
+    /** @var string $target */
+    $target = repoint_loose(null);
+
+    expect(UAMS_MRA_Repoint::replace_variants('https://old.example.edu/a.jpg', 'https://old.example.edu/a.jpg', $target))->toBe('');
 });
 
 // is_unreadable() and holds_url()
@@ -359,7 +390,7 @@ it('replaces inside a string, an array, an object and values nested in them', fu
     $object->src = 'A';
     $object->list = ['A', ['A']];
 
-    $result = repoint_call('deep_replace', ['k' => 'A', 'n' => ['A', 3, null, true], 'o' => $object], ['A'], ['B']);
+    $result = repoint_call_array('deep_replace', ['k' => 'A', 'n' => ['A', 3, null, true], 'o' => $object], ['A'], ['B']);
 
     expect($result['k'])->toBe('B')
         ->and($result['n'])->toBe(['B', 3, null, true])
@@ -403,8 +434,8 @@ it('stops going deeper after ten levels', function (): void {
     };
 
     // Depth starts at zero: a leaf string at depth 10 is still replaced, at depth 11 it is not.
-    expect($leaf(repoint_call('deep_replace', $nest(9), ['A'], ['B'])))->toBe('B')
-        ->and($leaf(repoint_call('deep_replace', $nest(10), ['A'], ['B'])))->toBe('A');
+    expect($leaf(repoint_call_array('deep_replace', $nest(9), ['A'], ['B'])))->toBe('B')
+        ->and($leaf(repoint_call_array('deep_replace', $nest(10), ['A'], ['B'])))->toBe('A');
 });
 
 it('stops going deeper after ten levels through objects as well', function (): void {
@@ -429,8 +460,8 @@ it('stops going deeper after ten levels through objects as well', function (): v
         return $data->leaf;
     };
 
-    expect($leaf(repoint_call('deep_replace', $nest(9), ['A'], ['B'])))->toBe('B')
-        ->and($leaf(repoint_call('deep_replace', $nest(10), ['A'], ['B'])))->toBe('A');
+    expect($leaf(repoint_call_object('deep_replace', $nest(9), ['A'], ['B'])))->toBe('B')
+        ->and($leaf(repoint_call_object('deep_replace', $nest(10), ['A'], ['B'])))->toBe('A');
 });
 
 it('does not touch an object it cannot read', function (): void {
@@ -522,7 +553,9 @@ it('lets the request arguments be filtered, with the URL', function (): void {
 });
 
 it('reports a file it cannot read as null', function (mixed $response): void {
-    repoint_head($response === 'error' ? new WP_Error : $response);
+    /** @var array<string, mixed>|WP_Error $reply */
+    $reply = $response === 'error' ? new WP_Error : $response;
+    repoint_head($reply);
 
     expect(repoint_call('remote_size', MATCH_URL))->toBeNull();
 })->with([
@@ -617,7 +650,7 @@ it('finds the generated size that matches the dimensions', function (): void {
         expect(repoint_call('local_size_file', 7, 300, 200))->toBe([
             'bytes' => 50,
             'url' => 'https://site.example.edu/wp-content/uploads/2020/01/hero-300x200.jpg',
-        ])->and(repoint_call('local_size_file', 7, 150, 150)['bytes'])->toBe(20);
+        ])->and(repoint_call_array('local_size_file', 7, 150, 150)['bytes'])->toBe(20);
     } finally {
         repoint_clean($dir);
     }
@@ -660,7 +693,7 @@ it('reads dimensions that are stored as text', function (): void {
         when('get_attached_file')->justReturn($dir.'hero.jpg');
         when('wp_get_attachment_url')->justReturn('https://site.example.edu/u/hero.jpg');
 
-        expect(repoint_call('local_size_file', 7, 300, 200)['bytes'])->toBe(2)
+        expect(repoint_call_array('local_size_file', 7, 300, 200)['bytes'])->toBe(2)
             ->and(repoint_call('local_size_file', 7, 200, 300))->toBeNull()
             ->and(repoint_call('local_size_file', 7, 300, 300))->toBeNull();
     } finally {
@@ -716,7 +749,7 @@ it('keeps looking after a size that does not fit', function (): void {
  *
  * @param  list<int|string>  $candidates  What the index resolves the name to.
  * @param  array<string, mixed>  $opts  remote (?int), meta, original (file contents), url.
- * @return array{mixed, stdClass} The classification and what the stand-ins recorded.
+ * @return array{array{verdict: string, local_id: int, remote_bytes: int, local_bytes: int, target_url: string}, stdClass} The classification and what the stand-ins recorded.
  */
 function repoint_classify(array $candidates, array $opts = []): array
 {
@@ -737,17 +770,23 @@ function repoint_classify(array $candidates, array $opts = []): array
         file_put_contents($dir.'hero.jpg', $original);
     }
 
-    foreach ($opts['files'] ?? [] as $name => $contents) {
+    /** @var array<string, string> $files */
+    $files = $opts['files'] ?? [];
+
+    foreach ($files as $name => $contents) {
         file_put_contents($dir.$name, $contents);
     }
 
     when('home_url')->justReturn('https://site.example.edu');
     when('apply_filters')->alias(static fn ($hook, $value) => $value);
     when('is_wp_error')->justReturn(false);
-    when('wp_safe_remote_head')->alias(static function () use ($opts, $log): array {
+    /** @var int|null $remote */
+    $remote = $opts['remote'] ?? null;
+
+    when('wp_safe_remote_head')->alias(static function () use ($remote, $log): array {
         $log->head++;
 
-        return ['response' => ['code' => ($opts['remote'] ?? null) === null ? 404 : 200], 'headers' => ['content-length' => (string) ($opts['remote'] ?? '')]];
+        return ['response' => ['code' => $remote === null ? 404 : 200], 'headers' => ['content-length' => (string) $remote]];
     });
     when('wp_remote_retrieve_response_code')->alias(static fn ($r) => $r['response']['code']);
     when('wp_remote_retrieve_header')->alias(static fn ($r, $h) => $r['headers'][$h] ?? '');
@@ -755,6 +794,7 @@ function repoint_classify(array $candidates, array $opts = []): array
     when('wp_get_attachment_url')->justReturn(($opts['noUrl'] ?? false) ? false : 'https://site.example.edu/wp-content/uploads/2020/01/hero.jpg');
     when('wp_get_attachment_metadata')->justReturn($opts['meta'] ?? false);
 
+    /** @var array{verdict: string, local_id: int, remote_bytes: int, local_bytes: int, target_url: string} $result */
     $result = repoint_call('classify', $opts['url'] ?? 'https://old.example.edu/wp-content/uploads/2020/01/hero.jpg', 'hero.jpg');
 
     repoint_clean($dir);
