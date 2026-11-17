@@ -65,15 +65,19 @@ function scanner_index(array $known = [], array $paths = [], array $names = []):
 
     scanner_redefine('UAMS_MRA_Index::filter_attachment_ids', static function (array $ids) use ($known, $log): array {
         $log->filtered[] = $ids;
+        /** @var list<int|string> $raw_ids */
+        $raw_ids = $ids;
 
-        return array_values(array_unique(array_filter(array_map(intval(...), $ids), static fn (int $id): bool => in_array($id, $known, true))));
+        return array_values(array_unique(array_filter(array_map(intval(...), $raw_ids), static fn (int $id): bool => in_array($id, $known, true))));
     });
 
     scanner_redefine('UAMS_MRA_Index::resolve_paths', static function (array $found) use ($paths, $log): array {
         $log->resolved[] = $found;
         $ids = [];
+        /** @var list<string> $found_paths */
+        $found_paths = $found;
 
-        foreach ($found as $path) {
+        foreach ($found_paths as $path) {
             $ids = array_merge($ids, $paths[$path] ?? []);
         }
 
@@ -82,8 +86,10 @@ function scanner_index(array $known = [], array $paths = [], array $names = []):
 
     scanner_redefine('UAMS_MRA_Index::resolve_map', static function (array $keys) use ($names, $log): array {
         $log->mapped[] = $keys;
+        /** @var list<string> $key_list */
+        $key_list = $keys;
 
-        return array_intersect_key($names, array_flip($keys));
+        return array_intersect_key($names, array_flip($key_list));
     });
 
     return $log;
@@ -91,7 +97,7 @@ function scanner_index(array $known = [], array $paths = [], array $names = []):
 
 beforeEach(function (): void {
     when('wp_get_upload_dir')->justReturn(['baseurl' => 'https://site.example.edu/wp-content/uploads']);
-    when('wp_parse_url')->alias(static fn ($url, $component = -1): string|int|array|false|null => parse_url((string) $url, $component));
+    when('wp_parse_url')->alias(static fn (string $url, int $component = -1): string|int|array|false|null => parse_url($url, $component));
     when('home_url')->justReturn('https://site.example.edu');
     when('site_url')->justReturn('https://site.example.edu');
     when('uams_mra_settings')->justReturn(['extra_paths' => '']);

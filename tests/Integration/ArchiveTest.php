@@ -17,6 +17,7 @@ use UAMS_MRA_Archive;
 use UAMS_MRA_Triage;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
 use WP_Error;
+use wpdb;
 use ZipArchive;
 
 /**
@@ -182,6 +183,7 @@ final class ArchiveTest extends IntegrationTestCase
 
     private function relative(int $id): string
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
 
         return substr((string) get_attached_file($id), strlen(trailingslashit($uploads['basedir'])));
@@ -219,6 +221,7 @@ final class ArchiveTest extends IntegrationTestCase
 
     public function test_every_job_lives_in_a_folder_of_its_own_under_uploads(): void
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
 
         $this->assertSame(trailingslashit($uploads['basedir']).'uams-mra-archives', UAMS_MRA_Archive::base_dir());
@@ -692,6 +695,7 @@ final class ArchiveTest extends IntegrationTestCase
 
     public function test_the_extension_is_read_in_any_case(): void
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
         $path = trailingslashit($uploads['basedir']).'SHOUT.JPG';
         wp_mkdir_p($uploads['basedir']);
@@ -751,6 +755,7 @@ final class ArchiveTest extends IntegrationTestCase
 
     public function test_a_file_that_only_shares_the_uploads_prefix_is_not_taken_for_one_inside_it(): void
     {
+        /** @var array{basedir: string, baseurl: string} $uploads */
         $uploads = wp_get_upload_dir();
         $sibling = rtrim($uploads['basedir'], '/').'-sibling';
         wp_mkdir_p($sibling);
@@ -800,6 +805,7 @@ final class ArchiveTest extends IntegrationTestCase
     public function test_the_manifest_has_blank_fields_for_a_post_that_cannot_be_read(): void
     {
         $id = $this->attachment('orphan.txt', 'o');
+        /** @var wpdb $wpdb */
         global $wpdb;
         // The file record outlives its post row, as after a partial delete.
         $wpdb->delete($wpdb->posts, ['ID' => $id]);
