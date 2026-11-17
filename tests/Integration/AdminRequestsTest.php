@@ -88,6 +88,9 @@ final class AdminSpy extends UAMS_MRA_Admin
     }
 }
 
+/**
+ * @phpstan-type ArchivePayload array{done: bool, percent: int, files: int, bytes: string, skipped: int, parts: list<array{part: int, name: string, files: int, size: string, url: string}>, total: int, progress: string}
+ */
 final class AdminRequestsTest extends IntegrationTestCase
 {
     private AdminSpy $admin;
@@ -156,6 +159,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         );
 
         foreach ($items as $item) {
+            /** @var \SplFileInfo $item */
             $item->isDir() && ! $item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
 
@@ -238,7 +242,7 @@ final class AdminRequestsTest extends IntegrationTestCase
      * Call a handler with a valid nonce under an action name and read its JSON answer.
      *
      * @param  array<string, mixed>  $post
-     * @return array<string, mixed>
+     * @return array{success: bool, data: array<string, mixed>, status: int|null}
      */
     private function ajax(string $method, string $action, array $post = [], bool $nonce = true): array
     {
@@ -256,8 +260,11 @@ final class AdminRequestsTest extends IntegrationTestCase
 
         // A throwable raised by the die stand-in can be caught by the handler's own try block, which answers a second time; the first answer is the one a browser would get.
         $first = $this->firstAnswer($result['out']);
-        $json = json_decode($first, true);
-        $this->assertIsArray($json, 'the handler answered something that is not JSON: '.$result['out']);
+        $decoded = json_decode($first, true);
+        $this->assertIsArray($decoded, 'the handler answered something that is not JSON: '.$result['out']);
+
+        /** @var array{success: bool, data: array<string, mixed>, status: int|null} $json */
+        $json = $decoded;
 
         // The status of the first answer, which is the one a browser would get.
         $json['status'] = $result['status'];
@@ -490,6 +497,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertNull($this->handle(['uams_mra_save_settings' => '1', '_wpnonce' => wp_create_nonce('uams_mra_settings')]));
 
         $defaults = uams_mra_default_settings();
+        /** @var array<string, int|string> $saved */
         $saved = get_option('uams_mra_settings');
 
         foreach (['include_revisions', 'include_numeric_meta', 'include_usermeta', 'include_termmeta', 'include_comments', 'include_network', 'include_render', 'include_offsite'] as $key) {
@@ -529,6 +537,7 @@ final class AdminRequestsTest extends IntegrationTestCase
             'sideload_max_mb' => '128',
         ]);
 
+        /** @var array<string, int|string> $saved */
         $saved = get_option('uams_mra_settings');
 
         $this->assertSame(1, $saved['include_revisions']);
@@ -590,7 +599,10 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $this->handle(['uams_mra_save_settings' => '1', '_wpnonce' => wp_create_nonce('uams_mra_settings'), $key => $submitted]);
 
-        $this->assertSame($expected, get_option('uams_mra_settings')[$key]);
+        /** @var array<string, int|string> $saved */
+        $saved = get_option('uams_mra_settings');
+
+        $this->assertSame($expected, $saved[$key]);
     }
 
     /* ---------------------------------------------------------------------
@@ -863,7 +875,8 @@ final class AdminRequestsTest extends IntegrationTestCase
         }
 
         $this->assertSame('redirect', $end?->kind);
-        $this->assertStringContainsString('view=weak', (string) $end->detail);
+        $this->assertIsString($end->detail);
+        $this->assertStringContainsString('view=weak', $end->detail);
     }
 
     public function test_a_filter_stores_the_files_it_matches_and_opens_the_review(): void
@@ -934,6 +947,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(UAMS_MRA_Admin::url(['action' => 'review']), $end?->detail);
         $this->assertSame([$one], UAMS_MRA_Selection::get());
 
+        /** @var array{type: string, message: string} $notice */
         $notice = get_user_meta(get_current_user_id(), '_uams_mra_notice', true);
         $this->assertSame('warning', $notice['type']);
         $this->assertSame(
@@ -1140,6 +1154,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $stepped = $this->ajax('ajax_archive_step', 'uams_mra_archive');
 
         $this->assertTrue($stepped['success']);
+        /** @var ArchivePayload $data */
         $data = $stepped['data'];
         $this->assertTrue($data['done']);
         $this->assertSame(100, $data['percent']);
@@ -1152,7 +1167,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(1, $data['parts'][0]['part']);
         $this->assertSame(UAMS_MRA_Archive::part_name(1), $data['parts'][0]['name']);
         $this->assertSame(2, $data['parts'][0]['files']);
-        /** @var array<string, mixed> $job */
+        /** @var array{dir: string} $job */
         $job = UAMS_MRA_Archive::get_job();
         $this->assertSame(size_format($this->bytesOf($job['dir'].'/'.UAMS_MRA_Archive::part_name(1)), 1), $data['parts'][0]['size']);
         $url = html_entity_decode((string) $data['parts'][0]['url']);
@@ -1189,8 +1204,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $job['skipped'] = ['a', 'b'];
         $job['parts'] = [1 => ['part' => 1, 'name' => 'p1.zip', 'bytes' => 1536, 'files' => 1], 2 => ['part' => 2, 'name' => 'p2.zip', 'bytes' => 0, 'files' => 0]];
 
-        $method = new ReflectionMethod($this->admin, 'archive_payload');
-        $payload = $method->invoke($this->admin, $job);
+        $payload = $this->archivePayloadOf($job);
 
         $this->assertSame(33, $payload['percent']);
         $this->assertSame(2, $payload['skipped']);
@@ -1200,32 +1214,31 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame('1.5 KB', $payload['parts'][0]['size']);
 
         $job['cursor'] = 99;
-        $this->assertSame(100, $method->invoke($this->admin, $job)['percent']);
+        $this->assertSame(100, $this->archivePayloadOf($job)['percent']);
     }
 
     public function test_archive_payload_handles_odd_jobs(): void
     {
-        $method = new ReflectionMethod($this->admin, 'archive_payload');
         $base = ['ids' => [1], 'cursor' => 0, 'files' => 0, 'bytes' => 0, 'skipped' => [], 'parts' => [], 'done' => false];
 
         // No ids at all must not divide by zero, and one id is one whole file.
-        $empty = $method->invoke($this->admin, ['ids' => []] + $base);
+        $empty = $this->archivePayloadOf(['ids' => []] + $base);
         $this->assertSame(0, $empty['percent']);
         $this->assertSame(0, $empty['total']);
 
-        $one = $method->invoke($this->admin, ['cursor' => 1, 'ids' => [7]] + $base);
+        $one = $this->archivePayloadOf(['cursor' => 1, 'ids' => [7]] + $base);
         $this->assertSame(100, $one['percent']);
 
         // Rounded, not floored: two of three is 67.
-        $this->assertSame(67, $method->invoke($this->admin, ['cursor' => 2, 'ids' => [1, 2, 3]] + $base)['percent']);
+        $this->assertSame(67, $this->archivePayloadOf(['cursor' => 2, 'ids' => [1, 2, 3]] + $base)['percent']);
 
         // A job with no parts or no skipped list still shapes.
-        $bare = $method->invoke($this->admin, ['parts' => null, 'skipped' => null] + $base);
+        $bare = $this->archivePayloadOf(['parts' => null, 'skipped' => null] + $base);
         $this->assertSame([], $bare['parts']);
         $this->assertSame(0, $bare['skipped']);
 
         // Stored numbers may come back as strings; the browser is given numbers, and a part with no files is left out wherever it sits.
-        $mixed = $method->invoke($this->admin, [
+        $mixed = $this->archivePayloadOf([
             'files' => '4',
             'parts' => [
                 1 => ['part' => '1', 'name' => 'empty.zip', 'bytes' => '0', 'files' => '0'],
@@ -1238,7 +1251,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertSame(3, $mixed['parts'][0]['files']);
         $this->assertSame('2.0 KB', $mixed['parts'][0]['size']);
         $this->assertSame('full.zip', $mixed['parts'][0]['name']);
-        $this->assertSame('2', $this->queryArg((string) $mixed['parts'][0]['url'], 'part'));
+        $this->assertSame('2', $this->queryArg($mixed['parts'][0]['url'], 'part'));
     }
 
     /**
@@ -1399,7 +1412,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         UAMS_MRA_Selection::store([$id]);
         $this->ajax('ajax_archive_start', 'uams_mra_archive');
         $this->ajax('ajax_archive_step', 'uams_mra_archive');
-        /** @var array<string, mixed> $job */
+        /** @var array{parts: array<int, array<string, mixed>>} $job */
         $job = UAMS_MRA_Archive::get_job();
         $this->assertNotEmpty($job['parts'][1]);
 
@@ -1416,7 +1429,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $job = UAMS_MRA_Archive::get_job();
         $this->assertIsArray($job);
         $this->ajax('ajax_archive_step', 'uams_mra_archive');
-        /** @var array<string, mixed> $job */
+        /** @var array{dir: string, parts: array<int, array{name: string}>} $job */
         $job = UAMS_MRA_Archive::get_job();
         $path = $job['dir'].'/'.$job['parts'][1]['name'];
         $this->assertFileExists($path);
@@ -1450,7 +1463,10 @@ final class AdminRequestsTest extends IntegrationTestCase
     {
         $constant = new \ReflectionClassConstant(UAMS_MRA_Archive::class, 'META_KEY');
 
-        return (string) $constant->getValue();
+        /** @var scalar $key */
+        $key = $constant->getValue();
+
+        return (string) $key;
     }
 
     /* ---------------------------------------------------------------------
@@ -1469,7 +1485,9 @@ final class AdminRequestsTest extends IntegrationTestCase
             $this->assertSame(404, $answer['status']);
         }
 
-        $this->assertSame('', (string) get_post_meta($post, UAMS_MRA_Triage::META_DISPOSITION, true));
+        /** @var scalar|null $disposition */
+        $disposition = get_post_meta($post, UAMS_MRA_Triage::META_DISPOSITION, true);
+        $this->assertSame('', (string) $disposition);
     }
 
     public function test_triage_saves_the_mark_and_the_note_and_answers_with_the_counts(): void
@@ -1483,10 +1501,12 @@ final class AdminRequestsTest extends IntegrationTestCase
         $answer = $this->ajax('ajax_triage', 'uams_mra_triage', ['id' => (string) $one, 'd' => 'DELETE', 'note' => '  <b>owner left</b>  ']);
 
         $this->assertTrue($answer['success']);
-        $this->assertSame(['d' => 'delete', 'n' => 'owner left'], $answer['data']['mark']);
-        $this->assertSame(2, $answer['data']['counts']['disp']['delete']);
-        $this->assertSame(3072, $answer['data']['counts']['delete_bytes']);
-        $this->assertSame('Delete the 2 files marked Delete (3.0 KB)', $answer['data']['deleteLabel']);
+        /** @var array{mark: array{d: string, n: string}, counts: array{disp: array<string, int>, delete_bytes: int}, deleteLabel: string} $data */
+        $data = $answer['data'];
+        $this->assertSame(['d' => 'delete', 'n' => 'owner left'], $data['mark']);
+        $this->assertSame(2, $data['counts']['disp']['delete']);
+        $this->assertSame(3072, $data['counts']['delete_bytes']);
+        $this->assertSame('Delete the 2 files marked Delete (3.0 KB)', $data['deleteLabel']);
         $this->assertSame(['d' => 'delete', 'n' => 'owner left'], UAMS_MRA_Triage::get($one));
     }
 
@@ -1499,9 +1519,11 @@ final class AdminRequestsTest extends IntegrationTestCase
         $answer = $this->ajax('ajax_triage', 'uams_mra_triage', ['id' => (string) $id]);
 
         $this->assertTrue($answer['success']);
-        $this->assertSame(['d' => '', 'n' => ''], $answer['data']['mark']);
+        /** @var array{mark: array{d: string, n: string}, deleteLabel: string} $data */
+        $data = $answer['data'];
+        $this->assertSame(['d' => '', 'n' => ''], $data['mark']);
         $this->assertSame(['d' => '', 'n' => ''], UAMS_MRA_Triage::get($id));
-        $this->assertSame('Delete the 0 files marked Delete (0.0 B)', $answer['data']['deleteLabel']);
+        $this->assertSame('Delete the 0 files marked Delete (0.0 B)', $data['deleteLabel']);
     }
 
     /* ---------------------------------------------------------------------
@@ -1545,6 +1567,7 @@ final class AdminRequestsTest extends IntegrationTestCase
         $this->assertTrue(UAMS_MRA_Repoint::is_running());
 
         $result = $this->request(fn () => $this->admin->ajax_start(), ['nonce' => wp_create_nonce('uams_mra_scan')], [], true);
+        /** @var array{success: bool, data: array<string, mixed>} $json */
         $json = json_decode($this->firstAnswer($result['out']), true);
 
         $this->assertSame(409, $result['status']);
@@ -1594,6 +1617,7 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_progress_shapes_the_scan_state(array $state, array $expected): void
     {
         $method = new ReflectionMethod($this->admin, 'progress');
+        /** @var array<string, mixed> $shaped */
         $shaped = $method->invoke($this->admin, $state);
 
         $summary = array_key_exists('summary', $shaped) ? $shaped['summary'] : 'absent';
@@ -1649,11 +1673,15 @@ final class AdminRequestsTest extends IntegrationTestCase
     public function test_repoint_apply_passes_the_resized_choice_on(): void
     {
         $this->ajax('ajax_repoint_apply', 'uams_mra_repoint', ['resized' => '1']);
-        $this->assertSame(1, get_option(UAMS_MRA_Repoint::STATE_OPTION)['resized']);
+        /** @var array{resized: int} $state */
+        $state = get_option(UAMS_MRA_Repoint::STATE_OPTION);
+        $this->assertSame(1, $state['resized']);
 
         delete_option(UAMS_MRA_Repoint::STATE_OPTION);
         $this->ajax('ajax_repoint_apply', 'uams_mra_repoint');
-        $this->assertSame(0, get_option(UAMS_MRA_Repoint::STATE_OPTION)['resized']);
+        /** @var array{resized: int} $state */
+        $state = get_option(UAMS_MRA_Repoint::STATE_OPTION);
+        $this->assertSame(0, $state['resized']);
     }
 
     public function test_repoint_apply_refuses_a_user_without_unfiltered_html_and_starts_nothing(): void
@@ -1669,7 +1697,9 @@ final class AdminRequestsTest extends IntegrationTestCase
         }
 
         $this->assertFalse($answer['success']);
-        $this->assertStringStartsWith('Rewriting pages needs the unfiltered_html capability', $answer['data']['message']);
+        /** @var array{message: string} $data */
+        $data = $answer['data'];
+        $this->assertStringStartsWith('Rewriting pages needs the unfiltered_html capability', $data['message']);
         $this->assertSame(403, $answer['status']);
         $this->assertFalse(get_option(UAMS_MRA_Repoint::STATE_OPTION));
     }
@@ -1692,6 +1722,7 @@ final class AdminRequestsTest extends IntegrationTestCase
             true
         );
 
+        /** @var array{success: bool, data: array{message: string}} $json */
         $json = json_decode($result['out'], true);
 
         $this->assertSame(500, $result['status']);
@@ -1714,7 +1745,10 @@ final class AdminRequestsTest extends IntegrationTestCase
             true
         );
 
-        $this->assertStringContainsString('Stopped: wrong type', (string) json_decode($result['out'], true)['data']['message']);
+        /** @var array{data: array{message: string}} $json */
+        $json = json_decode($result['out'], true);
+
+        $this->assertStringContainsString('Stopped: wrong type', $json['data']['message']);
     }
 
     /**
@@ -1753,6 +1787,23 @@ final class AdminRequestsTest extends IntegrationTestCase
      */
     private function payloadOf(mixed $job): array
     {
-        return (new ReflectionMethod($this->admin, 'repoint_payload'))->invoke($this->admin, $job);
+        /** @var array<string, mixed> $payload */
+        $payload = (new ReflectionMethod($this->admin, 'repoint_payload'))->invoke($this->admin, $job);
+
+        return $payload;
+    }
+
+    /**
+     * What the browser is told for an archive job.
+     *
+     * @param  array<string, mixed>  $job
+     * @return ArchivePayload
+     */
+    private function archivePayloadOf(array $job): array
+    {
+        /** @var ArchivePayload $payload */
+        $payload = (new ReflectionMethod($this->admin, 'archive_payload'))->invoke($this->admin, $job);
+
+        return $payload;
     }
 }
