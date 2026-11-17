@@ -65,7 +65,12 @@ it('still rewrites a stdClass, which has no methods to run', function (): void {
 
     $result = UAMS_MRA_Repoint::replace_variants(serialize($object), $old, 'https://new.example.edu/a.jpg');
 
-    expect(unserialize($result)->src)->toBe('https://new.example.edu/a.jpg');
+    /** @var string $rewritten */
+    $rewritten = $result;
+    /** @var stdClass $restored */
+    $restored = unserialize($rewritten);
+
+    expect($restored->src)->toBe('https://new.example.edu/a.jpg');
 });
 
 it('says a URL is still held when it sits in text, in a variant form or in a structure', function (mixed $value): void {

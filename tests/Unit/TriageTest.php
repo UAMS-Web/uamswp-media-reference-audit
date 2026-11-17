@@ -43,7 +43,10 @@ function triage_wpdb(array $vars = [], mixed $rows = [], mixed $col = []): objec
 
         public function prepare(string $query, mixed ...$args): string
         {
-            return vsprintf(str_replace('%s', "'%s'", $query), $args);
+            /** @var list<bool|float|int|string|null> $values */
+            $values = $args;
+
+            return vsprintf(str_replace('%s', "'%s'", $query), $values);
         }
 
         public function get_var(string $query): mixed
@@ -102,6 +105,49 @@ beforeEach(function (): void {
     stubTranslationFunctions();
     when('esc_sql')->returnArg();
 });
+
+/**
+ * Hand a value to a parameter declared `int`, with its type hidden, as a caller outside this code may.
+ *
+ * The declared return type is left off on purpose: a typed one would convert the value here, and the test is of what the code under test does with it.
+ *
+ * @return int
+ */
+function triage_int(mixed $value)
+{
+    /** @var int $hidden */
+    $hidden = $value;
+
+    return $hidden;
+}
+
+/**
+ * Hand a value to a parameter declared `string`, with its type hidden, as a caller outside this code may.
+ *
+ * The declared return type is left off on purpose: a typed one would convert the value here, and the test is of what the code under test does with it.
+ *
+ * @return string
+ */
+function triage_string(mixed $value)
+{
+    /** @var string $hidden */
+    $hidden = $value;
+
+    return $hidden;
+}
+
+/**
+ * The queries the stand-in recorded.
+ *
+ * @return object{queries: list<string>}
+ */
+function triage_db(): object
+{
+    /** @var object{queries: list<string>} $db */
+    $db = $GLOBALS['wpdb'];
+
+    return $db;
+}
 
 afterEach(function (): void {
     unset($GLOBALS['wpdb']);
@@ -199,7 +245,7 @@ it('reads a stored disposition and note as strings, and a missing one as empty',
 
     when('get_post_meta')->alias(static fn (int $id, string $key): mixed => $key === '_uams_mra_disposition' ? 'keep' : false);
 
-    expect(UAMS_MRA_Triage::get(triage_loose('12')))->toBe(['d' => 'keep', 'n' => '']);
+    expect(UAMS_MRA_Triage::get(triage_int('12')))->toBe(['d' => 'keep', 'n' => '']);
 });
 
 it('reads the meta of the attachment it was given, cast to an integer', function (): void {
@@ -210,7 +256,7 @@ it('reads the meta of the attachment it was given, cast to an integer', function
         return 'v';
     });
 
-    UAMS_MRA_Triage::get(triage_loose('12abc'));
+    UAMS_MRA_Triage::get(triage_int('12abc'));
 
     expect($seen)->toBe([[12, '_uams_mra_disposition', true], [12, '_uams_mra_note', true]]);
 });
@@ -225,7 +271,7 @@ it('stores a disposition and a note, and reports what it stored', function (): v
     });
     when('delete_post_meta')->alias(static fn (): never => throw new RuntimeException('nothing should be deleted'));
 
-    $result = UAMS_MRA_Triage::set(triage_loose('7'), 'delete', 'old logo');
+    $result = UAMS_MRA_Triage::set(triage_int('7'), 'delete', 'old logo');
 
     expect($result)->toBe(['d' => 'delete', 'n' => 'old logo'])
         ->and($writes)->toBe([[7, '_uams_mra_disposition', 'delete'], [7, '_uams_mra_note', 'old logo']]);
@@ -259,7 +305,7 @@ it('refuses a disposition that is not one a person can set', function (mixed $di
         return true;
     });
 
-    expect(UAMS_MRA_Triage::set(7, $disposition, 'n'))->toBe(['d' => '', 'n' => 'n'])
+    expect(UAMS_MRA_Triage::set(7, triage_string($disposition), 'n'))->toBe(['d' => '', 'n' => 'n'])
         ->and($deleted)->toBe(['_uams_mra_disposition']);
 })->with([
     'unknown' => ['purge'],
@@ -346,7 +392,7 @@ it('lists the attachments marked with a disposition as integers', function (): v
 
     expect(UAMS_MRA_Triage::ids_marked('keep'))->toBe([4, 9]);
 
-    $query = $GLOBALS['wpdb']->queries[0];
+    $query = triage_db()->queries[0];
 
     expect($query)->toContain('FROM wp_uams_mra_results r')
         ->and($query)->toContain("pm.meta_key = '_uams_mra_disposition'")
@@ -369,7 +415,7 @@ it('counts each tier inside the scope it was given', function (): void {
 
     expect($out['tier'])->toBe(['verify' => 3, 'ask' => 5, 'clear' => 7]);
 
-    $queries = $GLOBALS['wpdb']->queries;
+    $queries = triage_db()->queries;
 
     expect($queries[0])->toBe("SELECT COUNT(*) FROM wp_uams_mra_results WHERE ( mime = 1 ) AND ( is_attached = 1 AND render_state <> 'absent' )")
         ->and($queries[1])->toContain('WHERE ( mime = 1 ) AND ( ( is_attached = 0 ')
@@ -383,8 +429,8 @@ it('counts the whole table when no scope is given', function (): void {
     $out = UAMS_MRA_Triage::counts();
 
     expect($out['none'])->toBe(4)
-        ->and($GLOBALS['wpdb']->queries[0])->toContain('WHERE ( 1=1 ) AND (')
-        ->and($GLOBALS['wpdb']->queries[4])->toBe('SELECT COUNT(*) FROM wp_uams_mra_results WHERE ( 1=1 )');
+        ->and(triage_db()->queries[0])->toContain('WHERE ( 1=1 ) AND (')
+        ->and(triage_db()->queries[4])->toBe('SELECT COUNT(*) FROM wp_uams_mra_results WHERE ( 1=1 )');
 });
 
 it('puts the group counts, the delete size and the unmarked remainder in the result', function (): void {
@@ -418,7 +464,7 @@ it('groups the disposition counts by the stored value within the scope', functio
 
     UAMS_MRA_Triage::counts('x = 1');
 
-    $query = $GLOBALS['wpdb']->queries[3];
+    $query = triage_db()->queries[3];
 
     expect($query)->toContain("pm.meta_key = '_uams_mra_disposition'")
         ->and($query)->toContain("pm.meta_value <> '' AND ( x = 1 )")
@@ -451,7 +497,7 @@ it('stores against the integer form of the attachment and the string form of the
     });
     when('delete_post_meta')->justReturn(true);
 
-    $result = UAMS_MRA_Triage::set(triage_loose('7'), triage_loose(triage_stringable('keep')), triage_loose(123));
+    $result = UAMS_MRA_Triage::set(triage_int('7'), triage_string(triage_stringable('keep')), triage_string(123));
 
     expect($result)->toBe(['d' => 'keep', 'n' => '123'])
         ->and($writes)->toBe(['123', [7, '_uams_mra_disposition', 'keep'], [7, '_uams_mra_note', '123']]);

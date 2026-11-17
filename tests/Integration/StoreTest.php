@@ -47,7 +47,9 @@ final class StoreTest extends IntegrationTestCase
      */
     private static function refs(mixed ...$args): array
     {
-        $refs = UAMS_MRA_Store::get_refs(...$args);
+        /** @var array{0: int, 1?: int} $typed */
+        $typed = $args;
+        $refs = UAMS_MRA_Store::get_refs(...$typed);
 
         if ($refs === null) {
             self::fail('get_refs() returned null.');
@@ -63,7 +65,10 @@ final class StoreTest extends IntegrationTestCase
      */
     private static function offsiteFiles(mixed ...$args): array
     {
-        return UAMS_MRA_Store::offsite_files(...$args);
+        /** @var array{0?: string, 1?: int, 2?: int} $typed */
+        $typed = $args;
+
+        return UAMS_MRA_Store::offsite_files(...$typed);
     }
 
     /**
@@ -73,7 +78,10 @@ final class StoreTest extends IntegrationTestCase
      */
     private static function offsiteSources(mixed ...$args): array
     {
-        return UAMS_MRA_Store::offsite_sources(...$args);
+        /** @var array{0: string, 1?: int} $typed */
+        $typed = $args;
+
+        return UAMS_MRA_Store::offsite_sources(...$typed);
     }
 
     /**

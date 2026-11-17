@@ -174,7 +174,9 @@ final class RepointRewriteTest extends IntegrationTestCase
         $result = $this->rewrite(['source_type' => 'option', 'source_pk' => 0, 'source_key' => 'uams_mra_test_object']);
 
         $this->assertSame('applied', $result['status']);
-        $this->assertSame(self::NEW_URL, get_option('uams_mra_test_object')->logo);
+        /** @var \stdClass $stored */
+        $stored = get_option('uams_mra_test_object');
+        $this->assertSame(self::NEW_URL, $stored->logo);
     }
 
     public function test_an_option_whose_url_sits_in_a_private_property_is_failed_not_skipped(): void
@@ -184,7 +186,9 @@ final class RepointRewriteTest extends IntegrationTestCase
         $result = $this->rewrite(['source_type' => 'option', 'source_pk' => 0, 'source_key' => 'uams_mra_test_private']);
 
         $this->assertSame('failed', $result['status']);
-        $this->assertSame(self::OLD_URL, get_option('uams_mra_test_private')->url());
+        /** @var UamsMraPrivateHolder $holder */
+        $holder = get_option('uams_mra_test_private');
+        $this->assertSame(self::OLD_URL, $holder->url());
     }
 
     public function test_a_meta_value_holding_a_class_that_is_not_loaded_is_left_untouched_and_failed(): void
