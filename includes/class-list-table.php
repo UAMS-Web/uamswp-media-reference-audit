@@ -269,7 +269,6 @@ class UAMS_MRA_List_Table extends WP_List_Table
         $per_page = 50;
         $paged = max(1, $this->get_pagenum());
         $offset = ($paged - 1) * $per_page;
-        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         $query = self::build_query();
@@ -288,15 +287,15 @@ class UAMS_MRA_List_Table extends WP_List_Table
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $order = isset($_REQUEST['order']) && sanitize_key(wp_unslash($_REQUEST['order'])) === 'asc' ? 'ASC' : 'DESC';
 
-        $count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where}";
+        $count_sql = "SELECT COUNT(*) FROM %i WHERE {$where}";
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $total = (int) ($params ? $wpdb->get_var($wpdb->prepare($count_sql, $params)) : $wpdb->get_var($count_sql));
+        $total = (int) $wpdb->get_var($wpdb->prepare($count_sql, $table, ...$params));
 
-        $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY {$orderby} {$order}, attachment_id DESC LIMIT %d OFFSET %d";
-        $sql_args = array_merge($params, [$per_page, $offset]);
+        $sql = "SELECT * FROM %i WHERE {$where} ORDER BY {$orderby} {$order}, attachment_id DESC LIMIT %d OFFSET %d";
+        $sql_args = array_merge([$table], $params, [$per_page, $offset]);
         /** @var list<array<string, string>> $items */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $items = $wpdb->get_results($wpdb->prepare($sql, $sql_args), ARRAY_A);
+        $items = $wpdb->get_results($wpdb->prepare($sql, ...$sql_args), ARRAY_A);
         $this->items = $items;
 
         $this->set_pagination_args(

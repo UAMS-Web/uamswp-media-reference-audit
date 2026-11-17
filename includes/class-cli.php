@@ -127,14 +127,12 @@ class UAMS_MRA_CLI
         $format = $assoc_args['format'] ?? 'table';
         /** @var literal-string $where */
         $where = self::where_for($status);
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         /** @var list<array<string, string>> $rows */
         $rows = $wpdb->get_results(
-            $wpdb->prepare("SELECT * FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT %d", $limit),
+            $wpdb->prepare("SELECT * FROM %i WHERE {$where} ORDER BY bytes DESC LIMIT %d", UAMS_MRA_Store::results_table(), $limit),
             ARRAY_A
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -213,7 +211,6 @@ class UAMS_MRA_CLI
         $dry_run = isset($assoc_args['dry-run']);
         /** @var literal-string $where */
         $where = self::where_for($status);
-        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         if ($status !== 'orphaned' && $status !== 'unreferenced') {
@@ -224,7 +221,7 @@ class UAMS_MRA_CLI
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         /** @var list<array<string, string>> $rows */
         $rows = $wpdb->get_results(
-            $wpdb->prepare("SELECT attachment_id, bytes, file FROM {$table} WHERE {$where} AND ref_count = 0 ORDER BY bytes DESC LIMIT %d", $limit),
+            $wpdb->prepare("SELECT attachment_id, bytes, file FROM %i WHERE {$where} AND ref_count = 0 ORDER BY bytes DESC LIMIT %d", $table, $limit),
             ARRAY_A
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

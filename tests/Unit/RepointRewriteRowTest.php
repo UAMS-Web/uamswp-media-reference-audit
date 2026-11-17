@@ -212,7 +212,7 @@ it('writes a meta row to the table and key of its type, then drops that row from
 
     expect(rewrite_row_result(['source_type' => $type]))->toBe(['status' => 'applied', 'applied' => 1])
         ->and(rewrite_db()->updates)->toBe([[$table, ['meta_value' => 'see '.REWRITE_NEW], [$key => 7]]])
-        ->and(rewrite_db()->queries)->toBe(['SELECT meta_value FROM '.$table.' WHERE '.$key.' = %d|7']);
+        ->and(rewrite_db()->queries)->toBe(['SELECT meta_value FROM %i WHERE '.$key.' = %d|'.$table.',7']);
 })->with([
     'postmeta' => ['postmeta', 'wp_postmeta', 'meta_id', 'post_meta'],
     'termmeta' => ['termmeta', 'wp_termmeta', 'meta_id', 'term_meta'],

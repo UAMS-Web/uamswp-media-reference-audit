@@ -127,26 +127,22 @@ class UAMS_MRA_Index
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
-        /** @var literal-string $postmeta_table */
-        $postmeta_table = $wpdb->postmeta;
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties, and every value is bound through `prepare()`.
         /** @var list<object{ID: string, file: string|null}> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT p.ID, pm.meta_value AS file
-				 FROM {$posts_table} p
-				 LEFT JOIN {$postmeta_table} pm ON pm.post_id = p.ID AND pm.meta_key = '_wp_attached_file'
+				 FROM %i p
+				 LEFT JOIN %i pm ON pm.post_id = p.ID AND pm.meta_key = '_wp_attached_file'
 				 WHERE p.post_type = 'attachment' AND p.ID > %d
 				 ORDER BY p.ID ASC
 				 LIMIT %d",
+                $wpdb->posts,
+                $wpdb->postmeta,
                 $after,
                 $limit
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return [0, $after];
@@ -176,12 +172,10 @@ class UAMS_MRA_Index
             $args[] = $base_norm;
         }
 
-        /** @var literal-string $index_table */
-        $index_table = UAMS_MRA_Store::index_table();
-        $sql = 'REPLACE INTO '.$index_table.' (attachment_id, path_norm, base_norm) VALUES '.implode(',', $values);
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the index table name and the fixed `%d`/`%s` tuples, and every value is bound through `prepare()`.
+        $sql = 'REPLACE INTO %i (attachment_id, path_norm, base_norm) VALUES '.implode(',', $values);
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the fixed `%d`/`%s` tuples, and the table name and every value are bound through `prepare()`.
         /** @var string $statement */
-        $statement = $wpdb->prepare($sql, $args);
+        $statement = $wpdb->prepare($sql, UAMS_MRA_Store::index_table(), ...$args);
         $wpdb->query($statement);
         // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
@@ -246,17 +240,15 @@ class UAMS_MRA_Index
 
         /** @var array<string, list<int>> $out */
         $out = [];
-        /** @var literal-string $index_table */
-        $index_table = UAMS_MRA_Store::index_table();
 
         // Chunk to keep the IN() lists inside packet limits.
         foreach (array_chunk(array_keys($bases), 400) as $chunk) {
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%s'));
-            $sql = 'SELECT attachment_id, base_norm FROM '.$index_table." WHERE base_norm IN ({$placeholders})";
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the index table name and one `%s` per bound base name.
+            $sql = "SELECT attachment_id, base_norm FROM %i WHERE base_norm IN ({$placeholders})";
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds one `%s` per bound base name, and the table name and every name are bound through `prepare()`.
             /** @var list<object{attachment_id: string, base_norm: string}> $found_rows */
-            $found_rows = $wpdb->get_results($wpdb->prepare($sql, $chunk));
+            $found_rows = $wpdb->get_results($wpdb->prepare($sql, UAMS_MRA_Store::index_table(), ...$chunk));
             // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
             foreach ($found_rows as $row) {
                 $out[$row->base_norm][] = (int) $row->attachment_id;
@@ -283,15 +275,13 @@ class UAMS_MRA_Index
         }
 
         $out = [];
-        /** @var literal-string $index_table */
-        $index_table = UAMS_MRA_Store::index_table();
         foreach (array_chunk($ids, 500) as $chunk) {
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
-            $sql = 'SELECT attachment_id FROM '.$index_table." WHERE attachment_id IN ({$placeholders})";
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the index table name and one `%d` per bound ID.
+            $sql = "SELECT attachment_id FROM %i WHERE attachment_id IN ({$placeholders})";
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds one `%d` per bound ID, and the table name and every ID are bound through `prepare()`.
             /** @var list<string> $found */
-            $found = $wpdb->get_col($wpdb->prepare($sql, $chunk));
+            $found = $wpdb->get_col($wpdb->prepare($sql, UAMS_MRA_Store::index_table(), ...$chunk));
             // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
             foreach ($found as $id) {
                 $out[] = (int) $id;

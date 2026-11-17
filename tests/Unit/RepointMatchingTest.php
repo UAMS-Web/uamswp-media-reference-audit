@@ -996,6 +996,14 @@ function repoint_wpdb(array $rows = [], ?array $row = null): object
          */
         public function __construct(private readonly array $rows, private readonly ?array $row) {}
 
+        public function prepare(string $query, mixed ...$args): string
+        {
+            /** @var list<bool|float|int|string|null> $values */
+            $values = $args;
+
+            return vsprintf(str_replace('%i', '%s', $query), $values);
+        }
+
         /**
          * @return array<int, array<string, mixed>>
          */

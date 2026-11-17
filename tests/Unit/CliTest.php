@@ -175,7 +175,7 @@ function cli_wpdb(mixed $rows = []): object
             /** @var list<bool|float|int|string|null> $values */
             $values = $args;
 
-            return vsprintf($query, $values);
+            return vsprintf(str_replace('%i', '%s', $query), $values);
         }
 
         public function get_results(string $query, mixed $output = null): mixed

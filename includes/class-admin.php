@@ -279,8 +279,6 @@ class UAMS_MRA_Admin
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-
-        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
         $deleted = 0;
         $skipped = 0;
@@ -295,11 +293,8 @@ class UAMS_MRA_Admin
                 continue;
             }
 
-            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
             /** @var array{ref_count: string, bytes: string}|null $row */
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            $row = $wpdb->get_row($wpdb->prepare("SELECT ref_count, bytes FROM {$table} WHERE attachment_id = %d", $id), ARRAY_A);
-            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $row = $wpdb->get_row($wpdb->prepare('SELECT ref_count, bytes FROM %i WHERE attachment_id = %d', $table, $id), ARRAY_A);
 
             // The count is compared with 0, which converts the stored text to a number anyway, so the cast changes nothing.
             // @pest-mutate-ignore:RemoveIntegerCast
@@ -1187,8 +1182,6 @@ class UAMS_MRA_Admin
             ''
         );
 
-        /** @var literal-string $table */
-        $table = UAMS_MRA_Store::results_table();
         $offset = 0;
 
         do {
@@ -1196,7 +1189,7 @@ class UAMS_MRA_Admin
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             /** @var list<array<string, string>> $rows */
             $rows = $wpdb->get_results(
-                $wpdb->prepare("SELECT * FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT 500 OFFSET %d", $offset),
+                $wpdb->prepare("SELECT * FROM %i WHERE {$where} ORDER BY bytes DESC LIMIT 500 OFFSET %d", UAMS_MRA_Store::results_table(), $offset),
                 ARRAY_A
             );
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

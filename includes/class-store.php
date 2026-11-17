@@ -276,15 +276,13 @@ class UAMS_MRA_Store
             $args[] = isset($row['confidence']) ? (int) $row['confidence'] : 1;
         }
 
-        /** @var literal-string $refs_table */
-        $refs_table = self::refs_table();
-        $sql = 'INSERT IGNORE INTO '.$refs_table
+        $sql = 'INSERT IGNORE INTO %i'
             .' (attachment_id, source_type, source_id, source_label, site_id, confidence) VALUES '
             .implode(',', $values);
 
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the refs table name and the fixed `%d`/`%s` tuples, and every value is bound through `prepare()`.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the fixed `%d`/`%s` tuples, and the table name and every value are bound through `prepare()`.
         /** @var string $statement */
-        $statement = $wpdb->prepare($sql, $args);
+        $statement = $wpdb->prepare($sql, self::refs_table(), ...$args);
         $wpdb->query($statement);
         // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
     }
@@ -301,19 +299,14 @@ class UAMS_MRA_Store
         global $wpdb;
         /** @var wpdb $wpdb */
 
-        /** @var literal-string $refs_table */
-        $refs_table = self::refs_table();
-
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $wpdb->get_results(
             $wpdb->prepare(
-                'SELECT * FROM '.$refs_table.' WHERE attachment_id = %d ORDER BY confidence DESC, ref_id ASC LIMIT %d',
+                'SELECT * FROM %i WHERE attachment_id = %d ORDER BY confidence DESC, ref_id ASC LIMIT %d',
+                self::refs_table(),
                 $attachment_id,
                 $limit
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
     }
 
     /**
@@ -336,22 +329,16 @@ class UAMS_MRA_Store
             return;
         }
 
-        /** @var literal-string $results */
-        $results = self::results_table();
-        /** @var literal-string $refs */
-        $refs = self::refs_table();
-
         foreach (array_chunk($ids, 200) as $chunk) {
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
-            /** @var literal-string $sql */
-            $sql = "UPDATE {$results} r SET
-				r.ref_count = ( SELECT COUNT(*) FROM {$refs} f WHERE f.attachment_id = r.attachment_id ),
-				r.ref_count_strict = ( SELECT COUNT(*) FROM {$refs} f WHERE f.attachment_id = r.attachment_id AND f.confidence >= 2 )
+            $sql = "UPDATE %i r SET
+				r.ref_count = ( SELECT COUNT(*) FROM %i f WHERE f.attachment_id = r.attachment_id ),
+				r.ref_count_strict = ( SELECT COUNT(*) FROM %i f WHERE f.attachment_id = r.attachment_id AND f.confidence >= 2 )
 				WHERE r.attachment_id IN ({$placeholders})";
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the results and refs table names and one `%d` per bound ID.
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds one `%d` per bound ID, and the table names and every ID are bound through `prepare()`.
             /** @var string $statement */
-            $statement = $wpdb->prepare($sql, $chunk);
+            $statement = $wpdb->prepare($sql, self::results_table(), self::refs_table(), self::refs_table(), ...$chunk);
             $wpdb->query($statement);
             // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
         }
@@ -375,18 +362,16 @@ class UAMS_MRA_Store
             return;
         }
 
-        /** @var literal-string $results */
-        $results = self::results_table();
         $now = current_time('mysql');
 
         foreach (array_chunk($ids, 200) as $chunk) {
             /** @var literal-string $placeholders */
             $placeholders = implode(',', array_fill(0, count($chunk), '%d'));
-            /** @var literal-string $sql */
-            $sql = "UPDATE {$results} SET render_state = %s, render_url = %s, render_note = %s, render_checked_at = %s
+            $sql = "UPDATE %i SET render_state = %s, render_url = %s, render_note = %s, render_checked_at = %s
 				WHERE attachment_id IN ({$placeholders})";
             $args = array_merge(
                 [
+                    self::results_table(),
                     (string) $state,
                     mb_substr((string) $url, 0, 250),
                     mb_substr((string) $note, 0, 250),
@@ -394,9 +379,9 @@ class UAMS_MRA_Store
                 ],
                 $chunk
             );
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the results table name and one `%d` per bound ID.
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds one `%d` per bound ID, and the table name and every value are bound through `prepare()`.
             /** @var string $statement */
-            $statement = $wpdb->prepare($sql, $args);
+            $statement = $wpdb->prepare($sql, ...$args);
             $wpdb->query($statement);
             // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
         }
@@ -411,16 +396,11 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
-        $t = self::results_table();
 
         /** @var array<string, int> $out */
         $out = [];
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         /** @var list<object{render_state: string, n: string}> $state_rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $state_rows = $wpdb->get_results("SELECT render_state, COUNT(*) AS n FROM {$t} WHERE render_state <> '' GROUP BY render_state");
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $state_rows = $wpdb->get_results($wpdb->prepare("SELECT render_state, COUNT(*) AS n FROM %i WHERE render_state <> '' GROUP BY render_state", self::results_table()));
 
         foreach ($state_rows as $row) {
             $out[$row->render_state] = (int) $row->n;
@@ -470,15 +450,13 @@ class UAMS_MRA_Store
             $args[] = mb_substr((string) $row['source_label'], 0, 250);
         }
 
-        /** @var literal-string $offsite_table */
-        $offsite_table = self::offsite_table();
-        $sql = 'INSERT IGNORE INTO '.$offsite_table
+        $sql = 'INSERT IGNORE INTO %i'
             .' (url, url_hash, host, base_norm, source_type, source_id, source_pk, source_key, source_label) VALUES '
             .implode(',', $values);
 
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the offsite table name and the fixed `%s`/`%d` tuples, and every value is bound through `prepare()`.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the query holds the fixed `%s`/`%d` tuples, and the table name and every value are bound through `prepare()`.
         /** @var string $statement */
-        $statement = $wpdb->prepare($sql, $args);
+        $statement = $wpdb->prepare($sql, self::offsite_table(), ...$args);
         $wpdb->query($statement);
         // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
     }
@@ -496,13 +474,8 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
-        $t = self::offsite_table();
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        return (bool) $wpdb->get_var("SELECT 1 FROM {$t} WHERE source_pk = 0 LIMIT 1");
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        return (bool) $wpdb->get_var($wpdb->prepare('SELECT 1 FROM %i WHERE source_pk = 0 LIMIT 1', self::offsite_table()));
     }
 
     /**
@@ -514,29 +487,28 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
         $t = self::offsite_table();
-        $i = self::index_table();
 
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $row = $wpdb->get_row(
-            "SELECT
+            $wpdb->prepare(
+                'SELECT
 				COUNT(*) AS hits,
 				COUNT(DISTINCT url_hash) AS files,
 				COUNT(DISTINCT host) AS hosts
-			FROM {$t}",
+			FROM %i',
+                $t
+            ),
             ARRAY_A
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $with_local = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT o.url_hash) FROM {$t} o
-			 INNER JOIN {$i} x ON x.base_norm = o.base_norm"
+            $wpdb->prepare(
+                'SELECT COUNT(DISTINCT o.url_hash) FROM %i o
+			 INNER JOIN %i x ON x.base_norm = o.base_norm',
+                $t,
+                self::index_table()
+            )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        // phpcs:enable
 
         /** @var array<string, string>|null $row */
         $out = is_array($row) ? array_map(intval(...), $row) : [
@@ -560,18 +532,16 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
-        $t = self::offsite_table();
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         /** @var list<array<string, mixed>>|null $rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
-            "SELECT host, COUNT(*) AS hits, COUNT(DISTINCT url_hash) AS files
-			 FROM {$t} GROUP BY host ORDER BY hits DESC",
+            $wpdb->prepare(
+                'SELECT host, COUNT(*) AS hits, COUNT(DISTINCT url_hash) AS files
+			 FROM %i GROUP BY host ORDER BY hits DESC',
+                self::offsite_table()
+            ),
             ARRAY_A
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // The queries above select exactly these columns.
         /** @var list<array{host: string, hits: numeric-string, files: numeric-string}> $checked */
@@ -619,14 +589,9 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
-        $t = self::offsite_table();
-        /** @var literal-string $i */
-        $i = self::index_table();
-
         /** @var literal-string $where */
         $where = '';
-        $args = [];
+        $args = [self::index_table(), self::offsite_table()];
 
         if ($host !== '') {
             $where = 'WHERE o.host = %s';
@@ -642,9 +607,9 @@ class UAMS_MRA_Store
 					GROUP_CONCAT(DISTINCT o.source_type ORDER BY o.source_type SEPARATOR ', ') AS source_types,
 					(
 						SELECT GROUP_CONCAT(x.attachment_id ORDER BY x.attachment_id SEPARATOR ',')
-						FROM {$i} x WHERE x.base_norm = o.base_norm
+						FROM %i x WHERE x.base_norm = o.base_norm
 					) AS local_ids
-				FROM {$t} o
+				FROM %i o
 				{$where}
 				GROUP BY o.url, o.url_hash, o.host, o.base_norm
 				ORDER BY hits DESC, o.url ASC
@@ -670,20 +635,13 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
         $t = self::offsite_table();
 
         if ($host === '') {
-            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            return (int) $wpdb->get_var("SELECT COUNT(DISTINCT url_hash) FROM {$t}");
-            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            return (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(DISTINCT url_hash) FROM %i', $t));
         }
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT url_hash) FROM {$t} WHERE host = %s", $host));
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        return (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(DISTINCT url_hash) FROM %i WHERE host = %s', $t, $host));
     }
 
     /**
@@ -699,22 +657,18 @@ class UAMS_MRA_Store
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $t */
-        $t = self::offsite_table();
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         /** @var list<array<string, mixed>>|null $rows */
-        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT source_type, source_id, source_label FROM {$t}
-				 WHERE url_hash = %s ORDER BY source_type ASC, source_id ASC LIMIT %d",
+                'SELECT source_type, source_id, source_label FROM %i
+				 WHERE url_hash = %s ORDER BY source_type ASC, source_id ASC LIMIT %d',
+                self::offsite_table(),
                 $url_hash,
                 $limit
             ),
             ARRAY_A
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // The queries above select exactly these columns.
         /** @var list<array{source_type: string, source_id: numeric-string, source_label: string}> $checked */
@@ -739,13 +693,9 @@ class UAMS_MRA_Store
             return self::$summary_cache;
         }
 
-        /** @var literal-string $t */
-        $t = self::results_table();
-
-        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         $row = $wpdb->get_row(
-            "SELECT
+            $wpdb->prepare(
+                'SELECT
 				COUNT(*) AS total,
 				SUM(bytes) AS total_bytes,
 				SUM(CASE WHEN is_attached = 0 THEN 1 ELSE 0 END) AS unattached,
@@ -754,11 +704,11 @@ class UAMS_MRA_Store
 				SUM(CASE WHEN ref_count = 0 AND is_attached = 0 THEN 1 ELSE 0 END) AS orphaned,
 				SUM(CASE WHEN ref_count = 0 AND is_attached = 0 THEN bytes ELSE 0 END) AS orphaned_bytes,
 				SUM(CASE WHEN ref_count > 0 AND ref_count_strict = 0 THEN 1 ELSE 0 END) AS weak_only
-			FROM {$t}",
+			FROM %i',
+                self::results_table()
+            ),
             ARRAY_A
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        // phpcs:enable
 
         /** @var array<string, string>|null $row */
         self::$summary_cache = is_array($row) ? array_map(intval(...), $row) : [];
