@@ -89,7 +89,8 @@ class UAMS_MRA_Triage
      */
     public static function distributable_mimes(): array
     {
-        return (array) apply_filters(
+        /** @var array<string> $mimes */
+        $mimes = (array) apply_filters(
             'uams_mra_distributable_mimes',
             [
                 'application/pdf',
@@ -103,6 +104,8 @@ class UAMS_MRA_Triage
                 'text/csv',
             ]
         );
+
+        return $mimes;
     }
 
     /**
@@ -180,7 +183,7 @@ class UAMS_MRA_Triage
     public static function disposition_where($disposition): string
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $key = esc_sql(self::META_DISPOSITION);
 
         if ($disposition === 'none') {
@@ -277,20 +280,24 @@ class UAMS_MRA_Triage
     public static function ids_marked($disposition): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if (! array_key_exists($disposition, self::dispositions())) {
             return [];
         }
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<string> $ids */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $ids = $wpdb->get_col(
             $wpdb->prepare(
                 "SELECT r.attachment_id
 				 FROM {$table} r
-				 INNER JOIN {$wpdb->postmeta} pm
+				 INNER JOIN {$postmeta_table} pm
 				         ON pm.post_id = r.attachment_id AND pm.meta_key = %s
 				 WHERE pm.meta_value = %s",
                 self::META_DISPOSITION,
@@ -315,8 +322,12 @@ class UAMS_MRA_Triage
     public static function counts($scope = ''): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
+        /** @var literal-string $postmeta_table */
+        $postmeta_table = $wpdb->postmeta;
+        /** @var literal-string $scope */
         $scope = $scope === '' ? '1=1' : $scope;
 
         $out = [
@@ -340,12 +351,13 @@ class UAMS_MRA_Triage
         }
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
+        /** @var list<array{d: string, n: string, b: string}>|null $rows */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT pm.meta_value AS d, COUNT(*) AS n, SUM(r.bytes) AS b
 				 FROM {$table} r
-				 INNER JOIN {$wpdb->postmeta} pm
+				 INNER JOIN {$postmeta_table} pm
 				         ON pm.post_id = r.attachment_id AND pm.meta_key = %s
 				 WHERE pm.meta_value <> '' AND ( {$scope} )
 				 GROUP BY pm.meta_value",

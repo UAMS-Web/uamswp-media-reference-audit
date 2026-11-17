@@ -119,17 +119,20 @@ class UAMS_MRA_CLI
     public function list($args, $assoc_args): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $status = $assoc_args['status'] ?? 'orphaned';
         // $wpdb->prepare() formats the limit with %d, which casts it, so the explicit cast changes nothing.
         // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) ($assoc_args['limit'] ?? 100);
         $format = $assoc_args['format'] ?? 'table';
+        /** @var literal-string $where */
         $where = self::where_for($status);
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        /** @var list<array<string, string>> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare("SELECT * FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT %d", $limit),
             ARRAY_A
@@ -143,7 +146,9 @@ class UAMS_MRA_CLI
         }
 
         if ($format === 'ids') {
-            WP_CLI::line(implode(' ', wp_list_pluck($rows, 'attachment_id')));
+            /** @var list<string> $attachment_ids */
+            $attachment_ids = wp_list_pluck($rows, 'attachment_id');
+            WP_CLI::line(implode(' ', $attachment_ids));
 
             return;
         }
@@ -197,6 +202,7 @@ class UAMS_MRA_CLI
     public function delete($args, $assoc_args): void
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
         // The status flag is declared to take a value, so it is text; `yes` and `dry-run` are the flags without one.
         /** @var string $status */
@@ -205,7 +211,9 @@ class UAMS_MRA_CLI
         // @pest-mutate-ignore:RemoveIntegerCast
         $limit = (int) ($assoc_args['limit'] ?? 500);
         $dry_run = isset($assoc_args['dry-run']);
+        /** @var literal-string $where */
         $where = self::where_for($status);
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         if ($status !== 'orphaned' && $status !== 'unreferenced') {
@@ -214,6 +222,7 @@ class UAMS_MRA_CLI
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the WHERE fragment is assembled from literals in `UAMS_MRA_List_Table::where_for_view()`, `UAMS_MRA_Triage::tier_where()` or a fixed map, and user text reaches the query only through `%s` placeholders in `$params`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        /** @var list<array<string, string>> $rows */
         $rows = $wpdb->get_results(
             $wpdb->prepare("SELECT attachment_id, bytes, file FROM {$table} WHERE {$where} AND ref_count = 0 ORDER BY bytes DESC LIMIT %d", $limit),
             ARRAY_A
@@ -226,7 +235,10 @@ class UAMS_MRA_CLI
             return;
         }
 
-        $bytes = array_sum(wp_list_pluck($rows, 'bytes'));
+        /** @var list<numeric-string> $byte_counts */
+        $byte_counts = wp_list_pluck($rows, 'bytes');
+        /** @var int $bytes */
+        $bytes = array_sum($byte_counts);
 
         if ($dry_run) {
             foreach ($rows as $row) {
