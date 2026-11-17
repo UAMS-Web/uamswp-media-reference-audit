@@ -758,8 +758,6 @@ class UAMS_MRA_Scanner
     {
         global $wpdb;
         /** @var wpdb $wpdb */
-        /** @var literal-string $posts_table */
-        $posts_table = $wpdb->posts;
         if (empty($state['site_queue'])) {
             return self::advance($state);
         }
@@ -779,6 +777,10 @@ class UAMS_MRA_Scanner
         switch_to_blog($site_id);
 
         UAMS_MRA_Store::set_prefix_override($target_prefix);
+
+        // The table name is read after switch_to_blog(), which points `$wpdb->posts` at the sibling site.
+        /** @var literal-string $posts_table */
+        $posts_table = $wpdb->posts;
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names are `$wpdb` properties or `UAMS_MRA_Store` tables, and every value is bound through `prepare()`.
         /** @var list<object{ID: string, post_type: string, post_title: string, post_status: string, post_content: string}> $rows */
@@ -1579,14 +1581,14 @@ class UAMS_MRA_Scanner
      */
     protected static function foreign_id_key_pattern(): string
     {
-        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
-        // @pest-mutate-ignore:RemoveStringCast
         /** @var scalar|null $pattern */
         $pattern = apply_filters(
             'uams_mra_foreign_id_key_pattern',
             '#(^|_)(user|author|customer|post|page|parent|term|category|tag|comment|order|site|blog|form|entry)_id$#i'
         );
 
+        // The value is already a string here, or PHP coerces it the same way, so the cast changes nothing.
+        // @pest-mutate-ignore:RemoveStringCast
         return (string) $pattern;
     }
 
