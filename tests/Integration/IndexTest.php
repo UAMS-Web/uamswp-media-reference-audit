@@ -17,6 +17,7 @@ namespace UamswpMediaReferenceAudit\Tests\Integration;
 use UAMS_MRA_Index;
 use UAMS_MRA_Store;
 use UamswpMediaReferenceAudit\Tests\Support\IntegrationTestCase;
+use wpdb;
 
 final class IndexTest extends IntegrationTestCase
 {
@@ -46,11 +47,15 @@ final class IndexTest extends IntegrationTestCase
      */
     private function rows(): array
     {
+        /** @var wpdb $wpdb */
         global $wpdb;
 
         $out = [];
 
-        foreach ((array) $wpdb->get_results('SELECT attachment_id, path_norm, base_norm FROM '.UAMS_MRA_Store::index_table()) as $row) {
+        /** @var list<object{attachment_id: string, path_norm: string, base_norm: string}> $rows */
+        $rows = $wpdb->get_results('SELECT attachment_id, path_norm, base_norm FROM '.UAMS_MRA_Store::index_table());
+
+        foreach ($rows as $row) {
             $out[(int) $row->attachment_id] = [(string) $row->path_norm, (string) $row->base_norm];
         }
 

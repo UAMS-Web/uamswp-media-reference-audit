@@ -228,7 +228,9 @@ it('splits video and audio by the first six characters only', function (string $
 ]);
 
 it('reads is_attached as a truth value and render_state as a string', function (array $row, string $expected): void {
-    expect(UAMS_MRA_Triage::tier($row + ['mime' => 'image/jpeg']))->toBe($expected);
+    /** @var array<string, int|string> $fields */
+    $fields = $row;
+    expect(UAMS_MRA_Triage::tier($fields + ['mime' => 'image/jpeg']))->toBe($expected);
 })->with([
     'attached as a string 1' => [['is_attached' => '1'], 'verify'],
     'attached as a string 0' => [['is_attached' => '0'], 'clear'],
