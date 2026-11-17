@@ -242,7 +242,7 @@ class UAMS_MRA_Store
      * Insert reference rows, ignoring duplicates.
      *
      * @param  array  $rows  Each row: attachment_id, source_type, source_id, source_label, site_id, confidence.
-     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array{attachment_id: int|string, source_type: string, source_id: int|string, source_label: string, site_id?: int|string, confidence?: int|string}>  $rows
      */
     public static function add_refs(array $rows): void
     {
@@ -401,7 +401,7 @@ class UAMS_MRA_Store
      * Insert offsite media hits, ignoring duplicates.
      *
      * @param  array  $rows  Each row: url, host, base_norm, source_type, source_id, source_label.
-     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, int|string>>  $rows
      */
     public static function add_offsite(array $rows): void
     {
@@ -498,6 +498,7 @@ class UAMS_MRA_Store
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         // phpcs:enable
 
+        /** @var array<string, string>|null $row */
         $out = is_array($row) ? array_map(intval(...), $row) : [
             'hits' => 0,
             'files' => 0,
@@ -704,6 +705,7 @@ class UAMS_MRA_Store
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         // phpcs:enable
 
+        /** @var array<string, string>|null $row */
         self::$summary_cache = is_array($row) ? array_map(intval(...), $row) : [];
 
         return self::$summary_cache;

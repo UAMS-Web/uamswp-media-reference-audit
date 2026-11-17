@@ -418,6 +418,8 @@ class UAMS_MRA_Archive
     {
         $post = get_post($id);
         $mark = UAMS_MRA_Triage::get($id);
+        /** @var scalar|null $alt */
+        $alt = get_post_meta($id, '_wp_attachment_image_alt', true);
 
         // The row is written out as CSV text, where an integer and its string read the same.
         // @pest-mutate-ignore:RemoveIntegerCast
@@ -429,7 +431,7 @@ class UAMS_MRA_Archive
             $post ? $post->post_mime_type : '',
             $post ? $post->post_date : '',
             $post ? (int) $post->post_parent : 0,
-            (string) get_post_meta($id, '_wp_attachment_image_alt', true),
+            (string) $alt,
             $mark['d'],
             $mark['n'],
         ];
