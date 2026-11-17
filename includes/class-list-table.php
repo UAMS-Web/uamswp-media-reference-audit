@@ -228,7 +228,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
     public static function build_query(): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $where = self::where_for_view(self::current_view());
         $params = [];
 
@@ -265,13 +265,15 @@ class UAMS_MRA_List_Table extends WP_List_Table
     public function prepare_items(): void
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $per_page = 50;
         $paged = max(1, $this->get_pagenum());
         $offset = ($paged - 1) * $per_page;
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         $query = self::build_query();
+        /** @var literal-string $where */
         $where = $query['where'];
         $params = $query['params'];
 
@@ -281,6 +283,7 @@ class UAMS_MRA_List_Table extends WP_List_Table
         /** @var array<string, string> $_REQUEST */
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $orderby = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'bytes';
+        /** @var literal-string $orderby */
         $orderby = in_array($orderby, $orderby_allowed, true) ? $orderby : 'bytes';
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $order = isset($_REQUEST['order']) && sanitize_key(wp_unslash($_REQUEST['order'])) === 'asc' ? 'ASC' : 'DESC';
@@ -291,8 +294,10 @@ class UAMS_MRA_List_Table extends WP_List_Table
 
         $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY {$orderby} {$order}, attachment_id DESC LIMIT %d OFFSET %d";
         $sql_args = array_merge($params, [$per_page, $offset]);
+        /** @var list<array<string, string>> $items */
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        $this->items = $wpdb->get_results($wpdb->prepare($sql, $sql_args), ARRAY_A);
+        $items = $wpdb->get_results($wpdb->prepare($sql, $sql_args), ARRAY_A);
+        $this->items = $items;
 
         $this->set_pagination_args(
             [
@@ -305,7 +310,9 @@ class UAMS_MRA_List_Table extends WP_List_Table
         // These IDs never pass through WP_Query, so nothing has primed their meta.
         // Without this the Decision column costs two queries a row.
         if ($this->items) {
-            update_meta_cache('post', wp_list_pluck($this->items, 'attachment_id'));
+            /** @var array<int> $attachment_ids */
+            $attachment_ids = wp_list_pluck($this->items, 'attachment_id');
+            update_meta_cache('post', $attachment_ids);
         }
 
         $this->_column_headers = [$this->get_columns(), [], $this->get_sortable_columns(), 'title'];

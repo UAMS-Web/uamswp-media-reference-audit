@@ -37,6 +37,7 @@ $uams_mra_meta = ['_uams_mra_disposition', '_uams_mra_note'];
  */
 function uams_mra_uninstall_site(array $tables, array $options, array $meta): void
 {
+    /** @var wpdb $wpdb */
     global $wpdb;
 
     foreach ($tables as $table) {

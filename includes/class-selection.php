@@ -40,15 +40,21 @@ class UAMS_MRA_Selection
     public static function ids_matching_filter(): array
     {
         global $wpdb;
+        /** @var wpdb $wpdb */
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
         $query = UAMS_MRA_List_Table::build_query();
+        /** @var literal-string $where */
         $where = $query['where'];
 
-        $sql = "SELECT attachment_id FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT ".(self::MAX + 1);
+        /** @var literal-string $limit */
+        $limit = (string) (self::MAX + 1);
+        $sql = "SELECT attachment_id FROM {$table} WHERE {$where} ORDER BY bytes DESC LIMIT ".$limit;
 
         // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        /** @var list<string> $ids */
         $ids = $query['params']
             ? $wpdb->get_col($wpdb->prepare($sql, $query['params']))
             : $wpdb->get_col($sql);
@@ -150,13 +156,14 @@ class UAMS_MRA_Selection
     protected static function id_by_filename($filename): int
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         $filename = trim(rawurldecode($filename));
 
         if ($filename === '') {
             return 0;
         }
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table names come from `$wpdb` or `UAMS_MRA_Store`, and every value is bound through `prepare()` or cast to an integer.
@@ -226,17 +233,19 @@ class UAMS_MRA_Selection
     public static function rows(array $ids): array
     {
         global $wpdb;
-
+        /** @var wpdb $wpdb */
         if ($ids === []) {
             return [];
         }
 
+        /** @var literal-string $table */
         $table = UAMS_MRA_Store::results_table();
         $ids = array_map(intval(...), $ids);
         $in = implode(',', $ids);
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the IN list holds integers cast with `intval()` or a fixed set of verdict names escaped with `esc_sql()`.
         // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        /** @var list<array<string, int|string>>|null $rows */
         $rows = $wpdb->get_results(
             "SELECT * FROM {$table} WHERE attachment_id IN ( {$in} ) ORDER BY bytes DESC",
             ARRAY_A

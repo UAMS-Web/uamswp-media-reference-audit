@@ -102,7 +102,10 @@ function uams_mra_settings()
 {
     $saved = get_option('uams_mra_settings', []);
 
-    return wp_parse_args(is_array($saved) ? $saved : [], uams_mra_default_settings());
+    /** @var array<string, int|string> $settings */
+    $settings = wp_parse_args(is_array($saved) ? $saved : [], uams_mra_default_settings());
+
+    return $settings;
 }
 
 register_activation_hook(__FILE__, 'uams_mra_activate');
